@@ -1,6 +1,6 @@
 # discord-bot-template
 
-Discord-bot-template is a clean and modular Python Discord bot template built with [discord.py](https://discordpy.readthedocs.io/) and the Cog system. This repository is designed to be used as a starting point for custom bot projects. It provides a structured foundation that can be adapted to a wide range of use cases.
+This is a clean and modular Python Discord bot template built with [discord.py](https://discordpy.readthedocs.io/) and the Cog system. This repository is designed to be used as a starting point for custom bot projects. It provides a structured foundation that can be adapted to a wide range of use cases.
 
 ## Features
 
@@ -124,7 +124,7 @@ Setting `LOCALE=en` in `.env` activates the built-in English preset. To add a ne
 
 Use the GitHub template button to create a new repository based on this project.
 
-The template includes generic English-language cogs that can be modified or replaced. A typical customization workflow includes the following steps.
+The template includes generic English-language cogs that can be modified or replaced. A typical customization workflow includes the following steps:
 
 * Add new bot-specific cogs in the `cogs/` directory.
 * Extend the `Config` class in `config.py` to support additional environment variables.
