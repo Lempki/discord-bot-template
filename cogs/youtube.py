@@ -25,21 +25,25 @@ class YouTubeCog(commands.Cog, name="YouTube"):
     def _ffmpeg(self) -> str:
         return self.bot.config.FFMPEG_PATH or "ffmpeg"
 
+    async def _say(self, ctx: commands.Context, template: str, **kwargs) -> None:
+        if msg := template.format(**kwargs):
+            await self._reply_channel(ctx).send(msg)
+
     @commands.command(name="play", aliases=["youtube", "yt"])
     @in_bot_channel()
     async def play(self, ctx: commands.Context, *, url: str):
         """Add a YouTube URL or playlist to the queue and start playback if idle."""
+        s = self.bot.strings
         guild_id = ctx.guild.id
-        reply = self._reply_channel(ctx)
 
         urls = await resolve_urls(url, loop=self.bot.loop)
         for u in urls:
             await self._queue(guild_id).put((ctx, u))
 
         if len(urls) > 1:
-            await reply.send(f"Added {len(urls)} videos to queue, `{ctx.author}`.")
+            await self._say(ctx, s.queued_many, count=len(urls), user=ctx.author)
         else:
-            await reply.send(f"Added to queue, `{ctx.author}`.")
+            await self._say(ctx, s.queued_one, user=ctx.author)
         log(f"Queued {len(urls)} item(s) from {ctx.author}")
 
         if not self._playing.get(guild_id):
@@ -52,14 +56,14 @@ class YouTubeCog(commands.Cog, name="YouTube"):
             return
 
         ctx, url = await q.get()
-        reply = self._reply_channel(ctx)
+        s = self.bot.strings
         vc = ctx.voice_client
 
         if vc is None:
             if ctx.author.voice:
                 vc = await ctx.author.voice.channel.connect()
             else:
-                await reply.send(f"You are not in a voice channel, `{ctx.author}`.")
+                await self._say(ctx, s.not_in_voice, user=ctx.author)
                 await self._process_queue(guild_id)
                 return
 
@@ -72,13 +76,13 @@ class YouTubeCog(commands.Cog, name="YouTube"):
             )
         except Exception as e:
             log(f"Error loading '{url}': {e}")
-            await reply.send(f"Failed to load audio. Try again, `{ctx.author}`.")
+            await self._say(ctx, s.load_error, user=ctx.author)
             await self._process_queue(guild_id)
             return
 
         self._playing[guild_id] = True
         vc.play(player)
-        await reply.send(f"Now playing `{player.title}` in `{vc.channel}`.")
+        await self._say(ctx, s.now_playing, title=player.title, channel=vc.channel)
         log(f"Playing '{player.title}'")
 
         while vc.is_playing():
@@ -91,9 +95,7 @@ class YouTubeCog(commands.Cog, name="YouTube"):
         if isinstance(error, commands.CheckFailure):
             return
         if isinstance(error, commands.MissingRequiredArgument):
-            await self._reply_channel(ctx).send(
-                f"Provide a URL: `{ctx.bot.config.COMMAND_PREFIX}play <url>`"
-            )
+            await self._say(ctx, self.bot.strings.play_usage, prefix=self.bot.config.COMMAND_PREFIX)
         else:
             raise error
 
