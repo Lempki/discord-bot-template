@@ -86,7 +86,7 @@ All configuration is read from environment variables or from a `.env` file locat
 
 ```
 discord-bot-template/
-├── bot.py              # Entry point
+├── bot.py              # Entry point.
 ├── config.py           # Environment variable reader. Extend this file to add new configuration keys.
 ├── localization.py     # Strings dataclass and locale presets. Define new languages here.
 ├── cogs/
