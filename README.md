@@ -57,7 +57,7 @@ chmod +x setup.sh
 
 The script creates a `.venv` virtual environment if one does not already exist. It installs all dependencies and copies `.env.example` to `.env` on the first run. You must edit `.env` and set your `DISCORD_TOKEN` before starting the bot.
 
-If you prefer to perform the setup manually, follow these steps.
+If you prefer to perform the setup manually, follow these steps:
 
 ```bash
 git clone https://github.com/Lempki/discord-bot-template.git my-bot
