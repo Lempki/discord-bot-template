@@ -2,6 +2,7 @@ import asyncio
 import discord
 from discord.ext import commands
 from config import Config
+from localization import LOCALES, Strings
 
 
 async def main():
@@ -16,7 +17,8 @@ async def main():
         intents=intents,
         help_command=None,
     )
-    bot.config = config  # cogs access shared config via self.bot.config
+    bot.config = config   # cogs access shared config via self.bot.config
+    bot.strings: Strings = LOCALES.get(config.LOCALE, LOCALES["silent"])
 
     @bot.event
     async def on_ready():
