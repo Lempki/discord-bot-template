@@ -1,6 +1,6 @@
 import asyncio
 from discord.ext import commands
-from utils.audio import YouTubeDLSource
+from utils.audio import YouTubeDLSource, resolve_urls
 from utils.checks import in_bot_channel
 from utils.logging import log
 
@@ -28,11 +28,20 @@ class YouTubeCog(commands.Cog, name="YouTube"):
     @commands.command(name="play", aliases=["youtube", "yt"])
     @in_bot_channel()
     async def play(self, ctx: commands.Context, *, url: str):
-        """Add a YouTube URL to the queue and start playback if idle."""
+        """Add a YouTube URL or playlist to the queue and start playback if idle."""
         guild_id = ctx.guild.id
-        await self._queue(guild_id).put((ctx, url))
-        await self._reply_channel(ctx).send(f"Added to queue, `{ctx.author}`.")
-        log(f"Queued '{url}' from {ctx.author}")
+        reply = self._reply_channel(ctx)
+
+        urls = await resolve_urls(url, loop=self.bot.loop)
+        for u in urls:
+            await self._queue(guild_id).put((ctx, u))
+
+        if len(urls) > 1:
+            await reply.send(f"Added {len(urls)} videos to queue, `{ctx.author}`.")
+        else:
+            await reply.send(f"Added to queue, `{ctx.author}`.")
+        log(f"Queued {len(urls)} item(s) from {ctx.author}")
+
         if not self._playing.get(guild_id):
             await self._process_queue(guild_id)
 

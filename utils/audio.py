@@ -7,7 +7,7 @@ YTDL_OPTIONS = {
     "format": "bestaudio/best",
     "outtmpl": "%(id)s.%(ext)s",
     "restrictfilenames": True,
-    "noplaylist": True,
+    "noplaylist": True,   # only used in from_url (per-item extraction)
     "nocheckcertificate": True,
     "ignoreerrors": False,
     "logtostderr": False,
@@ -15,6 +15,13 @@ YTDL_OPTIONS = {
     "no_warnings": True,
     "default_search": "auto",
     "source_address": "0.0.0.0",
+}
+
+# Used only for the initial URL resolution step — fast flat extraction, no download.
+_YTDL_FLAT_OPTIONS = {
+    **YTDL_OPTIONS,
+    "extract_flat": "in_playlist",
+    "noplaylist": False,  # allow playlists at this stage
 }
 
 FFMPEG_STREAM_OPTIONS = {
@@ -51,6 +58,35 @@ class YouTubeDLSource(discord.PCMVolumeTransformer):
             file, executable=ffmpeg_executable, **FFMPEG_STREAM_OPTIONS
         )
         return cls(source, data=data)
+
+
+async def resolve_urls(
+    url: str,
+    *,
+    loop: asyncio.AbstractEventLoop | None = None,
+) -> list[str]:
+    """Resolve a URL to one or more streamable video URLs.
+
+    For a single video: returns ``[url]`` unchanged.
+    For a playlist: returns one URL per entry in playlist order.
+    Uses flat extraction so large playlists resolve quickly.
+    """
+    loop = loop or asyncio.get_event_loop()
+    with yt_dlp.YoutubeDL(_YTDL_FLAT_OPTIONS) as ydl:
+        data = await loop.run_in_executor(None, lambda: ydl.extract_info(url, download=False))
+
+    entries = data.get("entries")
+    if not entries:
+        return [url]
+
+    urls = []
+    for entry in entries:
+        vid_url = entry.get("webpage_url") or entry.get("url")
+        if not vid_url and entry.get("id"):
+            vid_url = f"https://www.youtube.com/watch?v={entry['id']}"
+        if vid_url:
+            urls.append(vid_url)
+    return urls or [url]
 
 
 async def play_file(
