@@ -40,13 +40,13 @@ This is a clean and modular Python Discord bot template built with [discord.py](
 
 ## Privileged intents
 
-The bot requires two privileged intents. Enable both on your application's **Bot** page in the [Discord Developer Portal](https://discord.com/developers/applications) under **Privileged Gateway Intents** before starting the bot.
+The bot requires one privileged intent. Enable it in your application's **Bot** page in the [Discord Developer Portal](https://discord.com/developers/applications) under **Privileged Gateway Intents** before starting the bot.
 
 | Intent | Portal label | Required for |
 |---|---|---|
 | `members` | Server Members Intent | `on_member_join` events and reliable member object caching. |
 
-The **Presence Intent** and **Message Content Intent** are not used by this template and do not need to be enabled.
+For now, the **Presence Intent** and **Message Content Intent** are not used by this template and do not need to be enabled.
 
 ## Bot permissions
 
