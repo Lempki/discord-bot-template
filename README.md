@@ -44,22 +44,22 @@ The bot requires two privileged intents. Enable both on your application's **Bot
 
 | Intent | Portal label | Required for |
 |---|---|---|
-| `members` | Server Members Intent | `on_member_join` events; reliable member object caching |
-| `message_content` | Message Content Intent | Reading message content in prefix-based commands |
+| `members` | Server Members Intent | `on_member_join` events for reliable member object caching. |
+| `message_content` | Message Content Intent | Reading message content in prefix-based commands. |
 
 The **Presence Intent** is not used and does not need to be enabled.
 
 ## Bot permissions
 
-The following permissions are required when inviting the bot to a server. Use the **OAuth2 → URL Generator** in the Developer Portal to generate an invite link: select `bot` as the scope, then check the permissions listed below to have the portal calculate the permission integer automatically.
+The following permissions are required when inviting the bot to a server. Use the **OAuth2 → URL Generator** in the Developer Portal to generate an invite link. Select `bot` as the scope, then check the permissions listed below to have the portal calculate the permission integer automatically.
 
 | Permission | Required for |
 |---|---|
-| View Channels | Reading messages and channel state |
-| Send Messages | Responding to commands |
-| Read Message History | Reply functionality |
-| Connect | Joining voice channels |
-| Speak | Playing audio in voice channels |
+| View Channels | Reading messages and channel state. |
+| Send Messages | Responding to commands. |
+| Read Message History | Reply functionality. |
+| Connect | Joining voice channels. |
+| Speak | Playing audio in voice channels. |
 
 ## Setup
 
