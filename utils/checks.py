@@ -1,4 +1,5 @@
-from discord.ext import commands
+import discord
+from discord import app_commands
 
 
 def in_bot_channel():
@@ -6,8 +7,8 @@ def in_bot_channel():
 
     If BOT_CHANNEL_ID is not set, commands are allowed in any channel.
     """
-    async def predicate(ctx: commands.Context) -> bool:
-        if ctx.bot.config.BOT_CHANNEL_ID is None:
+    async def predicate(interaction: discord.Interaction) -> bool:
+        if interaction.client.config.BOT_CHANNEL_ID is None:
             return True
-        return ctx.channel.id == ctx.bot.config.BOT_CHANNEL_ID
-    return commands.check(predicate)
+        return interaction.channel_id == interaction.client.config.BOT_CHANNEL_ID
+    return app_commands.check(predicate)

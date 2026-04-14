@@ -44,10 +44,9 @@ The bot requires two privileged intents. Enable both on your application's **Bot
 
 | Intent | Portal label | Required for |
 |---|---|---|
-| `members` | Server Members Intent | `on_member_join` events for reliable member object caching. |
-| `message_content` | Message Content Intent | Reading message content in prefix-based commands. |
+| `members` | Server Members Intent | `on_member_join` events and reliable member object caching. |
 
-The **Presence Intent** is not used and does not need to be enabled.
+The **Presence Intent** and **Message Content Intent** are not used by this template and do not need to be enabled.
 
 ## Bot permissions
 

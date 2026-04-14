@@ -1,4 +1,6 @@
 import asyncio
+import discord
+from discord import app_commands
 from discord.ext import commands
 from utils.audio import YouTubeDLSource, resolve_urls
 from utils.checks import in_bot_channel
@@ -18,38 +20,34 @@ class YouTubeCog(commands.Cog, name="YouTube"):
             self._queues[guild_id] = asyncio.Queue()
         return self._queues[guild_id]
 
-    def _reply_channel(self, ctx: commands.Context):
-        ch_id = self.bot.config.BOT_CHANNEL_ID
-        return self.bot.get_channel(ch_id) if ch_id else ctx.channel
-
     def _ffmpeg(self) -> str:
         return self.bot.config.FFMPEG_PATH or "ffmpeg"
 
-    async def _say(self, ctx: commands.Context, template: str, **kwargs) -> None:
+    async def _say(self, interaction: discord.Interaction, template: str, **kwargs) -> None:
         if not (msg := template.format(**kwargs)):
             return
-        if ctx.interaction:
-            await ctx.send(msg)
+        if interaction.response.is_done():
+            await interaction.followup.send(msg)
         else:
-            await self._reply_channel(ctx).send(msg)
+            await interaction.response.send_message(msg)
 
-    @commands.hybrid_command(name="play", aliases=["youtube", "yt"])
+    @app_commands.command(name="play")
     @in_bot_channel()
-    async def play(self, ctx: commands.Context, *, url: str):
+    async def play(self, interaction: discord.Interaction, url: str):
         """Add a YouTube URL or playlist to the queue and start playback if idle."""
-        await ctx.defer()
+        await interaction.response.defer()
         s = self.bot.strings
-        guild_id = ctx.guild.id
+        guild_id = interaction.guild_id
 
-        urls = await resolve_urls(url, loop=self.bot.loop)
+        urls = await resolve_urls(url, loop=asyncio.get_running_loop())
         for u in urls:
-            await self._queue(guild_id).put((ctx, u))
+            await self._queue(guild_id).put((interaction, u))
 
         if len(urls) > 1:
-            await self._say(ctx, s.queued_many, count=len(urls), user=ctx.author)
+            await self._say(interaction, s.queued_many, count=len(urls), user=interaction.user)
         else:
-            await self._say(ctx, s.queued_one, user=ctx.author)
-        log(f"Queued {len(urls)} item(s) from {ctx.author}")
+            await self._say(interaction, s.queued_one, user=interaction.user)
+        log(f"Queued {len(urls)} item(s) from {interaction.user}")
 
         if not self._playing.get(guild_id):
             await self._process_queue(guild_id)
@@ -60,34 +58,34 @@ class YouTubeCog(commands.Cog, name="YouTube"):
             self._playing[guild_id] = False
             return
 
-        ctx, url = await q.get()
+        interaction, url = await q.get()
         s = self.bot.strings
-        vc = ctx.voice_client
+        vc = interaction.guild.voice_client
 
         if vc is None:
-            if ctx.author.voice:
-                vc = await ctx.author.voice.channel.connect()
+            if interaction.user.voice:
+                vc = await interaction.user.voice.channel.connect()
             else:
-                await self._say(ctx, s.not_in_voice, user=ctx.author)
+                await self._say(interaction, s.not_in_voice, user=interaction.user)
                 await self._process_queue(guild_id)
                 return
 
         try:
             player = await YouTubeDLSource.from_url(
                 url,
-                loop=self.bot.loop,
+                loop=asyncio.get_running_loop(),
                 stream=True,
                 ffmpeg_executable=self._ffmpeg(),
             )
         except Exception as e:
             log(f"Error loading '{url}': {e}")
-            await self._say(ctx, s.load_error, user=ctx.author)
+            await self._say(interaction, s.load_error, user=interaction.user)
             await self._process_queue(guild_id)
             return
 
         self._playing[guild_id] = True
         vc.play(player)
-        await self._say(ctx, s.now_playing, title=player.title, channel=vc.channel)
+        await self._say(interaction, s.now_playing, title=player.title, channel=vc.channel)
         log(f"Playing '{player.title}'")
 
         while vc.is_playing():
@@ -96,18 +94,17 @@ class YouTubeCog(commands.Cog, name="YouTube"):
         self._playing[guild_id] = False
         await self._process_queue(guild_id)
 
-    async def cog_command_error(self, ctx: commands.Context, error: Exception):
-        if isinstance(error, commands.CheckFailure):
-            if ctx.interaction and not ctx.interaction.response.is_done():
-                await ctx.interaction.response.send_message(
+    async def cog_app_command_error(
+        self, interaction: discord.Interaction, error: app_commands.AppCommandError
+    ):
+        if isinstance(error, app_commands.CheckFailure):
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
                     "This command can only be used in the designated bot channel.",
                     ephemeral=True,
                 )
             return
-        if isinstance(error, commands.MissingRequiredArgument):
-            await self._say(ctx, self.bot.strings.play_usage, prefix=self.bot.config.COMMAND_PREFIX)
-        else:
-            raise error
+        raise error
 
 
 async def setup(bot: commands.Bot):

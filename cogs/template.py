@@ -1,8 +1,10 @@
+import discord
+from discord import app_commands
 from discord.ext import commands
 
 
 class TemplateCog(commands.Cog, name="Template"):
-    """Template cog showing all discord.py Cog patterns.
+    """Template cog showing discord.py Application Command patterns.
 
     Copy this file and rename the class to add a new feature group.
     Register it by adding its module name to COGS_TO_LOAD in your .env.
@@ -13,10 +15,10 @@ class TemplateCog(commands.Cog, name="Template"):
 
     # --- Commands ---
 
-    @commands.hybrid_command(name="ping", aliases=["p"])
-    async def ping(self, ctx: commands.Context):
+    @app_commands.command(name="ping")
+    async def ping(self, interaction: discord.Interaction):
         """Replies with current latency."""
-        await ctx.send(f"Pong! `{round(self.bot.latency * 1000)}ms`")
+        await interaction.response.send_message(f"Pong! `{round(self.bot.latency * 1000)}ms`")
 
     # --- Listeners ---
 
@@ -26,11 +28,17 @@ class TemplateCog(commands.Cog, name="Template"):
 
     # --- Per-cog error handler ---
 
-    async def cog_command_error(self, ctx: commands.Context, error: Exception):
-        if isinstance(error, commands.MissingRequiredArgument):
-            await ctx.reply(f"Missing required argument: `{error.param.name}`")
-        else:
-            raise error  # re-raise so the global handler in bot.py still sees it
+    async def cog_app_command_error(
+        self, interaction: discord.Interaction, error: app_commands.AppCommandError
+    ):
+        if isinstance(error, app_commands.CheckFailure):
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    "This command can only be used in the designated bot channel.",
+                    ephemeral=True,
+                )
+            return
+        raise error  # re-raise so the global handler in bot.py still sees it
 
 
 async def setup(bot: commands.Bot):

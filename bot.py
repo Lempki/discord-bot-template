@@ -10,7 +10,6 @@ async def main():
 
     intents = discord.Intents.default()
     intents.members = True
-    intents.message_content = True
 
     bot = commands.Bot(
         command_prefix=config.COMMAND_PREFIX,
@@ -25,12 +24,6 @@ async def main():
         print(f"Logged in as {bot.user} (ID: {bot.user.id})")
         synced = await bot.tree.sync()
         print(f"Synced {len(synced)} slash command(s).")
-
-    @bot.event
-    async def on_command_error(ctx, error):
-        if isinstance(error, commands.CommandNotFound):
-            return
-        raise error
 
     for cog_name in config.COGS_TO_LOAD:
         await bot.load_extension(f"cogs.{cog_name.strip()}")
