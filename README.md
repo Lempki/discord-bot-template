@@ -42,13 +42,13 @@ This is a clean and modular Python Discord bot template built with [discord.py](
 
 You can use the included setup script to prepare the project in a single step.
 
-On Windows, run the following command.
+On Windows, run the following command:
 
 ```
 setup.bat
 ```
 
-On macOS or Linux, run the following commands.
+On macOS or Linux, run the following commands:
 
 ```
 chmod +x setup.sh
@@ -67,7 +67,7 @@ source .venv/bin/activate
 # On Windows use: .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.template .env
-# Edit .env and set DISCORD_TOKEN and other values as needed
+# Edit .env and set DISCORD_TOKEN and other values as needed.
 python bot.py
 ```
 
