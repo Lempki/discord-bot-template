@@ -12,8 +12,8 @@ class Config:
     COMMAND_PREFIX: str = os.getenv("COMMAND_PREFIX", "/")
     FFMPEG_PATH: str | None = os.getenv("FFMPEG_PATH") or None  # None = use system PATH
 
-    # Comma-separated list of cog module names to load (e.g. "example,voice,youtube")
-    COGS_TO_LOAD: list[str] = os.getenv("COGS_TO_LOAD", "example").split(",")
+    # Comma-separated list of cog module names to load (e.g. "template,voice,youtube")
+    COGS_TO_LOAD: list[str] = os.getenv("COGS_TO_LOAD", "template").split(",")
 
     # Optional server-specific settings
     BOT_CHANNEL_ID: int | None = (

@@ -80,7 +80,7 @@ All configuration is read from environment variables or from a `.env` file locat
 | `DISCORD_TOKEN` | Yes | — | The Discord bot token used to authenticate with the API. |
 | `COMMAND_PREFIX` | No | `/` | The prefix that must precede all bot commands. |
 | `FFMPEG_PATH` | No | system PATH | The absolute path to the FFmpeg binary. Leave this empty to use the system PATH. |
-| `COGS_TO_LOAD` | No | `example` | A comma-separated list of cog module names to load at startup. |
+| `COGS_TO_LOAD` | No | `template` | A comma-separated list of cog module names to load at startup. |
 | `BOT_CHANNEL_ID` | No | — | The ID of the text channel where the bot listens for commands. Commands issued in other channels are ignored. |
 | `AUTO_ROLE_NAME` | No | — | The name of the role that is assigned automatically when a new member joins the server. |
 | `LOCALE` | No | `silent` | The language used for bot messages. Built-in values are `en` and `silent`. New locales can be added in `localization.py`. |
@@ -93,7 +93,7 @@ discord-bot-template/
 ├── config.py           # Environment variable reader. Extend this file to add new configuration keys.
 ├── localization.py     # Strings dataclass and locale presets. Define new languages here.
 ├── cogs/
-│   ├── example.py      # Reference cog. Use this as a starting point for new features.
+│   ├── template.py     # Template cog. Use this as a starting point for new features.
 │   ├── voice.py        # Voice-related commands such as join, leave, and skip.
 │   └── youtube.py      # YouTube audio queue with playlist support.
 ├── utils/
@@ -110,7 +110,7 @@ discord-bot-template/
 
 ## Adding a new cog
 
-1. Copy `cogs/example.py` to a new file such as `cogs/my_feature.py`.
+1. Copy `cogs/template.py` to a new file such as `cogs/my_feature.py`.
 2. Rename the class and implement your commands or event listeners.
 3. Add the module name to the `COGS_TO_LOAD` variable in your `.env` file.
 
@@ -130,7 +130,7 @@ The template includes generic English-language cogs that can be modified or repl
 * Extend the `Config` class in `config.py` to support additional environment variables.
 * Add locale strings to `localization.py` and set `LOCALE` in your `.env` file.
 * Add audio files to `assets/audio/`. Git LFS will manage these automatically.
-* Replace or remove `cogs/example.py` once it is no longer needed.
+* Replace or remove `cogs/template.py` once it is no longer needed.
 
 A forked repository does not maintain a git link to this template. To pull in future updates selectively, add this repository as a named remote and cherry-pick the commits you want.
 

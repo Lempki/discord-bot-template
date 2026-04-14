@@ -1,7 +1,7 @@
 from discord.ext import commands
 
 
-class ExampleCog(commands.Cog, name="Example"):
+class TemplateCog(commands.Cog, name="Template"):
     """Template cog showing all discord.py Cog patterns.
 
     Copy this file and rename the class to add a new feature group.
@@ -34,4 +34,4 @@ class ExampleCog(commands.Cog, name="Example"):
 
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(ExampleCog(bot))
+    await bot.add_cog(TemplateCog(bot))
