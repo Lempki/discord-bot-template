@@ -23,6 +23,8 @@ async def main():
     @bot.event
     async def on_ready():
         print(f"Logged in as {bot.user} (ID: {bot.user.id})")
+        synced = await bot.tree.sync()
+        print(f"Synced {len(synced)} slash command(s).")
 
     @bot.event
     async def on_command_error(ctx, error):

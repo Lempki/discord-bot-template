@@ -13,10 +13,14 @@ class VoiceCog(commands.Cog, name="Voice"):
         return self.bot.get_channel(ch_id) if ch_id else ctx.channel
 
     async def _say(self, ctx: commands.Context, template: str, **kwargs) -> None:
-        if msg := template.format(**kwargs):
+        if not (msg := template.format(**kwargs)):
+            return
+        if ctx.interaction:
+            await ctx.send(msg)
+        else:
             await self._reply_channel(ctx).send(msg)
 
-    @commands.command(name="join", aliases=["connect"])
+    @commands.hybrid_command(name="join", aliases=["connect"])
     @in_bot_channel()
     async def join(self, ctx: commands.Context):
         """Join the voice channel you are currently in."""
@@ -33,7 +37,7 @@ class VoiceCog(commands.Cog, name="Voice"):
             await target.connect()
             await self._say(ctx, s.joined_voice, channel=target)
 
-    @commands.command(name="leave", aliases=["disconnect"])
+    @commands.hybrid_command(name="leave", aliases=["disconnect"])
     @in_bot_channel()
     async def leave(self, ctx: commands.Context):
         """Leave the current voice channel and stop audio."""
@@ -48,7 +52,7 @@ class VoiceCog(commands.Cog, name="Voice"):
         await vc.disconnect()
         await self._say(ctx, s.left_voice, channel=channel)
 
-    @commands.command(name="skip")
+    @commands.hybrid_command(name="skip")
     @in_bot_channel()
     async def skip(self, ctx: commands.Context):
         """Skip the currently playing audio."""
@@ -62,6 +66,11 @@ class VoiceCog(commands.Cog, name="Voice"):
 
     async def cog_command_error(self, ctx: commands.Context, error: Exception):
         if isinstance(error, commands.CheckFailure):
+            if ctx.interaction and not ctx.interaction.response.is_done():
+                await ctx.interaction.response.send_message(
+                    "This command can only be used in the designated bot channel.",
+                    ephemeral=True,
+                )
             return
         raise error
 

@@ -26,13 +26,18 @@ class YouTubeCog(commands.Cog, name="YouTube"):
         return self.bot.config.FFMPEG_PATH or "ffmpeg"
 
     async def _say(self, ctx: commands.Context, template: str, **kwargs) -> None:
-        if msg := template.format(**kwargs):
+        if not (msg := template.format(**kwargs)):
+            return
+        if ctx.interaction:
+            await ctx.send(msg)
+        else:
             await self._reply_channel(ctx).send(msg)
 
-    @commands.command(name="play", aliases=["youtube", "yt"])
+    @commands.hybrid_command(name="play", aliases=["youtube", "yt"])
     @in_bot_channel()
     async def play(self, ctx: commands.Context, *, url: str):
         """Add a YouTube URL or playlist to the queue and start playback if idle."""
+        await ctx.defer()
         s = self.bot.strings
         guild_id = ctx.guild.id
 
@@ -93,6 +98,11 @@ class YouTubeCog(commands.Cog, name="YouTube"):
 
     async def cog_command_error(self, ctx: commands.Context, error: Exception):
         if isinstance(error, commands.CheckFailure):
+            if ctx.interaction and not ctx.interaction.response.is_done():
+                await ctx.interaction.response.send_message(
+                    "This command can only be used in the designated bot channel.",
+                    ephemeral=True,
+                )
             return
         if isinstance(error, commands.MissingRequiredArgument):
             await self._say(ctx, self.bot.strings.play_usage, prefix=self.bot.config.COMMAND_PREFIX)

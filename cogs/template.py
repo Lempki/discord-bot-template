@@ -13,10 +13,10 @@ class TemplateCog(commands.Cog, name="Template"):
 
     # --- Commands ---
 
-    @commands.command(name="ping", aliases=["p"])
+    @commands.hybrid_command(name="ping", aliases=["p"])
     async def ping(self, ctx: commands.Context):
         """Replies with current latency."""
-        await ctx.reply(f"Pong! `{round(self.bot.latency * 1000)}ms`")
+        await ctx.send(f"Pong! `{round(self.bot.latency * 1000)}ms`")
 
     # --- Listeners ---
 
