@@ -50,9 +50,9 @@ For now, the **Presence Intent** and **Message Content Intent** are not used by 
 
 ## Bot permissions
 
-The following permissions are required when inviting the bot to a server. Use the **OAuth2 → URL Generator** in the Developer Portal to build the invite URL. Select both `bot` and `applications.commands` as the OAuth2 scopes, then select the required permissions from the list that appears below the scope selector.
+Use the **OAuth2 → URL Generator** in the Developer Portal to build the invite URL. Select both `bot` and `applications.commands` as the OAuth2 scopes, then select the required permissions from the list that appears below the scope selector.
 
-The **Requires OAuth2 Code Grant** toggle in the Bot section is not applicable to standard bot invites and should remain disabled.
+The **Requires OAuth2 Code Grant** toggle in the Bot page is not applicable to standard bot invites and should remain disabled.
 
 | Permission | Required for |
 |---|---|
