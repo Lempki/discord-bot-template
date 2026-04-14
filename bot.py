@@ -12,7 +12,7 @@ async def main():
     intents.members = True
 
     bot = commands.Bot(
-        command_prefix=config.COMMAND_PREFIX,
+        command_prefix=commands.when_mentioned,
         intents=intents,
         help_command=None,
     )

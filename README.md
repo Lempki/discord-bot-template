@@ -102,7 +102,6 @@ All configuration is read from environment variables or from a `.env` file locat
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `DISCORD_TOKEN` | Yes | — | The Discord bot token used to authenticate with the API. |
-| `COMMAND_PREFIX` | No | `/` | Prefix used in help display strings. Not used as a Discord command trigger; the bot uses slash commands exclusively. |
 | `FFMPEG_PATH` | No | system PATH | The absolute path to the FFmpeg binary. Leave this empty to use the system PATH. |
 | `COGS_TO_LOAD` | No | `template` | A comma-separated list of cog module names to load at startup. |
 | `BOT_CHANNEL_ID` | No | none | The ID of the text channel where the bot listens for commands. If not set, commands are accepted in any channel. |
