@@ -44,7 +44,7 @@ if errorlevel 1 (
 
 :: Copy .env.example to .env if .env doesn't exist yet
 if not exist ".env" (
-    copy ".env.example" ".env" >nul
+    copy ".env.template" ".env" >nul
     echo Created .env from .env.example
     echo   ^> Edit .env and set your DISCORD_TOKEN before running the bot.
 ) else (

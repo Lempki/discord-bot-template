@@ -9,7 +9,7 @@ class Config:
     DISCORD_TOKEN: str = os.environ["DISCORD_TOKEN"]
 
     # Optional with defaults
-    COMMAND_PREFIX: str = os.getenv("COMMAND_PREFIX", "!")
+    COMMAND_PREFIX: str = os.getenv("COMMAND_PREFIX", "/")
     FFMPEG_PATH: str | None = os.getenv("FFMPEG_PATH") or None  # None = use system PATH
 
     # Comma-separated list of cog module names to load (e.g. "example,voice,youtube")

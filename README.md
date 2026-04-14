@@ -55,7 +55,7 @@ chmod +x setup.sh
 ./setup.sh
 ```
 
-The script creates a `.venv` virtual environment if one does not already exist. It installs all dependencies and copies `.env.example` to `.env` on the first run. You must edit `.env` and set your `DISCORD_TOKEN` before starting the bot.
+The script creates a `.venv` virtual environment if one does not already exist. It installs all dependencies and copies `.env.template` to `.env` on the first run. You must edit `.env` and set your `DISCORD_TOKEN` before starting the bot.
 
 If you prefer to perform the setup manually, follow these steps:
 
@@ -66,7 +66,7 @@ python -m venv .venv
 source .venv/bin/activate
 # On Windows use: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env
+cp .env.template .env
 # Edit .env and set DISCORD_TOKEN and other values as needed
 python bot.py
 ```
@@ -78,7 +78,7 @@ All configuration is read from environment variables or from a `.env` file locat
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `DISCORD_TOKEN` | Yes | — | The Discord bot token used to authenticate with the API. |
-| `COMMAND_PREFIX` | No | `!` | The prefix that must precede all bot commands. |
+| `COMMAND_PREFIX` | No | `/` | The prefix that must precede all bot commands. |
 | `FFMPEG_PATH` | No | system PATH | The absolute path to the FFmpeg binary. Leave this empty to use the system PATH. |
 | `COGS_TO_LOAD` | No | `example` | A comma-separated list of cog module names to load at startup. |
 | `BOT_CHANNEL_ID` | No | — | The ID of the text channel where the bot listens for commands. Commands issued in other channels are ignored. |
@@ -102,7 +102,7 @@ discord-bot-template/
 │   └── logging.py      # Timestamped console logging helper.
 ├── assets/
 │   └── audio/          # Directory for .ogg and .mp3 files. Managed via Git LFS.
-├── .env.example        # Template for environment variables.
+├── .env.template       # Template for environment variables.
 ├── setup.bat           # Windows setup script.
 ├── setup.sh            # macOS and Linux setup script.
 └── requirements.txt

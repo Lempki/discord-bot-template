@@ -24,7 +24,7 @@ echo "Installing requirements..."
 
 # Copy .env.example to .env if .env doesn't exist yet
 if [ ! -f ".env" ]; then
-    cp .env.example .env
+    cp .env.template .env
     echo "Created .env from .env.example"
     echo "  > Edit .env and set your DISCORD_TOKEN before running the bot."
 else
