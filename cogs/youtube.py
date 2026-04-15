@@ -23,13 +23,15 @@ class YouTubeCog(commands.Cog, name="YouTube"):
     def _ffmpeg(self) -> str:
         return self.bot.config.FFMPEG_PATH or "ffmpeg"
 
-    async def _say(self, interaction: discord.Interaction, template: str, **kwargs) -> None:
+    async def _say(self, interaction: discord.Interaction, template: str, **kwargs) -> bool:
+        """Format and send *template*. Returns True if a message was sent."""
         if not (msg := template.format(**kwargs)):
-            return
+            return False
         if interaction.response.is_done():
             await interaction.followup.send(msg)
         else:
             await interaction.response.send_message(msg)
+        return True
 
     @app_commands.command(name="play")
     @in_bot_channel()
@@ -39,14 +41,30 @@ class YouTubeCog(commands.Cog, name="YouTube"):
         s = self.bot.strings
         guild_id = interaction.guild_id
 
-        urls = await resolve_urls(url, loop=asyncio.get_running_loop())
+        vc = interaction.guild.voice_client
+        if vc is None and interaction.user.voice is None:
+            if not await self._say(interaction, s.not_in_voice, user=interaction.user):
+                await interaction.delete_original_response()
+            return
+
+        try:
+            urls = await resolve_urls(url, loop=asyncio.get_running_loop())
+        except Exception as e:
+            log(f"Error resolving '{url}': {e}")
+            if not await self._say(interaction, s.load_error, user=interaction.user):
+                await interaction.delete_original_response()
+            return
+
         for u in urls:
             await self._queue(guild_id).put((interaction, u))
 
         if len(urls) > 1:
-            await self._say(interaction, s.queued_many, count=len(urls), user=interaction.user)
+            sent = await self._say(interaction, s.queued_many, count=len(urls), user=interaction.user)
         else:
-            await self._say(interaction, s.queued_one, user=interaction.user)
+            sent = await self._say(interaction, s.queued_one, user=interaction.user)
+        if not sent:
+            await interaction.delete_original_response()
+
         log(f"Queued {len(urls)} item(s) from {interaction.user}")
 
         if not self._playing.get(guild_id):
