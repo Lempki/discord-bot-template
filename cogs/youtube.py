@@ -159,10 +159,8 @@ class YouTubeCog(commands.Cog, name="YouTube"):
     ):
         if isinstance(error, app_commands.CheckFailure):
             if not interaction.response.is_done():
-                await interaction.response.send_message(
-                    "This command can only be used in the designated bot channel.",
-                    ephemeral=True,
-                )
+                if msg := self.bot.strings.bot_channel_only:
+                    await interaction.response.send_message(msg, ephemeral=True)
             return
         raise error
 
