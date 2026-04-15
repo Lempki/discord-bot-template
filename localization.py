@@ -27,6 +27,9 @@ class Strings:
     named placeholders documented in the comments below.
     """
 
+    # --- General ---
+    bot_channel_only: str = ""
+
     # --- Voice cog ---
     # {user}
     not_in_voice: str = ""
@@ -66,6 +69,7 @@ class Strings:
 SILENT = Strings()  # all empty strings — bot sends no messages
 
 ENGLISH = Strings(
+    bot_channel_only="This command can only be used in the designated bot channel.",
     not_in_voice="You are not in a voice channel, `{user}`.",
     bot_not_in_voice="Not in a voice channel.",
     already_same_channel="Already in your voice channel, `{user}`.",
