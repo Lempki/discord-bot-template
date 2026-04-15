@@ -106,11 +106,53 @@ class YouTubeCog(commands.Cog, name="YouTube"):
         await self._say(interaction, s.now_playing, title=player.title, channel=vc.channel)
         log(f"Playing '{player.title}'")
 
-        while vc.is_playing():
+        while vc.is_playing() or vc.is_paused():
             await asyncio.sleep(1)
 
         self._playing[guild_id] = False
         await self._process_queue(guild_id)
+
+    @app_commands.command(name="stop")
+    @in_bot_channel()
+    async def stop(self, interaction: discord.Interaction):
+        """Stop playback and clear the queue."""
+        await interaction.response.defer()
+        s = self.bot.strings
+        guild_id = interaction.guild_id
+        vc = interaction.guild.voice_client
+        if vc is None or (not vc.is_playing() and not vc.is_paused()):
+            if not await self._say(interaction, s.nothing_to_skip):
+                await interaction.delete_original_response()
+            return
+        q = self._queue(guild_id)
+        while not q.empty():
+            try:
+                q.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+        vc.stop()
+        if not await self._say(interaction, s.stopped):
+            await interaction.delete_original_response()
+
+    @app_commands.command(name="pause")
+    @in_bot_channel()
+    async def pause(self, interaction: discord.Interaction):
+        """Pause or resume the current audio."""
+        await interaction.response.defer()
+        s = self.bot.strings
+        vc = interaction.guild.voice_client
+        if vc is None or (not vc.is_playing() and not vc.is_paused()):
+            if not await self._say(interaction, s.nothing_to_skip):
+                await interaction.delete_original_response()
+            return
+        if vc.is_paused():
+            vc.resume()
+            if not await self._say(interaction, s.resumed):
+                await interaction.delete_original_response()
+        else:
+            vc.pause()
+            if not await self._say(interaction, s.paused):
+                await interaction.delete_original_response()
 
     async def cog_app_command_error(
         self, interaction: discord.Interaction, error: app_commands.AppCommandError
