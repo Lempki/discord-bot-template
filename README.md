@@ -1,4 +1,4 @@
-# discord-bot-template
+# Discord Bot Template
 
 This is a clean and modular Python Discord bot template built with [discord.py](https://discordpy.readthedocs.io/) and the Cog system. This repository is designed to be used as a starting point for custom bot projects. It provides a structured foundation that can be adapted to a wide range of use cases.
 
