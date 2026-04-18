@@ -1,6 +1,6 @@
 # discord-bot-template
 
-This is a clean and modular Python Discord bot template built with [discord.py](https://discordpy.readthedocs.io/) and the Cog system. This repository is designed to be used as a starting point for custom bot projects. It provides a structured foundation that can be adapted to a wide range of use cases.
+This is a clean and modular Python Discord bot template built with [discord.py](https://discordpy.readthedocs.io/) and the cog system. This repository is designed to be used as a starting point for custom bot projects. It provides a structured foundation that can be adapted to a wide range of use cases.
 
 ## Features
 
@@ -87,8 +87,7 @@ If you prefer to perform the setup manually, follow these steps:
 git clone https://github.com/Lempki/discord-bot-template.git my-bot
 cd my-bot
 python -m venv .venv
-source .venv/bin/activate
-# On Windows use: .venv\Scripts\activate
+source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.template .env
 # Edit .env and set DISCORD_TOKEN and other values as needed.
