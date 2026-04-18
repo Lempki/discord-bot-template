@@ -1,10 +1,10 @@
 # discord-bot-template
 
-This is a clean and modular Python Discord bot template built with [discord.py](https://discordpy.readthedocs.io/) and the cog system. This repository is designed to be used as a starting point for custom bot projects. It provides a structured foundation that can be adapted to a wide range of use cases.
+This is a clean and modular Python Discord bot template built with [discord.py](https://discordpy.readthedocs.io/). This repository is designed to be used as a starting point for custom bot projects. It provides a structured foundation that can be adapted to a wide range of use cases.
 
 ## Features
 
-* The template uses a Cog-based architecture. Each feature group is implemented as an isolated and reloadable module.
+* The template uses a cog-based architecture. Each feature group is implemented as an isolated and reloadable module.
 * All configuration is handled through environment variables. No tokens or IDs are hardcoded in the source code.
 * FFmpeg is resolved automatically from the system PATH or from a configurable environment variable.
 * Per-guild audio queue support is included. This ensures safe operation across multiple servers.
