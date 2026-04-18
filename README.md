@@ -143,6 +143,17 @@ All user-facing messages are defined in `localization.py` as a `Strings` datacla
 
 Setting `LOCALE=en` in `.env` activates the built-in English preset. To add a new language, create a `Strings(...)` instance with your translated strings and register it in the `LOCALES` dictionary at the bottom of the file. No changes to cog code are required.
 
+## Related services
+
+The following services work alongside bots built from this template and handle functionality that is managed centrally rather than bundled in each bot repository.
+
+| Service | Description |
+|---|---|
+| [discord-api-media](https://github.com/Lempki/discord-api-media) | Resolves YouTube and SoundCloud track metadata and stream URLs. Bots call this instead of bundling yt-dlp directly. |
+| [discord-api-scraper](https://github.com/Lempki/discord-api-scraper) | Scrapes structured data from external websites using configurable CSS or XPath selectors. |
+| [discord-api-scheduler](https://github.com/Lempki/discord-api-scheduler) | Schedules persistent reminders that survive bot restarts and are delivered via Discord webhooks. |
+| [discord-api-tts](https://github.com/Lempki/discord-api-tts) | Generates Morshu TTS audio from text and returns a WAV file. |
+
 ## Forking this template
 
 Use the GitHub template button to create a new repository based on this project.
