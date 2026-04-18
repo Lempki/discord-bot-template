@@ -1,4 +1,4 @@
-# Discord Bot Template
+# discord-bot-template
 
 This is a clean and modular Python Discord bot template built with [discord.py](https://discordpy.readthedocs.io/) and the Cog system. This repository is designed to be used as a starting point for custom bot projects. It provides a structured foundation that can be adapted to a wide range of use cases.
 
@@ -95,6 +95,19 @@ cp .env.template .env
 python bot.py
 ```
 
+### Docker
+
+Alternatively, you can run the bot as a Docker container.
+
+1. Copy `.env.template` to `.env` and set `DISCORD_TOKEN`.
+2. Build and start the container:
+
+   ```
+   docker-compose up -d
+   ```
+
+The container automatically restarts unless explicitly stopped.
+
 ## Configuration
 
 All configuration is read from environment variables or from a `.env` file located in the project root directory.
@@ -128,6 +141,9 @@ discord-bot-template/
 ├── .env.template       # Template for environment variables.
 ├── setup.bat           # Windows setup script.
 ├── setup.sh            # macOS and Linux setup script.
+├── Dockerfile
+├── docker-compose.yml
+├── .dockerignore
 └── requirements.txt
 ```
 
