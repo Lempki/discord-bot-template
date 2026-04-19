@@ -46,7 +46,7 @@ class Strings:
     skipped: str = ""
     nothing_to_skip: str = ""
 
-    # --- YouTube cog ---
+    # --- Media cog ---
     # {user}
     queued_one: str = ""
     # {count}, {user}

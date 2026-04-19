@@ -14,13 +14,13 @@ _FFMPEG_OPTIONS = {
 }
 
 
-class YouTubeCog(commands.Cog, name="YouTube"):
+class MediaCog(commands.Cog, name="Media"):
     """Audio queue supporting YouTube and Spotify. Concurrent queues per guild."""
 
     def __init__(self, bot: commands.Bot):
         if not bot.config.DISCORD_API_MEDIA_URL or not bot.config.DISCORD_API_MEDIA_SECRET:
             raise RuntimeError(
-                "DISCORD_API_MEDIA_URL and DISCORD_API_MEDIA_SECRET must be set to use the youtube cog."
+                "DISCORD_API_MEDIA_URL and DISCORD_API_MEDIA_SECRET must be set to use the media cog."
             )
         self.bot = bot
         self._queues: dict[int, asyncio.Queue] = {}
@@ -194,4 +194,4 @@ class YouTubeCog(commands.Cog, name="YouTube"):
 
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(YouTubeCog(bot))
+    await bot.add_cog(MediaCog(bot))
