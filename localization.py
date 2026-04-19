@@ -61,6 +61,11 @@ class Strings:
     paused: str = ""
     resumed: str = ""
 
+    # --- Help cog ---
+    help_title: str = ""
+    # optional tagline shown in the embed footer
+    help_footer: str = ""
+
 
 # ---------------------------------------------------------------------------
 # Built-in locale presets
@@ -86,6 +91,7 @@ ENGLISH = Strings(
     stopped="Stopped and cleared the queue.",
     paused="Paused.",
     resumed="Resumed.",
+    help_title="Commands",
 )
 
 #: Map LOCALE env var values to Strings instances.

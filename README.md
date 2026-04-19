@@ -11,6 +11,7 @@ This is a clean and modular Python Discord bot template built with [discord.py](
 * Local development is supported through a `.env` file using `python-dotenv`.
 * Git LFS is configured for managing large audio and image assets.
 * A `Strings` dataclass defines all user-facing messages as named format strings. The bot is silent by default and messages are enabled by setting a locale in the environment.
+* The `/help` command displays all loaded commands grouped by cog in an ephemeral embed. The output reflects whichever cogs are active at runtime with no additional configuration.
 * Setup scripts for Windows and Unix are included. Running `setup.bat` or `setup.sh` handles virtual environment creation, dependency installation, and initial `.env` configuration in a single step.
 
 ## Prerequisites
@@ -115,7 +116,7 @@ All configuration is read from environment variables or from a `.env` file locat
 |---|---|---|---|
 | `DISCORD_TOKEN` | Yes | — | The Discord bot token used to authenticate with the API. |
 | `FFMPEG_PATH` | No | system PATH | The absolute path to the FFmpeg binary. Leave this empty to use the system PATH. |
-| `COGS_TO_LOAD` | No | `template` | A comma-separated list of cog module names to load at startup. |
+| `COGS_TO_LOAD` | No | `template` | A comma-separated list of cog module names to load at startup. Set to `help,template,voice,youtube` for the full feature set. |
 | `BOT_CHANNEL_ID` | No | none | The ID of the text channel where the bot listens for commands. If not set, commands are accepted in any channel. |
 | `AUTO_ROLE_NAME` | No | none | The name of the role assigned automatically when a new member joins the server. If not set, no role is assigned automatically. |
 | `LOCALE` | No | `silent` | The language used for bot messages. Built-in values are `en` and `silent`. When set to `silent`, the bot sends no messages. New locales can be added in `localization.py`. |
@@ -128,6 +129,7 @@ discord-bot-template/
 ├── config.py           # Environment variable reader. Extend this file to add new configuration keys.
 ├── localization.py     # Strings dataclass and locale presets. Define new languages here.
 ├── cogs/
+│   ├── help.py         # /help command. Lists all loaded commands grouped by cog.
 │   ├── template.py     # Template cog. Use this as a starting point for new features.
 │   ├── voice.py        # Voice-related commands such as join, leave, and skip.
 │   └── youtube.py      # YouTube audio queue with playlist support.
