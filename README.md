@@ -9,7 +9,7 @@ This is a clean and modular Python Discord bot template built with [discord.py](
 * FFmpeg is resolved automatically from the system PATH or from a configurable environment variable.
 * Per-guild audio queue support is included. This ensures safe operation across multiple servers.
 * Local development is supported through a `.env` file using `python-dotenv`.
-* Git LFS is configured for managing large audio and image assets.
+* Git LFS is configured for managing large audio, image, and video assets.
 * A `Strings` dataclass defines all user-facing messages as named format strings. The bot is silent by default and messages are enabled by setting a locale in the environment.
 * The `/help` command displays all loaded commands grouped by cog in an ephemeral embed. The output reflects whichever cogs are active at runtime with no additional configuration.
 * Setup scripts for Windows and Unix are included. Running `setup.bat` or `setup.sh` handles virtual environment creation, dependency installation, and initial `.env` configuration in a single step.
@@ -117,8 +117,8 @@ All configuration is read from environment variables or from a `.env` file locat
 | `DISCORD_TOKEN` | Yes | — | The Discord bot token used to authenticate with the API. |
 | `FFMPEG_PATH` | No | system PATH | The absolute path to the FFmpeg binary. Leave this empty to use the system PATH. |
 | `COGS_TO_LOAD` | No | `template` | A comma-separated list of cog module names to load at startup. Set to `help,template,voice,media` for the full feature set. |
-| `BOT_CHANNEL_ID` | No | none | The ID of the text channel where the bot listens for commands. If not set, commands are accepted in any channel. |
-| `AUTO_ROLE_NAME` | No | none | The name of the role assigned automatically when a new member joins the server. If not set, no role is assigned automatically. |
+| `BOT_CHANNEL_ID` | No | — | The ID of the text channel where the bot listens for commands. If not set, commands are accepted in any channel. |
+| `AUTO_ROLE_NAME` | No | — | The name of the role assigned automatically when a new member joins the server. If not set, no role is assigned automatically. |
 | `LOCALE` | No | `silent` | The language used for bot messages. Built-in values are `en` and `silent`. When set to `silent`, the bot sends no messages. New locales can be added in `localization.py`. |
 | `DISCORD_API_MEDIA_URL` | No* | — | Base URL of the [discord-api-media](https://github.com/Lempki/discord-api-media) service. Required when the `media` cog is loaded. |
 | `DISCORD_API_MEDIA_SECRET` | No* | — | Bearer token for discord-api-media. Must match `DISCORD_API_SECRET` in that service. Required when the `media` cog is loaded. |
@@ -142,7 +142,9 @@ discord-bot-template/
 │   ├── checks.py       # Custom command checks such as in_bot_channel().
 │   └── logging.py      # Timestamped console logging helper.
 ├── assets/
-│   └── audio/          # Directory for .ogg and .mp3 files. Managed via Git LFS.
+│   ├── audio/          # .ogg, .mp3, .wav — Git LFS
+│   ├── images/         # .png, .jpg, .gif, .webp — Git LFS
+│   └── videos/         # .mp4, .mov, .webm — Git LFS
 ├── .env.template       # Template for environment variables.
 ├── setup.bat           # Windows setup script.
 ├── setup.sh            # macOS and Linux setup script.
@@ -173,7 +175,6 @@ The following services work alongside bots built from this template and handle f
 | [discord-api-media](https://github.com/Lempki/discord-api-media) | Resolves YouTube, SoundCloud, and Spotify track metadata and stream URLs. Bots call this instead of bundling yt-dlp directly. Supports Spotify tracks, albums, and playlists. |
 | [discord-api-scraper](https://github.com/Lempki/discord-api-scraper) | Scrapes structured data from external websites using configurable CSS or XPath selectors. |
 | [discord-api-scheduler](https://github.com/Lempki/discord-api-scheduler) | Schedules persistent reminders that survive bot restarts and are delivered via Discord webhooks. |
-| [discord-api-tts](https://github.com/Lempki/discord-api-tts) | Generates Morshu TTS audio from text and returns a WAV file. |
 
 ## Forking this template
 
@@ -184,7 +185,8 @@ The template includes generic English-language cogs that can be modified or repl
 * Add new bot-specific cogs in the `cogs/` directory.
 * Extend the `Config` class in `config.py` to support additional environment variables.
 * Add locale strings to `localization.py` and set `LOCALE` in your `.env` file.
-* Add audio files to `assets/audio/`. Git LFS will manage these automatically.
+* Add audio files to `assets/audio/`, images to `assets/images/`, and videos to `assets/videos/`. Git LFS will manage these automatically based on file extension.
+* Send images and videos to Discord as `discord.File` attachments. `audio.py` and `play_file()` are audio-only and are not used for other asset types.
 * Replace or remove `cogs/template.py` once it is no longer needed.
 
 A forked repository does not maintain a git link to this template. To pull in future updates selectively, add this repository as a named remote and cherry-pick the commits you want.
