@@ -120,6 +120,10 @@ All configuration is read from environment variables or from a `.env` file locat
 | `BOT_CHANNEL_ID` | No | none | The ID of the text channel where the bot listens for commands. If not set, commands are accepted in any channel. |
 | `AUTO_ROLE_NAME` | No | none | The name of the role assigned automatically when a new member joins the server. If not set, no role is assigned automatically. |
 | `LOCALE` | No | `silent` | The language used for bot messages. Built-in values are `en` and `silent`. When set to `silent`, the bot sends no messages. New locales can be added in `localization.py`. |
+| `DISCORD_API_MEDIA_URL` | No* | — | Base URL of the [discord-api-media](https://github.com/Lempki/discord-api-media) service. Required when the `youtube` cog is loaded. |
+| `DISCORD_API_MEDIA_SECRET` | No* | — | Bearer token for discord-api-media. Must match `DISCORD_API_SECRET` in that service. Required when the `youtube` cog is loaded. |
+
+\* Required if the `youtube` cog is included in `COGS_TO_LOAD`.
 
 ## Project structure
 
@@ -132,9 +136,9 @@ discord-bot-template/
 │   ├── help.py         # /help command. Lists all loaded commands grouped by cog.
 │   ├── template.py     # Template cog. Use this as a starting point for new features.
 │   ├── voice.py        # Voice-related commands such as join, leave, and skip.
-│   └── youtube.py      # YouTube audio queue with playlist support.
+│   └── youtube.py      # Audio queue with YouTube and Spotify support.
 ├── utils/
-│   ├── audio.py        # Audio helpers including YouTubeDLSource and playback utilities.
+│   ├── audio.py        # MediaAPIClient, URL helpers, and local file playback utility.
 │   ├── checks.py       # Custom command checks such as in_bot_channel().
 │   └── logging.py      # Timestamped console logging helper.
 ├── assets/
@@ -166,7 +170,7 @@ The following services work alongside bots built from this template and handle f
 
 | Service | Description |
 |---|---|
-| [discord-api-media](https://github.com/Lempki/discord-api-media) | Resolves YouTube and SoundCloud track metadata and stream URLs. Bots call this instead of bundling yt-dlp directly. |
+| [discord-api-media](https://github.com/Lempki/discord-api-media) | Resolves YouTube, SoundCloud, and Spotify track metadata and stream URLs. Bots call this instead of bundling yt-dlp directly. Supports Spotify tracks, albums, and playlists. |
 | [discord-api-scraper](https://github.com/Lempki/discord-api-scraper) | Scrapes structured data from external websites using configurable CSS or XPath selectors. |
 | [discord-api-scheduler](https://github.com/Lempki/discord-api-scheduler) | Schedules persistent reminders that survive bot restarts and are delivered via Discord webhooks. |
 | [discord-api-tts](https://github.com/Lempki/discord-api-tts) | Generates Morshu TTS audio from text and returns a WAV file. |
