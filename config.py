@@ -23,3 +23,7 @@ class Config:
     # Locale to use for bot messages. Built-in values: "silent", "en".
     # Add more in localization.py. Default is "silent" (bot sends no messages).
     LOCALE: str = os.getenv("LOCALE", "silent")
+
+    # discord-api-media service. Required when the youtube cog is loaded.
+    DISCORD_API_MEDIA_URL: str | None = os.getenv("DISCORD_API_MEDIA_URL") or None
+    DISCORD_API_MEDIA_SECRET: str | None = os.getenv("DISCORD_API_MEDIA_SECRET") or None

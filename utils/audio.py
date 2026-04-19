@@ -1,92 +1,50 @@
 import asyncio
+
 import discord
-import yt_dlp
+import httpx
 
 
-YTDL_OPTIONS = {
-    "format": "bestaudio/best",
-    "outtmpl": "%(id)s.%(ext)s",
-    "restrictfilenames": True,
-    "noplaylist": True,   # only used in from_url (per-item extraction)
-    "nocheckcertificate": True,
-    "ignoreerrors": False,
-    "logtostderr": False,
-    "quiet": True,
-    "no_warnings": True,
-    "default_search": "auto",
-    "source_address": "0.0.0.0",
-}
+class MediaAPIClient:
+    """HTTP client for discord-api-media."""
 
-# Used only for the initial URL resolution step — fast flat extraction, no download.
-_YTDL_FLAT_OPTIONS = {
-    **YTDL_OPTIONS,
-    "extract_flat": "in_playlist",
-    "noplaylist": False,  # allow playlists at this stage
-}
-
-FFMPEG_STREAM_OPTIONS = {
-    "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-    "options": "-vn",
-}
-
-
-class YouTubeDLSource(discord.PCMVolumeTransformer):
-    def __init__(self, source: discord.FFmpegAudio, *, data: dict, volume: float = 0.5):
-        super().__init__(source, volume)
-        self.data = data
-        self.title = data.get("title")
-        self.url = data.get("url")
-
-    @classmethod
-    async def from_url(
-        cls,
-        url: str,
-        *,
-        loop: asyncio.AbstractEventLoop | None = None,
-        stream: bool = True,
-        ffmpeg_executable: str = "ffmpeg",
-    ) -> "YouTubeDLSource":
-        loop = loop or asyncio.get_event_loop()
-        with yt_dlp.YoutubeDL(YTDL_OPTIONS) as ydl:
-            data = await loop.run_in_executor(
-                None, lambda: ydl.extract_info(url, download=not stream)
-            )
-        if "entries" in data:
-            data = data["entries"][0]
-        file = data["url"] if stream else yt_dlp.YoutubeDL.prepare_filename(data)
-        source = discord.FFmpegPCMAudio(
-            file, executable=ffmpeg_executable, **FFMPEG_STREAM_OPTIONS
+    def __init__(self, base_url: str, secret: str):
+        self._http = httpx.AsyncClient(
+            base_url=base_url,
+            headers={"Authorization": f"Bearer {secret}"},
+            timeout=120.0,
         )
-        return cls(source, data=data)
+
+    async def get_info(self, url: str | None = None, query: str | None = None) -> dict:
+        """Resolve a URL or search query to full track metadata including stream_url."""
+        params: dict[str, str] = {}
+        if url:
+            params["url"] = url
+        if query:
+            params["query"] = query
+        resp = await self._http.get("/media/info", params=params)
+        resp.raise_for_status()
+        return resp.json()
+
+    async def get_playlist(self, url: str) -> list[dict]:
+        """Expand a YouTube playlist or Spotify album/playlist into a list of tracks."""
+        resp = await self._http.get("/media/playlist", params={"url": url})
+        resp.raise_for_status()
+        return resp.json().get("tracks", [])
+
+    async def aclose(self) -> None:
+        await self._http.aclose()
 
 
-async def resolve_urls(
-    url: str,
-    *,
-    loop: asyncio.AbstractEventLoop | None = None,
-) -> list[str]:
-    """Resolve a URL to one or more streamable video URLs.
+def is_url(text: str) -> bool:
+    return text.startswith(("http://", "https://"))
 
-    For a single video: returns ``[url]`` unchanged.
-    For a playlist: returns one URL per entry in playlist order.
-    Uses flat extraction so large playlists resolve quickly.
-    """
-    loop = loop or asyncio.get_event_loop()
-    with yt_dlp.YoutubeDL(_YTDL_FLAT_OPTIONS) as ydl:
-        data = await loop.run_in_executor(None, lambda: ydl.extract_info(url, download=False))
 
-    entries = data.get("entries")
-    if not entries:
-        return [url]
+def is_spotify_collection(url: str) -> bool:
+    return "spotify.com" in url and ("/album/" in url or "/playlist/" in url)
 
-    urls = []
-    for entry in entries:
-        vid_url = entry.get("webpage_url") or entry.get("url")
-        if not vid_url and entry.get("id"):
-            vid_url = f"https://www.youtube.com/watch?v={entry['id']}"
-        if vid_url:
-            urls.append(vid_url)
-    return urls or [url]
+
+def is_youtube_playlist(url: str) -> bool:
+    return ("youtube.com" in url or "youtu.be" in url) and "list=" in url
 
 
 async def play_file(
