@@ -170,10 +170,10 @@ The following services work alongside bots built from this template and handle f
 
 | Service | Description |
 |---|---|
-| [discord-api-media](https://github.com/Lempki/discord-api-media) | Resolves YouTube, SoundCloud, and Spotify track metadata and stream URLs. Bots call this instead of bundling yt-dlp directly. Supports Spotify tracks, albums, and playlists. |
-| [discord-api-morshu](https://github.com/Lempki/discord-api-morshu) | Generates Morshu TTS audio and video from text. Bots call this instead of bundling the TTS engine locally. |
+| [discord-api-media](https://github.com/Lempki/discord-api-media) | Resolves YouTube, SoundCloud, and Spotify track metadata and stream URLs. Supports Spotify tracks, albums, and playlists. |
 | [discord-api-scraper](https://github.com/Lempki/discord-api-scraper) | Scrapes structured data from external websites using configurable CSS or XPath selectors. |
 | [discord-api-scheduler](https://github.com/Lempki/discord-api-scheduler) | Schedules persistent reminders that survive bot restarts and are delivered via Discord webhooks. |
+| [discord-api-morshu](https://github.com/Lempki/discord-api-morshu) | Generates Morshu TTS audio and video from text. |
 
 ## Forking this template
 
