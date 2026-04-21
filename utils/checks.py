@@ -3,12 +3,12 @@ from discord import app_commands
 
 
 def in_bot_channel():
-    """Check decorator that restricts commands to the configured BOT_CHANNEL_ID.
+    """Check decorator for per-guild channel restrictions.
 
-    If BOT_CHANNEL_ID is not set, commands are allowed in any channel.
+    Currently a no-op — all channels are permitted. Intended to be
+    replaced with a per-guild database lookup once server admin commands
+    are implemented.
     """
     async def predicate(interaction: discord.Interaction) -> bool:
-        if interaction.client.config.BOT_CHANNEL_ID is None:
-            return True
-        return interaction.channel_id == interaction.client.config.BOT_CHANNEL_ID
+        return True
     return app_commands.check(predicate)

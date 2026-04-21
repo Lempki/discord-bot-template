@@ -117,8 +117,6 @@ All configuration is read from environment variables or from a `.env` file locat
 | `DISCORD_TOKEN` | Yes | — | The Discord bot token used to authenticate with the API. |
 | `FFMPEG_PATH` | No | system PATH | The absolute path to the FFmpeg binary. Leave this empty to use the system PATH. |
 | `COGS_TO_LOAD` | No | `template` | A comma-separated list of cog module names to load at startup. Set to `help,template,voice,media` for the full feature set. |
-| `BOT_CHANNEL_ID` | No | — | The ID of the text channel where the bot listens for commands. If not set, commands are accepted in any channel. |
-| `AUTO_ROLE_NAME` | No | — | The name of the role assigned automatically when a new member joins the server. If not set, no role is assigned automatically. |
 | `LOCALE` | No | `silent` | The language used for bot messages. Built-in values are `en` and `silent`. When set to `silent`, the bot sends no messages. New locales can be added in `localization.py`. |
 | `DISCORD_API_MEDIA_URL` | No* | — | Base URL of the [discord-api-media](https://github.com/Lempki/discord-api-media) service. Required when the `media` cog is loaded. |
 | `DISCORD_API_MEDIA_SECRET` | No* | — | Bearer token for discord-api-media. Must match `DISCORD_API_SECRET` in that service. Required when the `media` cog is loaded. |
