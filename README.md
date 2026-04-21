@@ -141,7 +141,7 @@ discord-bot-template/
 │   └── logging.py      # Timestamped console logging helper.
 ├── assets/
 │   ├── audio/          # Local Git LFS-managed audio files.
-│   ├── images/         # Local Git LFS-managerd image files.
+│   ├── images/         # Local Git LFS-managed image files.
 │   └── videos/         # Local Git LFS-managed video files.
 ├── .env.template       # Template for environment variables.
 ├── setup.bat           # Windows setup script.
