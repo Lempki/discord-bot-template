@@ -140,9 +140,9 @@ discord-bot-template/
 │   ├── checks.py       # Custom command checks such as in_bot_channel().
 │   └── logging.py      # Timestamped console logging helper.
 ├── assets/
-│   ├── audio/          # .ogg, .mp3, .wav — Git LFS
-│   ├── images/         # .png, .jpg, .gif, .webp — Git LFS
-│   └── videos/         # .mp4, .mov, .webm — Git LFS
+│   ├── audio/          # Local Git LFS-managed audio files.
+│   ├── images/         # Local Git LFS-managerd image files.
+│   └── videos/         # Local Git LFS-managed video files.
 ├── .env.template       # Template for environment variables.
 ├── setup.bat           # Windows setup script.
 ├── setup.sh            # macOS and Linux setup script.
