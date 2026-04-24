@@ -45,9 +45,9 @@ The bot requires one privileged intent. Enable it in your application's **Bot** 
 
 | Intent | Portal label | Required for |
 |---|---|---|
-| `members` | Server Members Intent | `on_member_join` events and reliable member object caching. |
+| `members` | Server Members Intent | `on_member_join` events, auto-role assignment, and reliable member object caching. |
 
-For now, the **Presence Intent** and **Message Content Intent** are not used by this template and do not need to be enabled.
+The **Presence Intent** is not used by this template and does not need to be enabled. The **Message Content Intent** is not required yet but will be needed in a future phase for message-based automoderation.
 
 ## Bot permissions
 
@@ -62,6 +62,9 @@ The **Requires OAuth2 Code Grant** toggle in the Bot page is not applicable to s
 | Read Message History | Reply functionality. |
 | Connect | Joining voice channels. |
 | Speak | Playing audio in voice channels. |
+| Manage Roles | Auto-role assignment on member join. |
+| Kick Members | `/kick` and `/warn` threshold enforcement. |
+| Ban Members | `/ban` and `/warn` threshold enforcement when action is `ban`. |
 
 ## Setup
 
@@ -116,7 +119,8 @@ All configuration is read from environment variables or from a `.env` file locat
 |---|---|---|---|
 | `DISCORD_TOKEN` | Yes | — | The Discord bot token used to authenticate with the API. |
 | `FFMPEG_PATH` | No | system PATH | The absolute path to the FFmpeg binary. Leave this empty to use the system PATH. |
-| `COGS_TO_LOAD` | No | `template` | A comma-separated list of cog module names to load at startup. Set to `help,template,voice,media` for the full feature set. |
+| `COGS_TO_LOAD` | No | `template` | A comma-separated list of cog module names to load at startup. Set to `help,template,voice,media,admin,moderation,events` for the full feature set. |
+| `DATABASE_PATH` | No | `bot.db` | Path to the SQLite database file for per-guild settings and moderation data. |
 | `LOCALE` | No | `silent` | The language used for bot messages. Built-in values are `en` and `silent`. When set to `silent`, the bot sends no messages. New locales can be added in `localization.py`. |
 | `DISCORD_API_MEDIA_URL` | No* | — | Base URL of the [discord-api-media](https://github.com/Lempki/discord-api-media) service. Required when the `media` cog is loaded. |
 | `DISCORD_API_MEDIA_SECRET` | No* | — | Bearer token for discord-api-media. Must match `DISCORD_API_SECRET` in that service. Required when the `media` cog is loaded. |
@@ -134,10 +138,14 @@ discord-bot-template/
 │   ├── help.py         # /help command. Lists all loaded commands grouped by cog.
 │   ├── template.py     # Template cog. Use this as a starting point for new features.
 │   ├── voice.py        # Voice-related commands such as join, leave, and skip.
-│   └── media.py        # Audio queue with YouTube and Spotify support.
+│   ├── media.py        # Audio queue with YouTube and Spotify support.
+│   ├── admin.py        # /admin command group for per-guild configuration.
+│   ├── moderation.py   # /warn, /warnings, /clearwarning, /clearwarnings, /kick, /ban.
+│   └── events.py       # on_member_join: auto-role assignment and welcome message.
 ├── utils/
 │   ├── audio.py        # MediaAPIClient, URL helpers, and local file playback utility.
 │   ├── checks.py       # Custom command checks such as in_bot_channel().
+│   ├── database.py     # aiosqlite singleton, per-guild settings and warnings CRUD.
 │   └── logging.py      # Timestamped console logging helper.
 ├── assets/
 │   ├── audio/          # Local Git LFS-managed audio files.
