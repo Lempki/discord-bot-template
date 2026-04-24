@@ -14,6 +14,9 @@ class Config:
     # Comma-separated list of cog module names to load (e.g. "template,voice,media")
     COGS_TO_LOAD: list[str] = os.getenv("COGS_TO_LOAD", "template").split(",")
 
+    # Path to the SQLite database file for per-guild settings and moderation data.
+    DATABASE_PATH: str = os.getenv("DATABASE_PATH", "bot.db")
+
     # Locale to use for bot messages. Built-in values: "silent", "en".
     # Add more in localization.py. Default is "silent" (bot sends no messages).
     LOCALE: str = os.getenv("LOCALE", "silent")
