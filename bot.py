@@ -3,10 +3,13 @@ import discord
 from discord.ext import commands
 from config import Config
 from localization import LOCALES, Strings
+from utils import database
 
 
 async def main():
     config = Config()
+
+    await database.init(config.DATABASE_PATH)
 
     intents = discord.Intents.default()
     intents.members = True
@@ -28,8 +31,11 @@ async def main():
     for cog_name in config.COGS_TO_LOAD:
         await bot.load_extension(f"cogs.{cog_name.strip()}")
 
-    async with bot:
-        await bot.start(config.DISCORD_TOKEN)
+    try:
+        async with bot:
+            await bot.start(config.DISCORD_TOKEN)
+    finally:
+        await database.close()
 
 
 if __name__ == "__main__":
