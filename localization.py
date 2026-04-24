@@ -66,6 +66,50 @@ class Strings:
     # optional tagline shown in the embed footer
     help_footer: str = ""
 
+    # --- Admin cog ---
+    # {channel}
+    admin_channel_set: str = ""
+    admin_channel_cleared: str = ""
+    # {role}
+    admin_autorole_set: str = ""
+    admin_autorole_cleared: str = ""
+    # {count}
+    admin_threshold_set: str = ""
+    # {action}
+    admin_action_set: str = ""
+    # {channel}, {autorole}, {threshold}, {action}
+    admin_status: str = ""
+
+    # --- Moderation cog ---
+    # {user}, {count}, {threshold}
+    warn_issued: str = ""
+    # {user}, {action}
+    warn_threshold_reached: str = ""
+    # {user}, {action}, {error}
+    warn_action_failed: str = ""
+    # {user}, {count}
+    warnings_list_header: str = ""
+    # {id}, {reason}, {date}
+    warnings_list_entry: str = ""
+    # {user}
+    warnings_none: str = ""
+    # {user}, {count}
+    warnings_cleared: str = ""
+    # {id}
+    warning_removed: str = ""
+    # {id}
+    warning_not_found: str = ""
+    # {user}
+    kick_success: str = ""
+    # {user}
+    ban_success: str = ""
+    # {user}, {action}, {error}
+    mod_action_failed: str = ""
+
+    # --- Events cog ---
+    # {member}
+    member_join_welcome: str = ""
+
 
 # ---------------------------------------------------------------------------
 # Built-in locale presets
@@ -92,6 +136,26 @@ ENGLISH = Strings(
     paused="Paused.",
     resumed="Resumed.",
     help_title="Commands",
+    admin_channel_set="Bot channel set to {channel}.",
+    admin_channel_cleared="Bot channel restriction removed.",
+    admin_autorole_set="Auto-role set to **{role}**.",
+    admin_autorole_cleared="Auto-role cleared.",
+    admin_threshold_set="Warning threshold set to {count}.",
+    admin_action_set="Warning action set to **{action}**.",
+    admin_status="**Bot settings**\nChannel: {channel}\nAuto-role: {autorole}\nWarn threshold: {threshold}\nWarn action: {action}",
+    warn_issued="⚠️ **{user}** warned ({count}/{threshold}).",
+    warn_threshold_reached="🚨 Threshold reached — **{user}** will be **{action}**ed.",
+    warn_action_failed="Failed to {action} **{user}**: {error}",
+    warnings_list_header="**Warnings for {user}** ({count} total)",
+    warnings_list_entry="`#{id}` — {reason} _({date})_",
+    warnings_none="No warnings on record for **{user}**.",
+    warnings_cleared="Cleared {count} warning(s) for **{user}**.",
+    warning_removed="Warning `#{id}` removed.",
+    warning_not_found="Warning `#{id}` not found.",
+    kick_success="**{user}** has been kicked.",
+    ban_success="**{user}** has been banned.",
+    mod_action_failed="Could not {action} **{user}**: {error}",
+    member_join_welcome="Welcome, {member}! 👋",
 )
 
 #: Map LOCALE env var values to Strings instances.
