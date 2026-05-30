@@ -51,7 +51,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-:: Copy .env.example to .env if .env doesn't exist yet
+:: Copy .env.template to .env if .env doesn't exist yet
 if not exist ".env" (
     copy ".env.template" ".env" >nul
     echo Created .env from .env.template
