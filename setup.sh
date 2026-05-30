@@ -22,6 +22,10 @@ echo "Upgrading pip..."
 echo "Installing requirements..."
 .venv/bin/python -m pip install -r requirements.txt
 
+# Install dev dependencies (pytest etc.)
+echo "Installing dev dependencies..."
+.venv/bin/python -m pip install -r requirements-dev.txt
+
 # Copy .env.example to .env if .env doesn't exist yet
 if [ ! -f ".env" ]; then
     cp .env.template .env
@@ -35,5 +39,6 @@ echo
 echo "Setup complete!"
 echo "  Activate venv : source .venv/bin/activate"
 echo "  Run the bot   : .venv/bin/python bot.py"
+echo "  Run tests     : .venv/bin/python -m pytest"
 echo
 read -rp "Press Enter to close..."

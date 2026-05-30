@@ -42,6 +42,15 @@ if errorlevel 1 (
     exit /b 1
 )
 
+:: Install dev dependencies (pytest etc.)
+echo Installing dev dependencies...
+.venv\Scripts\python -m pip install -r requirements-dev.txt
+if errorlevel 1 (
+    echo ERROR: Failed to install dev dependencies.
+    pause
+    exit /b 1
+)
+
 :: Copy .env.example to .env if .env doesn't exist yet
 if not exist ".env" (
     copy ".env.template" ".env" >nul
@@ -55,6 +64,7 @@ echo.
 echo Setup complete!
 echo   Activate venv : .venv\Scripts\activate
 echo   Run the bot   : .venv\Scripts\python bot.py
+echo   Run tests     : .venv\Scripts\python -m pytest
 echo.
 pause
 endlocal
