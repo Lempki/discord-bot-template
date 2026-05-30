@@ -19,8 +19,16 @@ def _make_interaction(guild_id: int, channel_id: int) -> MagicMock:
 
 
 def _get_predicate():
-    """Extract the raw async predicate from the check decorator."""
-    return in_bot_channel().predicate
+    """Extract the raw async predicate from the in_bot_channel() check.
+
+    app_commands.check() stores predicates in __discord_app_commands_checks__
+    on the decorated callable — it has no .predicate attribute (unlike
+    ext.commands.check). Apply the decorator to a throwaway coroutine so we
+    can pull the predicate back out.
+    """
+    async def _dummy(interaction: discord.Interaction) -> bool: ...  # noqa: E704
+    in_bot_channel()(_dummy)
+    return _dummy.__discord_app_commands_checks__[0]
 
 
 # Every predicate test needs a live DB connection because the predicate calls
