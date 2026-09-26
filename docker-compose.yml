@@ -1,6 +1,12 @@
+# Runs the bot alone. Use compose.stack.yml to also run the discord-api-* services it depends on.
 services:
   bot:
     build: .
     env_file:
       - .env
+    volumes:
+      - bot-data:/app/data
     restart: unless-stopped
+
+volumes:
+  bot-data:
