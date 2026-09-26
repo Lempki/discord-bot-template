@@ -1,7 +1,6 @@
 """Tests for utils/database.py — all CRUD helpers against an in-memory DB."""
-from __future__ import annotations
 
-import pytest
+from __future__ import annotations
 
 from utils import database
 
@@ -15,6 +14,7 @@ MOD = "555555555555555555"
 # ---------------------------------------------------------------------------
 # Settings helpers
 # ---------------------------------------------------------------------------
+
 
 async def test_get_settings_unknown_guild_returns_none(db: None) -> None:
     result = await database.get_settings(GUILD)
@@ -75,6 +75,7 @@ async def test_upsert_settings_can_clear_bot_channel_id(db: None) -> None:
 # ---------------------------------------------------------------------------
 # Warning helpers
 # ---------------------------------------------------------------------------
+
 
 async def test_get_warnings_empty_for_fresh_guild_user(db: None) -> None:
     rows = await database.get_warnings(GUILD, USER)

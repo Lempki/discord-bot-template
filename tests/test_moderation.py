@@ -1,10 +1,10 @@
 """Tests for cogs/moderation.py — ModerationCog command handlers."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
 import discord
-import pytest
 
 from cogs.moderation import ModerationCog
 from localization import ENGLISH
@@ -46,6 +46,7 @@ def _make_member(user_id: int = USER_ID, display_name: str = "TestUser") -> Magi
 # warn
 # ---------------------------------------------------------------------------
 
+
 async def test_warn_adds_warning_to_db(db: None) -> None:
     cog = ModerationCog(_make_bot())
     member = _make_member()
@@ -61,7 +62,9 @@ async def test_warn_below_threshold_does_not_kick_or_ban(db: None) -> None:
     cog = ModerationCog(_make_bot())
     member = _make_member()
 
-    await cog.warn.callback(cog, _make_interaction(), member=member, reason="first offence")
+    await cog.warn.callback(
+        cog, _make_interaction(), member=member, reason="first offence"
+    )
 
     member.kick.assert_not_awaited()
     member.ban.assert_not_awaited()
@@ -69,12 +72,16 @@ async def test_warn_below_threshold_does_not_kick_or_ban(db: None) -> None:
 
 async def test_warn_at_threshold_kicks_when_action_is_kick(db: None) -> None:
     await database.upsert_settings(str(GUILD_ID), warn_threshold=2, warn_action="kick")
-    await database.add_warning(str(GUILD_ID), str(USER_ID), str(MOD_ID), "prior offence")
+    await database.add_warning(
+        str(GUILD_ID), str(USER_ID), str(MOD_ID), "prior offence"
+    )
 
     cog = ModerationCog(_make_bot())
     member = _make_member()
 
-    await cog.warn.callback(cog, _make_interaction(), member=member, reason="second offence")
+    await cog.warn.callback(
+        cog, _make_interaction(), member=member, reason="second offence"
+    )
 
     member.kick.assert_awaited_once()
     member.ban.assert_not_awaited()
@@ -82,12 +89,16 @@ async def test_warn_at_threshold_kicks_when_action_is_kick(db: None) -> None:
 
 async def test_warn_at_threshold_bans_when_action_is_ban(db: None) -> None:
     await database.upsert_settings(str(GUILD_ID), warn_threshold=2, warn_action="ban")
-    await database.add_warning(str(GUILD_ID), str(USER_ID), str(MOD_ID), "prior offence")
+    await database.add_warning(
+        str(GUILD_ID), str(USER_ID), str(MOD_ID), "prior offence"
+    )
 
     cog = ModerationCog(_make_bot())
     member = _make_member()
 
-    await cog.warn.callback(cog, _make_interaction(), member=member, reason="second offence")
+    await cog.warn.callback(
+        cog, _make_interaction(), member=member, reason="second offence"
+    )
 
     member.ban.assert_awaited_once()
     member.kick.assert_not_awaited()
@@ -104,13 +115,15 @@ async def test_warn_forbidden_on_kick_sends_error_and_does_not_raise(db: None) -
 
     member.kick.assert_awaited_once()
     # _say falls through to followup since is_done() returns True.
-    # The cog sends at least three messages: warn_issued, warn_threshold_reached, warn_action_failed.
+    # The cog sends at least three messages.
+    # They are warn_issued, warn_threshold_reached, and warn_action_failed.
     assert _make_interaction().followup.send.call_count >= 0  # existence check only
 
 
 # ---------------------------------------------------------------------------
 # warnings
 # ---------------------------------------------------------------------------
+
 
 async def test_warnings_with_no_entries_sends_none_message(db: None) -> None:
     cog = ModerationCog(_make_bot())
@@ -125,7 +138,9 @@ async def test_warnings_with_no_entries_sends_none_message(db: None) -> None:
 
 
 async def test_warnings_with_entries_sends_list_containing_reason(db: None) -> None:
-    await database.add_warning(str(GUILD_ID), str(USER_ID), str(MOD_ID), "bad behaviour")
+    await database.add_warning(
+        str(GUILD_ID), str(USER_ID), str(MOD_ID), "bad behaviour"
+    )
     cog = ModerationCog(_make_bot())
     interaction = _make_interaction()
     member = _make_member()
@@ -141,8 +156,11 @@ async def test_warnings_with_entries_sends_list_containing_reason(db: None) -> N
 # clearwarning (single)
 # ---------------------------------------------------------------------------
 
+
 async def test_clearwarning_success_sends_removed_message_with_id(db: None) -> None:
-    warn_id = await database.add_warning(str(GUILD_ID), str(USER_ID), str(MOD_ID), "test")
+    warn_id = await database.add_warning(
+        str(GUILD_ID), str(USER_ID), str(MOD_ID), "test"
+    )
     cog = ModerationCog(_make_bot())
     interaction = _make_interaction()
 
@@ -165,7 +183,9 @@ async def test_clearwarning_not_found_sends_not_found_message(db: None) -> None:
 
 
 async def test_clearwarning_removes_row_from_db(db: None) -> None:
-    warn_id = await database.add_warning(str(GUILD_ID), str(USER_ID), str(MOD_ID), "test")
+    warn_id = await database.add_warning(
+        str(GUILD_ID), str(USER_ID), str(MOD_ID), "test"
+    )
     cog = ModerationCog(_make_bot())
 
     await cog.clearwarning.callback(cog, _make_interaction(), warning_id=warn_id)
@@ -176,6 +196,7 @@ async def test_clearwarning_removes_row_from_db(db: None) -> None:
 # ---------------------------------------------------------------------------
 # clearwarnings (all)
 # ---------------------------------------------------------------------------
+
 
 async def test_clearwarnings_removes_all_rows_and_reports_count(db: None) -> None:
     await database.add_warning(str(GUILD_ID), str(USER_ID), str(MOD_ID), "one")
@@ -195,6 +216,7 @@ async def test_clearwarnings_removes_all_rows_and_reports_count(db: None) -> Non
 # ---------------------------------------------------------------------------
 # kick
 # ---------------------------------------------------------------------------
+
 
 async def test_kick_calls_member_kick_with_reason(db: None) -> None:
     cog = ModerationCog(_make_bot())
@@ -223,6 +245,7 @@ async def test_kick_forbidden_sends_error_and_does_not_raise(db: None) -> None:
 # ---------------------------------------------------------------------------
 # ban
 # ---------------------------------------------------------------------------
+
 
 async def test_ban_calls_member_ban_with_reason(db: None) -> None:
     cog = ModerationCog(_make_bot())

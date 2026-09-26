@@ -15,6 +15,7 @@ Adding a new locale
 Create a ``Strings`` instance with your translated strings and add it to
 ``LOCALES`` under a new key (e.g. ``"de"``).  No other code needs to change.
 """
+
 from dataclasses import dataclass
 
 
@@ -142,7 +143,10 @@ ENGLISH = Strings(
     admin_autorole_cleared="Auto-role cleared.",
     admin_threshold_set="Warning threshold set to {count}.",
     admin_action_set="Warning action set to **{action}**.",
-    admin_status="**Bot settings**\nChannel: {channel}\nAuto-role: {autorole}\nWarn threshold: {threshold}\nWarn action: {action}",
+    admin_status=(
+        "**Bot settings**\nChannel: {channel}\nAuto-role: {autorole}\n"
+        "Warn threshold: {threshold}\nWarn action: {action}"
+    ),
     warn_issued="⚠️ **{user}** warned ({count}/{threshold}).",
     warn_threshold_reached="🚨 Threshold reached — **{user}** will be **{action}**ed.",
     warn_action_failed="Failed to {action} **{user}**: {error}",

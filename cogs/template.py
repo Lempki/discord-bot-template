@@ -18,7 +18,9 @@ class TemplateCog(commands.Cog, name="Template"):
     @app_commands.command(name="ping")
     async def ping(self, interaction: discord.Interaction):
         """Replies with current latency."""
-        await interaction.response.send_message(f"Pong! `{round(self.bot.latency * 1000)}ms`")
+        await interaction.response.send_message(
+            f"Pong! `{round(self.bot.latency * 1000)}ms`"
+        )
 
     # --- Listeners ---
 

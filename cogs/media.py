@@ -4,7 +4,12 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from utils.audio import MediaAPIClient, is_spotify_collection, is_url, is_youtube_playlist
+from utils.audio import (
+    MediaAPIClient,
+    is_spotify_collection,
+    is_url,
+    is_youtube_playlist,
+)
 from utils.checks import in_bot_channel
 from utils.logging import log
 
@@ -18,9 +23,13 @@ class MediaCog(commands.Cog, name="Media"):
     """Audio queue supporting YouTube and Spotify. Concurrent queues per guild."""
 
     def __init__(self, bot: commands.Bot):
-        if not bot.config.DISCORD_API_MEDIA_URL or not bot.config.DISCORD_API_MEDIA_SECRET:
+        if (
+            not bot.config.DISCORD_API_MEDIA_URL
+            or not bot.config.DISCORD_API_MEDIA_SECRET
+        ):
             raise RuntimeError(
-                "DISCORD_API_MEDIA_URL and DISCORD_API_MEDIA_SECRET must be set to use the media cog."
+                "DISCORD_API_MEDIA_URL and DISCORD_API_MEDIA_SECRET must be set "
+                "to use the media cog."
             )
         self.bot = bot
         self._queues: dict[int, asyncio.Queue] = {}
@@ -38,7 +47,9 @@ class MediaCog(commands.Cog, name="Media"):
     def _ffmpeg(self) -> str:
         return self.bot.config.FFMPEG_PATH or "ffmpeg"
 
-    async def _say(self, interaction: discord.Interaction, template: str, **kwargs) -> bool:
+    async def _say(
+        self, interaction: discord.Interaction, template: str, **kwargs
+    ) -> bool:
         """Format and send *template*. Returns True if a message was sent."""
         if not (msg := template.format(**kwargs)):
             return False
@@ -82,7 +93,9 @@ class MediaCog(commands.Cog, name="Media"):
             await self._queue(guild_id).put((interaction, u))
 
         if len(urls) > 1:
-            sent = await self._say(interaction, s.queued_many, count=len(urls), user=interaction.user)
+            sent = await self._say(
+                interaction, s.queued_many, count=len(urls), user=interaction.user
+            )
         else:
             sent = await self._say(interaction, s.queued_one, user=interaction.user)
         if not sent:
@@ -125,7 +138,9 @@ class MediaCog(commands.Cog, name="Media"):
             return
 
         source = discord.PCMVolumeTransformer(
-            discord.FFmpegPCMAudio(stream_url, executable=self._ffmpeg(), **_FFMPEG_OPTIONS),
+            discord.FFmpegPCMAudio(
+                stream_url, executable=self._ffmpeg(), **_FFMPEG_OPTIONS
+            ),
             volume=0.5,
         )
 
@@ -186,9 +201,10 @@ class MediaCog(commands.Cog, name="Media"):
         self, interaction: discord.Interaction, error: app_commands.AppCommandError
     ):
         if isinstance(error, app_commands.CheckFailure):
-            if not interaction.response.is_done():
-                if msg := self.bot.strings.bot_channel_only:
-                    await interaction.response.send_message(msg, ephemeral=True)
+            if not interaction.response.is_done() and (
+                msg := self.bot.strings.bot_channel_only
+            ):
+                await interaction.response.send_message(msg, ephemeral=True)
             return
         raise error
 

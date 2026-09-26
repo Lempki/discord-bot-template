@@ -1,6 +1,7 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
+
 from utils.checks import in_bot_channel
 
 
@@ -10,7 +11,9 @@ class VoiceCog(commands.Cog, name="Voice"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    async def _say(self, interaction: discord.Interaction, template: str, **kwargs) -> bool:
+    async def _say(
+        self, interaction: discord.Interaction, template: str, **kwargs
+    ) -> bool:
         """Format and send *template*. Returns True if a message was sent."""
         if not (msg := template.format(**kwargs)):
             return False
@@ -34,7 +37,9 @@ class VoiceCog(commands.Cog, name="Voice"):
         vc = interaction.guild.voice_client
         if vc:
             if vc.channel == target:
-                if not await self._say(interaction, s.already_same_channel, user=interaction.user):
+                if not await self._say(
+                    interaction, s.already_same_channel, user=interaction.user
+                ):
                     await interaction.delete_original_response()
                 return
             await vc.move_to(target)
@@ -53,7 +58,9 @@ class VoiceCog(commands.Cog, name="Voice"):
         s = self.bot.strings
         vc = interaction.guild.voice_client
         if vc is None:
-            if not await self._say(interaction, s.bot_not_in_voice, user=interaction.user):
+            if not await self._say(
+                interaction, s.bot_not_in_voice, user=interaction.user
+            ):
                 await interaction.delete_original_response()
             return
         channel = vc.channel
@@ -82,9 +89,10 @@ class VoiceCog(commands.Cog, name="Voice"):
         self, interaction: discord.Interaction, error: app_commands.AppCommandError
     ):
         if isinstance(error, app_commands.CheckFailure):
-            if not interaction.response.is_done():
-                if msg := self.bot.strings.bot_channel_only:
-                    await interaction.response.send_message(msg, ephemeral=True)
+            if not interaction.response.is_done() and (
+                msg := self.bot.strings.bot_channel_only
+            ):
+                await interaction.response.send_message(msg, ephemeral=True)
             return
         raise error
 

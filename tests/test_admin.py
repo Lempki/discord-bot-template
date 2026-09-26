@@ -1,4 +1,5 @@
 """Tests for cogs/admin.py — AdminCog command handlers."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
@@ -27,6 +28,7 @@ def _make_interaction(guild_id: int = GUILD_ID) -> MagicMock:
 # ---------------------------------------------------------------------------
 # set_channel
 # ---------------------------------------------------------------------------
+
 
 async def test_set_channel_with_channel_updates_db(db: None) -> None:
     cog = AdminCog(_make_bot())
@@ -59,6 +61,7 @@ async def test_set_channel_with_none_clears_bot_channel_id(db: None) -> None:
 # set_autorole
 # ---------------------------------------------------------------------------
 
+
 async def test_set_autorole_with_role_updates_db(db: None) -> None:
     cog = AdminCog(_make_bot())
     interaction = _make_interaction()
@@ -88,6 +91,7 @@ async def test_set_autorole_with_none_clears_auto_role_name(db: None) -> None:
 # set_threshold
 # ---------------------------------------------------------------------------
 
+
 async def test_set_threshold_writes_warn_threshold_to_db(db: None) -> None:
     cog = AdminCog(_make_bot())
     interaction = _make_interaction()
@@ -102,6 +106,7 @@ async def test_set_threshold_writes_warn_threshold_to_db(db: None) -> None:
 # ---------------------------------------------------------------------------
 # set_action
 # ---------------------------------------------------------------------------
+
 
 async def test_set_action_ban_writes_to_db(db: None) -> None:
     cog = AdminCog(_make_bot())
@@ -132,6 +137,7 @@ async def test_set_action_kick_writes_to_db(db: None) -> None:
 # ---------------------------------------------------------------------------
 # status
 # ---------------------------------------------------------------------------
+
 
 async def test_status_with_no_guild_settings_sends_defaults(db: None) -> None:
     cog = AdminCog(_make_bot())

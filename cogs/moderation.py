@@ -1,7 +1,9 @@
 """Moderation commands: warn, warnings, clearwarning, clearwarnings, kick, ban."""
+
 import discord
 from discord import app_commands
 from discord.ext import commands
+
 from utils import database
 from utils.logging import log
 
@@ -12,7 +14,9 @@ class ModerationCog(commands.Cog, name="Moderation"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    async def _say(self, interaction: discord.Interaction, template: str, **kwargs) -> bool:
+    async def _say(
+        self, interaction: discord.Interaction, template: str, **kwargs
+    ) -> bool:
         if not (msg := template.format(**kwargs) if kwargs else template):
             return False
         if interaction.response.is_done():
@@ -24,7 +28,12 @@ class ModerationCog(commands.Cog, name="Moderation"):
     @app_commands.command(name="warn")
     @app_commands.describe(member="Member to warn.", reason="Reason for the warning.")
     @app_commands.default_permissions(kick_members=True)
-    async def warn(self, interaction: discord.Interaction, member: discord.Member, reason: str | None = None):
+    async def warn(
+        self,
+        interaction: discord.Interaction,
+        member: discord.Member,
+        reason: str | None = None,
+    ):
         """Issue a warning to a member. Kicks or bans at the configured threshold."""
         await interaction.response.defer(ephemeral=True)
         s = self.bot.strings
@@ -38,19 +47,40 @@ class ModerationCog(commands.Cog, name="Moderation"):
         threshold = settings.get("warn_threshold", 3) if settings else 3
         action = settings.get("warn_action", "kick") if settings else "kick"
 
-        await self._say(interaction, s.warn_issued, user=member.display_name, count=count, threshold=threshold)
+        await self._say(
+            interaction,
+            s.warn_issued,
+            user=member.display_name,
+            count=count,
+            threshold=threshold,
+        )
         log(f"[Mod] {interaction.user} warned {member} ({count}/{threshold}): {reason}")
 
         if count >= threshold:
-            await self._say(interaction, s.warn_threshold_reached, user=member.display_name, action=action)
+            await self._say(
+                interaction,
+                s.warn_threshold_reached,
+                user=member.display_name,
+                action=action,
+            )
             try:
                 if action == "ban":
-                    await member.ban(reason=f"Warning threshold reached ({count} warnings)")
+                    await member.ban(
+                        reason=f"Warning threshold reached ({count} warnings)"
+                    )
                 else:
-                    await member.kick(reason=f"Warning threshold reached ({count} warnings)")
+                    await member.kick(
+                        reason=f"Warning threshold reached ({count} warnings)"
+                    )
                 log(f"[Mod] {action}ed {member} — threshold reached")
             except discord.Forbidden as e:
-                await self._say(interaction, s.warn_action_failed, user=member.display_name, action=action, error=str(e))
+                await self._say(
+                    interaction,
+                    s.warn_action_failed,
+                    user=member.display_name,
+                    action=action,
+                    error=str(e),
+                )
                 log(f"[Mod] failed to {action} {member}: {e}")
 
     @app_commands.command(name="warnings")
@@ -65,13 +95,19 @@ class ModerationCog(commands.Cog, name="Moderation"):
         if not rows:
             await self._say(interaction, s.warnings_none, user=member.display_name)
             return
-        header = s.warnings_list_header.format(user=member.display_name, count=len(rows)) or \
-                 f"**Warnings for {member.display_name}** ({len(rows)} total)"
+        header = (
+            s.warnings_list_header.format(user=member.display_name, count=len(rows))
+            or f"**Warnings for {member.display_name}** ({len(rows)} total)"
+        )
         lines = [header]
         for r in rows:
             date = r["created_at"][:10]
-            entry = s.warnings_list_entry.format(id=r["id"], reason=r["reason"] or "—", date=date) or \
-                    f"`#{r['id']}` — {r['reason'] or '—'} _({date})_"
+            entry = (
+                s.warnings_list_entry.format(
+                    id=r["id"], reason=r["reason"] or "—", date=date
+                )
+                or f"`#{r['id']}` — {r['reason'] or '—'} _({date})_"
+            )
             lines.append(entry)
         await interaction.followup.send("\n".join(lines), ephemeral=True)
 
@@ -91,18 +127,29 @@ class ModerationCog(commands.Cog, name="Moderation"):
     @app_commands.command(name="clearwarnings")
     @app_commands.describe(member="Member whose warnings to clear.")
     @app_commands.default_permissions(kick_members=True)
-    async def clearwarnings(self, interaction: discord.Interaction, member: discord.Member):
+    async def clearwarnings(
+        self, interaction: discord.Interaction, member: discord.Member
+    ):
         """Clear all warnings for a member."""
         await interaction.response.defer(ephemeral=True)
         s = self.bot.strings
-        count = await database.delete_all_warnings(str(interaction.guild_id), str(member.id))
-        await self._say(interaction, s.warnings_cleared, user=member.display_name, count=count)
+        count = await database.delete_all_warnings(
+            str(interaction.guild_id), str(member.id)
+        )
+        await self._say(
+            interaction, s.warnings_cleared, user=member.display_name, count=count
+        )
         log(f"[Mod] {interaction.user} cleared {count} warning(s) for {member}")
 
     @app_commands.command(name="kick")
     @app_commands.describe(member="Member to kick.", reason="Reason for the kick.")
     @app_commands.default_permissions(kick_members=True)
-    async def kick(self, interaction: discord.Interaction, member: discord.Member, reason: str | None = None):
+    async def kick(
+        self,
+        interaction: discord.Interaction,
+        member: discord.Member,
+        reason: str | None = None,
+    ):
         """Kick a member from the server."""
         await interaction.response.defer(ephemeral=True)
         s = self.bot.strings
@@ -111,12 +158,23 @@ class ModerationCog(commands.Cog, name="Moderation"):
             await self._say(interaction, s.kick_success, user=member.display_name)
             log(f"[Mod] {interaction.user} kicked {member}: {reason}")
         except discord.Forbidden as e:
-            await self._say(interaction, s.mod_action_failed, user=member.display_name, action="kick", error=str(e))
+            await self._say(
+                interaction,
+                s.mod_action_failed,
+                user=member.display_name,
+                action="kick",
+                error=str(e),
+            )
 
     @app_commands.command(name="ban")
     @app_commands.describe(member="Member to ban.", reason="Reason for the ban.")
     @app_commands.default_permissions(ban_members=True)
-    async def ban(self, interaction: discord.Interaction, member: discord.Member, reason: str | None = None):
+    async def ban(
+        self,
+        interaction: discord.Interaction,
+        member: discord.Member,
+        reason: str | None = None,
+    ):
         """Permanently ban a member from the server."""
         await interaction.response.defer(ephemeral=True)
         s = self.bot.strings
@@ -125,13 +183,22 @@ class ModerationCog(commands.Cog, name="Moderation"):
             await self._say(interaction, s.ban_success, user=member.display_name)
             log(f"[Mod] {interaction.user} banned {member}: {reason}")
         except discord.Forbidden as e:
-            await self._say(interaction, s.mod_action_failed, user=member.display_name, action="ban", error=str(e))
+            await self._say(
+                interaction,
+                s.mod_action_failed,
+                user=member.display_name,
+                action="ban",
+                error=str(e),
+            )
 
-    async def cog_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
+    async def cog_app_command_error(
+        self, interaction: discord.Interaction, error: app_commands.AppCommandError
+    ):
         if isinstance(error, app_commands.CheckFailure):
             if not interaction.response.is_done():
                 await interaction.response.send_message(
-                    "You need **Kick Members** permission to use this command.", ephemeral=True
+                    "You need **Kick Members** permission to use this command.",
+                    ephemeral=True,
                 )
             return
         raise error

@@ -1,6 +1,8 @@
 """Server event listeners: auto-role and welcome message on member join."""
+
 import discord
 from discord.ext import commands
+
 from utils import database
 from utils.logging import log
 
@@ -27,7 +29,10 @@ class EventsCog(commands.Cog, name="Events"):
                     await member.add_roles(role)
                     log(f"[Events] assigned role '{role_name}' to {member}")
                 except discord.Forbidden:
-                    log(f"[Events] missing permission to assign role '{role_name}' in {member.guild.name}")
+                    log(
+                        f"[Events] missing permission to assign role '{role_name}' "
+                        f"in {member.guild.name}"
+                    )
             else:
                 log(f"[Events] role '{role_name}' not found in '{member.guild.name}'")
 

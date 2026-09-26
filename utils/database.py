@@ -1,8 +1,10 @@
 """Per-guild persistent storage for bot settings and moderation data."""
+
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import aiosqlite
-from datetime import datetime, timezone
 
 _conn: aiosqlite.Connection | None = None
 
@@ -49,6 +51,7 @@ def _conn_or_raise() -> aiosqlite.Connection:
 
 # --- Settings ---
 
+
 async def get_settings(guild_id: str) -> dict | None:
     async with _conn_or_raise().execute(
         "SELECT * FROM guild_settings WHERE guild_id = ?", (guild_id,)
@@ -75,11 +78,21 @@ async def upsert_settings(guild_id: str, **fields) -> None:
 
 # --- Warnings ---
 
-async def add_warning(guild_id: str, user_id: str, moderator_id: str, reason: str | None) -> int:
+
+async def add_warning(
+    guild_id: str, user_id: str, moderator_id: str, reason: str | None
+) -> int:
     db = _conn_or_raise()
     cur = await db.execute(
-        "INSERT INTO warnings (guild_id, user_id, moderator_id, reason, created_at) VALUES (?,?,?,?,?)",
-        (guild_id, user_id, moderator_id, reason, datetime.now(timezone.utc).isoformat()),
+        "INSERT INTO warnings (guild_id, user_id, moderator_id, reason, created_at) "
+        "VALUES (?,?,?,?,?)",
+        (
+            guild_id,
+            user_id,
+            moderator_id,
+            reason,
+            datetime.now(UTC).isoformat(),
+        ),
     )
     await db.commit()
     return cur.lastrowid
