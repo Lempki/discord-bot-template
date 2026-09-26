@@ -50,21 +50,21 @@ async def test_in_bot_channel_settings_exist_but_no_channel_configured_returns_t
     db: None,
 ) -> None:
     # Row exists but bot_channel_id is NULL (only auto_role_name set).
-    await database.upsert_settings(str(GUILD_ID), auto_role_name="Member")
+    await database.upsert_settings(GUILD_ID, auto_role_name="Member")
     interaction = _make_interaction(GUILD_ID, CHANNEL_ID)
     result = await _get_predicate()(interaction)
     assert result is True
 
 
 async def test_in_bot_channel_matching_channel_returns_true(db: None) -> None:
-    await database.upsert_settings(str(GUILD_ID), bot_channel_id=CHANNEL_ID)
+    await database.upsert_settings(GUILD_ID, bot_channel_id=CHANNEL_ID)
     interaction = _make_interaction(GUILD_ID, CHANNEL_ID)
     result = await _get_predicate()(interaction)
     assert result is True
 
 
 async def test_in_bot_channel_wrong_channel_returns_false(db: None) -> None:
-    await database.upsert_settings(str(GUILD_ID), bot_channel_id=CHANNEL_ID)
+    await database.upsert_settings(GUILD_ID, bot_channel_id=CHANNEL_ID)
     interaction = _make_interaction(GUILD_ID, OTHER_CHANNEL_ID)
     result = await _get_predicate()(interaction)
     assert result is False
@@ -72,8 +72,8 @@ async def test_in_bot_channel_wrong_channel_returns_false(db: None) -> None:
 
 async def test_in_bot_channel_channel_cleared_returns_true(db: None) -> None:
     # Set a channel, then clear it — should be unrestricted again.
-    await database.upsert_settings(str(GUILD_ID), bot_channel_id=CHANNEL_ID)
-    await database.upsert_settings(str(GUILD_ID), bot_channel_id=None)
+    await database.upsert_settings(GUILD_ID, bot_channel_id=CHANNEL_ID)
+    await database.upsert_settings(GUILD_ID, bot_channel_id=None)
     interaction = _make_interaction(GUILD_ID, OTHER_CHANNEL_ID)
     result = await _get_predicate()(interaction)
     assert result is True

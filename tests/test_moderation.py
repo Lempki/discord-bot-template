@@ -53,7 +53,7 @@ async def test_warn_adds_warning_to_db(db: None) -> None:
 
     await cog.warn.callback(cog, _make_interaction(), member=member, reason="spamming")
 
-    count = await database.count_warnings(str(GUILD_ID), str(USER_ID))
+    count = await database.count_warnings(GUILD_ID, USER_ID)
     assert count == 1
 
 
@@ -71,10 +71,8 @@ async def test_warn_below_threshold_does_not_kick_or_ban(db: None) -> None:
 
 
 async def test_warn_at_threshold_kicks_when_action_is_kick(db: None) -> None:
-    await database.upsert_settings(str(GUILD_ID), warn_threshold=2, warn_action="kick")
-    await database.add_warning(
-        str(GUILD_ID), str(USER_ID), str(MOD_ID), "prior offence"
-    )
+    await database.upsert_settings(GUILD_ID, warn_threshold=2, warn_action="kick")
+    await database.add_warning(GUILD_ID, USER_ID, MOD_ID, "prior offence")
 
     cog = ModerationCog(_make_bot())
     member = _make_member()
@@ -88,10 +86,8 @@ async def test_warn_at_threshold_kicks_when_action_is_kick(db: None) -> None:
 
 
 async def test_warn_at_threshold_bans_when_action_is_ban(db: None) -> None:
-    await database.upsert_settings(str(GUILD_ID), warn_threshold=2, warn_action="ban")
-    await database.add_warning(
-        str(GUILD_ID), str(USER_ID), str(MOD_ID), "prior offence"
-    )
+    await database.upsert_settings(GUILD_ID, warn_threshold=2, warn_action="ban")
+    await database.add_warning(GUILD_ID, USER_ID, MOD_ID, "prior offence")
 
     cog = ModerationCog(_make_bot())
     member = _make_member()
@@ -105,7 +101,7 @@ async def test_warn_at_threshold_bans_when_action_is_ban(db: None) -> None:
 
 
 async def test_warn_forbidden_on_kick_sends_error_and_does_not_raise(db: None) -> None:
-    await database.upsert_settings(str(GUILD_ID), warn_threshold=1, warn_action="kick")
+    await database.upsert_settings(GUILD_ID, warn_threshold=1, warn_action="kick")
     cog = ModerationCog(_make_bot())
     member = _make_member()
     member.kick.side_effect = discord.Forbidden(MagicMock(), "Missing Permissions")
@@ -138,9 +134,7 @@ async def test_warnings_with_no_entries_sends_none_message(db: None) -> None:
 
 
 async def test_warnings_with_entries_sends_list_containing_reason(db: None) -> None:
-    await database.add_warning(
-        str(GUILD_ID), str(USER_ID), str(MOD_ID), "bad behaviour"
-    )
+    await database.add_warning(GUILD_ID, USER_ID, MOD_ID, "bad behaviour")
     cog = ModerationCog(_make_bot())
     interaction = _make_interaction()
     member = _make_member()
@@ -158,9 +152,7 @@ async def test_warnings_with_entries_sends_list_containing_reason(db: None) -> N
 
 
 async def test_clearwarning_success_sends_removed_message_with_id(db: None) -> None:
-    warn_id = await database.add_warning(
-        str(GUILD_ID), str(USER_ID), str(MOD_ID), "test"
-    )
+    warn_id = await database.add_warning(GUILD_ID, USER_ID, MOD_ID, "test")
     cog = ModerationCog(_make_bot())
     interaction = _make_interaction()
 
@@ -183,14 +175,26 @@ async def test_clearwarning_not_found_sends_not_found_message(db: None) -> None:
 
 
 async def test_clearwarning_removes_row_from_db(db: None) -> None:
-    warn_id = await database.add_warning(
-        str(GUILD_ID), str(USER_ID), str(MOD_ID), "test"
-    )
+    warn_id = await database.add_warning(GUILD_ID, USER_ID, MOD_ID, "test")
     cog = ModerationCog(_make_bot())
 
     await cog.clearwarning.callback(cog, _make_interaction(), warning_id=warn_id)
 
-    assert await database.count_warnings(str(GUILD_ID), str(USER_ID)) == 0
+    assert await database.count_warnings(GUILD_ID, USER_ID) == 0
+
+
+async def test_clearwarning_cannot_delete_another_guilds_warning(db: None) -> None:
+    # Regression test: warning IDs are global, so the delete must be scoped to the guild.
+    other_guild = 222222222222222222
+    warn_id = await database.add_warning(other_guild, USER_ID, MOD_ID, "elsewhere")
+    cog = ModerationCog(_make_bot())
+    interaction = _make_interaction()
+
+    await cog.clearwarning.callback(cog, interaction, warning_id=warn_id)
+
+    assert await database.count_warnings(other_guild, USER_ID) == 1
+    msg: str = interaction.followup.send.call_args[0][0]
+    assert "not found" in msg
 
 
 # ---------------------------------------------------------------------------
@@ -199,15 +203,15 @@ async def test_clearwarning_removes_row_from_db(db: None) -> None:
 
 
 async def test_clearwarnings_removes_all_rows_and_reports_count(db: None) -> None:
-    await database.add_warning(str(GUILD_ID), str(USER_ID), str(MOD_ID), "one")
-    await database.add_warning(str(GUILD_ID), str(USER_ID), str(MOD_ID), "two")
+    await database.add_warning(GUILD_ID, USER_ID, MOD_ID, "one")
+    await database.add_warning(GUILD_ID, USER_ID, MOD_ID, "two")
     cog = ModerationCog(_make_bot())
     interaction = _make_interaction()
     member = _make_member()
 
     await cog.clearwarnings.callback(cog, interaction, member=member)
 
-    assert await database.count_warnings(str(GUILD_ID), str(USER_ID)) == 0
+    assert await database.count_warnings(GUILD_ID, USER_ID) == 0
     interaction.followup.send.assert_awaited()
     msg: str = interaction.followup.send.call_args[0][0]
     assert "2" in msg

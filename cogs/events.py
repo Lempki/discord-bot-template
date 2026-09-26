@@ -1,55 +1,74 @@
 """Server event listeners: auto-role and welcome message on member join."""
 
+import logging
+
 import discord
 from discord.ext import commands
 
 from utils import database
-from utils.logging import log
+
+log = logging.getLogger(__name__)
 
 
 class EventsCog(commands.Cog, name="Events"):
     """Server event listeners and moderation hooks."""
 
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
+    async def _auto_role(
+        self, member: discord.Member, settings: database.GuildSettings
+    ) -> discord.Role | None:
+        """Finds the configured auto-role, upgrading a legacy name to an ID on first use."""
+        guild = member.guild
+        if settings.auto_role_id is not None:
+            role = guild.get_role(settings.auto_role_id)
+            if role is None:
+                log.warning(
+                    f"Auto-role {settings.auto_role_id} no longer exists in {guild}."
+                )
+            return role
+        if settings.auto_role_name is None:
+            return None
+        role = discord.utils.get(guild.roles, name=settings.auto_role_name)
+        if role is None:
+            log.warning(
+                f"Auto-role '{settings.auto_role_name}' was not found in {guild}."
+            )
+            return None
+        # Settings from before roles were stored by ID only have a name. Store the ID from now on.
+        await database.upsert_settings(
+            guild.id, auto_role_id=role.id, auto_role_name=None
+        )
+        return role
+
     @commands.Cog.listener()
-    async def on_member_join(self, member: discord.Member):
-        guild_id = str(member.guild.id)
-        settings = await database.get_settings(guild_id)
-        if settings is None:
+    async def on_member_join(self, member: discord.Member) -> None:
+        """Assigns the auto-role and posts the welcome message, if either is configured."""
+        settings = await database.get_settings(member.guild.id)
+
+        role = await self._auto_role(member, settings)
+        if role is not None:
+            try:
+                await member.add_roles(role)
+                log.info(f"Assigned role '{role.name}' to {member}.")
+            except discord.Forbidden:
+                log.warning(
+                    f"Missing permission to assign role '{role.name}' in {member.guild}."
+                )
+
+        if settings.bot_channel_id is None:
             return
+        channel = member.guild.get_channel(settings.bot_channel_id)
+        if isinstance(channel, discord.TextChannel) and (
+            msg := self.bot.strings.member_join_welcome.format(member=member.mention)
+        ):
+            await channel.send(msg)
+            log.info(f"Welcomed {member} in #{channel.name}.")
 
-        # Auto-role assignment
-        role_name = settings.get("auto_role_name")
-        if role_name:
-            role = discord.utils.get(member.guild.roles, name=role_name)
-            if role:
-                try:
-                    await member.add_roles(role)
-                    log(f"[Events] assigned role '{role_name}' to {member}")
-                except discord.Forbidden:
-                    log(
-                        f"[Events] missing permission to assign role '{role_name}' "
-                        f"in {member.guild.name}"
-                    )
-            else:
-                log(f"[Events] role '{role_name}' not found in '{member.guild.name}'")
-
-        # Welcome message
-        ch_id = settings.get("bot_channel_id")
-        if ch_id:
-            channel = member.guild.get_channel(ch_id)
-            if channel:
-                s = self.bot.strings
-                if msg := s.member_join_welcome.format(member=member.mention):
-                    await channel.send(msg)
-                    log(f"[Events] welcomed {member} in #{channel.name}")
-
-    @commands.Cog.listener()
-    async def on_ready(self):
-        print(f"[{self.__class__.__name__}] loaded.")
+    async def cog_load(self) -> None:
+        log.info(f"{self.qualified_name} cog loaded.")
 
 
-async def setup(bot: commands.Bot):
+async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(EventsCog(bot))

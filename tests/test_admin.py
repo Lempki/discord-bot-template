@@ -39,21 +39,21 @@ async def test_set_channel_with_channel_updates_db(db: None) -> None:
 
     await cog.set_channel.callback(cog, interaction, channel=channel)
 
-    settings = await database.get_settings(str(GUILD_ID))
+    settings = await database.get_settings(GUILD_ID)
     assert settings is not None
-    assert settings["bot_channel_id"] == channel.id
+    assert settings.bot_channel_id == channel.id
     interaction.response.send_message.assert_awaited_once()
 
 
 async def test_set_channel_with_none_clears_bot_channel_id(db: None) -> None:
-    await database.upsert_settings(str(GUILD_ID), bot_channel_id=777777777777777777)
+    await database.upsert_settings(GUILD_ID, bot_channel_id=777777777777777777)
     cog = AdminCog(_make_bot())
     interaction = _make_interaction()
 
     await cog.set_channel.callback(cog, interaction, channel=None)
 
-    settings = await database.get_settings(str(GUILD_ID))
-    assert settings["bot_channel_id"] is None
+    settings = await database.get_settings(GUILD_ID)
+    assert settings.bot_channel_id is None
     interaction.response.send_message.assert_awaited_once()
 
 
@@ -66,24 +66,29 @@ async def test_set_autorole_with_role_updates_db(db: None) -> None:
     cog = AdminCog(_make_bot())
     interaction = _make_interaction()
     role = MagicMock()
+    role.id = 999999999999999999
     role.name = "Member"
 
     await cog.set_autorole.callback(cog, interaction, role=role)
 
-    settings = await database.get_settings(str(GUILD_ID))
-    assert settings["auto_role_name"] == "Member"
+    settings = await database.get_settings(GUILD_ID)
+    assert settings.auto_role_id == role.id
+    assert settings.auto_role_name is None
     interaction.response.send_message.assert_awaited_once()
 
 
-async def test_set_autorole_with_none_clears_auto_role_name(db: None) -> None:
-    await database.upsert_settings(str(GUILD_ID), auto_role_name="Member")
+async def test_set_autorole_with_none_clears_auto_role(db: None) -> None:
+    await database.upsert_settings(
+        GUILD_ID, auto_role_id=999999999999999999, auto_role_name="Legacy"
+    )
     cog = AdminCog(_make_bot())
     interaction = _make_interaction()
 
     await cog.set_autorole.callback(cog, interaction, role=None)
 
-    settings = await database.get_settings(str(GUILD_ID))
-    assert settings["auto_role_name"] is None
+    settings = await database.get_settings(GUILD_ID)
+    assert settings.auto_role_id is None
+    assert settings.auto_role_name is None
     interaction.response.send_message.assert_awaited_once()
 
 
@@ -98,8 +103,8 @@ async def test_set_threshold_writes_warn_threshold_to_db(db: None) -> None:
 
     await cog.set_threshold.callback(cog, interaction, count=5)
 
-    settings = await database.get_settings(str(GUILD_ID))
-    assert settings["warn_threshold"] == 5
+    settings = await database.get_settings(GUILD_ID)
+    assert settings.warn_threshold == 5
     interaction.response.send_message.assert_awaited_once()
 
 
@@ -116,8 +121,8 @@ async def test_set_action_ban_writes_to_db(db: None) -> None:
 
     await cog.set_action.callback(cog, interaction, action=action_choice)
 
-    settings = await database.get_settings(str(GUILD_ID))
-    assert settings["warn_action"] == "ban"
+    settings = await database.get_settings(GUILD_ID)
+    assert settings.warn_action == "ban"
     interaction.response.send_message.assert_awaited_once()
 
 
@@ -129,8 +134,8 @@ async def test_set_action_kick_writes_to_db(db: None) -> None:
 
     await cog.set_action.callback(cog, interaction, action=action_choice)
 
-    settings = await database.get_settings(str(GUILD_ID))
-    assert settings["warn_action"] == "kick"
+    settings = await database.get_settings(GUILD_ID)
+    assert settings.warn_action == "kick"
     interaction.response.send_message.assert_awaited_once()
 
 
@@ -153,7 +158,7 @@ async def test_status_with_no_guild_settings_sends_defaults(db: None) -> None:
 
 async def test_status_with_settings_reflects_configured_values(db: None) -> None:
     await database.upsert_settings(
-        str(GUILD_ID),
+        GUILD_ID,
         bot_channel_id=777777777777777777,
         auto_role_name="Member",
         warn_threshold=5,
@@ -169,3 +174,14 @@ async def test_status_with_settings_reflects_configured_values(db: None) -> None
     assert "Member" in msg
     assert "5" in msg
     assert "ban" in msg
+
+
+async def test_status_shows_auto_role_id_as_mention(db: None) -> None:
+    await database.upsert_settings(GUILD_ID, auto_role_id=999999999999999999)
+    cog = AdminCog(_make_bot())
+    interaction = _make_interaction()
+
+    await cog.status.callback(cog, interaction)
+
+    msg: str = interaction.response.send_message.call_args[0][0]
+    assert "<@&999999999999999999>" in msg

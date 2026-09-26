@@ -1,10 +1,14 @@
 """Admin configuration commands for guild administrators."""
 
+import logging
+
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from utils import database
+
+log = logging.getLogger(__name__)
 
 
 class AdminCog(commands.Cog, name="Admin"):
@@ -17,6 +21,8 @@ class AdminCog(commands.Cog, name="Admin"):
         name="admin",
         description="Configure the bot for this server.",
         default_permissions=discord.Permissions(manage_guild=True),
+        guild_only=True,
+        allowed_contexts=app_commands.AppCommandContext(guild=True),
     )
 
     @admin.command(name="channel")
@@ -30,7 +36,7 @@ class AdminCog(commands.Cog, name="Admin"):
     ):
         """Set or clear the channel where the bot accepts commands."""
         s = self.bot.strings
-        guild_id = str(interaction.guild_id)
+        guild_id = interaction.guild_id
         if channel:
             await database.upsert_settings(guild_id, bot_channel_id=channel.id)
             msg = (
@@ -51,15 +57,20 @@ class AdminCog(commands.Cog, name="Admin"):
     ):
         """Set or clear the role automatically assigned to new members."""
         s = self.bot.strings
-        guild_id = str(interaction.guild_id)
+        guild_id = interaction.guild_id
         if role:
-            await database.upsert_settings(guild_id, auto_role_name=role.name)
+            # The ID survives role renames. The legacy name column is cleared.
+            await database.upsert_settings(
+                guild_id, auto_role_id=role.id, auto_role_name=None
+            )
             msg = (
                 s.admin_autorole_set.format(role=role.name)
                 or f"Auto-role set to **{role.name}**."
             )
         else:
-            await database.upsert_settings(guild_id, auto_role_name=None)
+            await database.upsert_settings(
+                guild_id, auto_role_id=None, auto_role_name=None
+            )
             msg = s.admin_autorole_cleared or "Auto-role cleared."
         await interaction.response.send_message(msg, ephemeral=True)
 
@@ -72,7 +83,7 @@ class AdminCog(commands.Cog, name="Admin"):
     ):
         """Set how many warnings trigger an automatic kick or ban."""
         s = self.bot.strings
-        await database.upsert_settings(str(interaction.guild_id), warn_threshold=count)
+        await database.upsert_settings(interaction.guild_id, warn_threshold=count)
         msg = (
             s.admin_threshold_set.format(count=count)
             or f"Warning threshold set to {count}."
@@ -92,9 +103,7 @@ class AdminCog(commands.Cog, name="Admin"):
     ):
         """Set whether hitting the warning threshold kicks or bans the member."""
         s = self.bot.strings
-        await database.upsert_settings(
-            str(interaction.guild_id), warn_action=action.value
-        )
+        await database.upsert_settings(interaction.guild_id, warn_action=action.value)
         msg = (
             s.admin_action_set.format(action=action.value)
             or f"Warning action set to **{action.value}**."
@@ -105,12 +114,18 @@ class AdminCog(commands.Cog, name="Admin"):
     async def status(self, interaction: discord.Interaction):
         """Show the current bot configuration for this server."""
         s = self.bot.strings
-        settings = await database.get_settings(str(interaction.guild_id))
-        ch_id = settings.get("bot_channel_id") if settings else None
-        channel = f"<#{ch_id}>" if ch_id else "any channel"
-        autorole = settings.get("auto_role_name") if settings else None
-        threshold = settings.get("warn_threshold", 3) if settings else 3
-        action = settings.get("warn_action", "kick") if settings else "kick"
+        settings = await database.get_settings(interaction.guild_id)
+        channel = (
+            f"<#{settings.bot_channel_id}>"
+            if settings.bot_channel_id
+            else "any channel"
+        )
+        if settings.auto_role_id:
+            autorole = f"<@&{settings.auto_role_id}>"
+        else:
+            autorole = settings.auto_role_name
+        threshold = settings.warn_threshold
+        action = settings.warn_action
         msg = s.admin_status.format(
             channel=channel,
             autorole=autorole or "none",
@@ -137,9 +152,8 @@ class AdminCog(commands.Cog, name="Admin"):
             return
         raise error
 
-    @commands.Cog.listener()
-    async def on_ready(self):
-        print(f"[{self.__class__.__name__}] loaded.")
+    async def cog_load(self) -> None:
+        log.info(f"{self.qualified_name} cog loaded.")
 
 
 async def setup(bot: commands.Bot):
