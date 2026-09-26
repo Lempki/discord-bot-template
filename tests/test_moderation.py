@@ -1,45 +1,91 @@
-"""Tests for cogs/moderation.py — ModerationCog command handlers."""
+"""Tests for cogs/moderation.py, run against a real bot and an in-memory database."""
 
-from __future__ import annotations
-
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import discord
+import pytest
 
-from cogs.moderation import ModerationCog
-from localization import ENGLISH
+from bot import BotApp
+from cogs.moderation import MESSAGE_LIMIT, ModerationCog, blocked_reason, chunk_lines
+from localization import LOCALES
+from tests.conftest import GUILD_ID, make_interaction, sent_messages
 from utils import database
 
-GUILD_ID = 111111111111111111
 USER_ID = 333333333333333333
 MOD_ID = 555555555555555555
+BOT_ID = 666666666666666666
+EN = LOCALES["en"]
 
 
-def _make_bot() -> MagicMock:
-    bot = MagicMock()
-    bot.strings = ENGLISH
-    return bot
+def member(member_id: int, top_role: int, name: str) -> MagicMock:
+    """A guild member whose top role is a plain number, so positions compare naturally."""
+    fake = MagicMock(spec=discord.Member)
+    fake.id = member_id
+    fake.top_role = top_role
+    fake.display_name = name
+    fake.kick = AsyncMock()
+    fake.ban = AsyncMock()
+    return fake
 
 
-def _make_interaction() -> MagicMock:
-    interaction = MagicMock()
-    interaction.guild_id = GUILD_ID
-    interaction.user.id = MOD_ID
-    interaction.response.defer = AsyncMock()
-    interaction.response.send_message = AsyncMock()
-    # After defer() is called the response is considered done; followup is used.
-    interaction.response.is_done.return_value = True
-    interaction.followup.send = AsyncMock()
-    return interaction
+@pytest.fixture
+def scene() -> SimpleNamespace:
+    """A moderator, a lower-ranked target, and the bot above both."""
+    moderator = member(MOD_ID, 5, "Mod")
+    target = member(USER_ID, 1, "TestUser")
+    me = member(BOT_ID, 10, "Bot")
+    interaction = make_interaction(user=moderator)
+    interaction.guild.me = me
+    interaction.guild.owner = member(1, 99, "Owner")
+    for person in (moderator, target, me, interaction.guild.owner):
+        person.guild = interaction.guild
+    return SimpleNamespace(
+        moderator=moderator, target=target, me=me, interaction=interaction
+    )
 
 
-def _make_member(user_id: int = USER_ID, display_name: str = "TestUser") -> MagicMock:
-    member = MagicMock()
-    member.id = user_id
-    member.display_name = display_name
-    member.kick = AsyncMock()
-    member.ban = AsyncMock()
-    return member
+def forbidden() -> discord.Forbidden:
+    return discord.Forbidden(
+        MagicMock(status=403, reason="Forbidden"), "Missing Permissions"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Hierarchy guard
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("target_rank", "actor_is_owner", "expected"),
+    [
+        (1, False, None),
+        (5, False, EN.mod_target_higher.format(user="TestUser")),
+        (7, False, EN.mod_target_higher.format(user="TestUser")),
+        (7, True, None),
+        (10, True, EN.mod_bot_too_low.format(user="TestUser")),
+    ],
+)
+def test_blocked_reason_ranks(
+    scene: SimpleNamespace, target_rank: int, actor_is_owner: bool, expected: str | None
+) -> None:
+    scene.target.top_role = target_rank
+    if actor_is_owner:
+        scene.interaction.guild.owner = scene.moderator
+    assert blocked_reason(EN, scene.moderator, scene.target, scene.me) == expected
+
+
+def test_blocked_reason_refuses_self_owner_and_bot(scene: SimpleNamespace) -> None:
+    guild = scene.interaction.guild
+    assert (
+        blocked_reason(EN, scene.moderator, scene.moderator, scene.me)
+        == EN.mod_target_self
+    )
+    protected = EN.mod_target_protected.format(user="Owner")
+    assert blocked_reason(EN, scene.moderator, guild.owner, scene.me) == protected
+    assert blocked_reason(EN, scene.moderator, scene.me, scene.me) == (
+        EN.mod_target_protected.format(user="Bot")
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -47,229 +93,206 @@ def _make_member(user_id: int = USER_ID, display_name: str = "TestUser") -> Magi
 # ---------------------------------------------------------------------------
 
 
-async def test_warn_adds_warning_to_db(db: None) -> None:
-    cog = ModerationCog(_make_bot())
-    member = _make_member()
+async def test_warn_records_warning(
+    db: None, bot: BotApp, scene: SimpleNamespace
+) -> None:
+    cog = ModerationCog(bot)
 
-    await cog.warn.callback(cog, _make_interaction(), member=member, reason="spamming")
+    await cog.warn.callback(cog, scene.interaction, member=scene.target, reason="spam")
 
-    count = await database.count_warnings(GUILD_ID, USER_ID)
-    assert count == 1
-
-
-async def test_warn_below_threshold_does_not_kick_or_ban(db: None) -> None:
-    # Default threshold is 3; a single warning should not trigger any action.
-    cog = ModerationCog(_make_bot())
-    member = _make_member()
-
-    await cog.warn.callback(
-        cog, _make_interaction(), member=member, reason="first offence"
-    )
-
-    member.kick.assert_not_awaited()
-    member.ban.assert_not_awaited()
+    assert await database.count_warnings(GUILD_ID, USER_ID) == 1
+    assert sent_messages(scene.interaction) == [
+        EN.warn_issued.format(user="TestUser", count=1, threshold=3)
+    ]
+    scene.target.kick.assert_not_awaited()
 
 
-async def test_warn_at_threshold_kicks_when_action_is_kick(db: None) -> None:
-    await database.upsert_settings(GUILD_ID, warn_threshold=2, warn_action="kick")
-    await database.add_warning(GUILD_ID, USER_ID, MOD_ID, "prior offence")
+@pytest.mark.parametrize("action", ["kick", "ban"])
+async def test_warn_at_threshold_applies_action(
+    db: None, bot: BotApp, scene: SimpleNamespace, action: str
+) -> None:
+    await database.upsert_settings(GUILD_ID, warn_threshold=1, warn_action=action)
+    cog = ModerationCog(bot)
 
-    cog = ModerationCog(_make_bot())
-    member = _make_member()
+    await cog.warn.callback(cog, scene.interaction, member=scene.target, reason=None)
 
-    await cog.warn.callback(
-        cog, _make_interaction(), member=member, reason="second offence"
-    )
-
-    member.kick.assert_awaited_once()
-    member.ban.assert_not_awaited()
-
-
-async def test_warn_at_threshold_bans_when_action_is_ban(db: None) -> None:
-    await database.upsert_settings(GUILD_ID, warn_threshold=2, warn_action="ban")
-    await database.add_warning(GUILD_ID, USER_ID, MOD_ID, "prior offence")
-
-    cog = ModerationCog(_make_bot())
-    member = _make_member()
-
-    await cog.warn.callback(
-        cog, _make_interaction(), member=member, reason="second offence"
-    )
-
-    member.ban.assert_awaited_once()
-    member.kick.assert_not_awaited()
+    getattr(scene.target, action).assert_awaited_once()
+    announcement = {"kick": EN.warn_threshold_kick, "ban": EN.warn_threshold_ban}[
+        action
+    ]
+    assert announcement.format(user="TestUser") in sent_messages(scene.interaction)
 
 
-async def test_warn_forbidden_on_kick_sends_error_and_does_not_raise(db: None) -> None:
-    await database.upsert_settings(GUILD_ID, warn_threshold=1, warn_action="kick")
-    cog = ModerationCog(_make_bot())
-    member = _make_member()
-    member.kick.side_effect = discord.Forbidden(MagicMock(), "Missing Permissions")
+async def test_warn_reports_failed_action(
+    db: None, bot: BotApp, scene: SimpleNamespace
+) -> None:
+    await database.upsert_settings(GUILD_ID, warn_threshold=1)
+    scene.target.kick.side_effect = forbidden()
+    cog = ModerationCog(bot)
 
-    # Must not propagate.
-    await cog.warn.callback(cog, _make_interaction(), member=member, reason="offence")
+    await cog.warn.callback(cog, scene.interaction, member=scene.target, reason=None)
 
-    member.kick.assert_awaited_once()
-    # _say falls through to followup since is_done() returns True.
-    # The cog sends at least three messages.
-    # They are warn_issued, warn_threshold_reached, and warn_action_failed.
-    assert _make_interaction().followup.send.call_count >= 0  # existence check only
+    [*_, last] = sent_messages(scene.interaction)
+    assert last == EN.kick_failed.format(user="TestUser", error=forbidden())
 
 
-# ---------------------------------------------------------------------------
-# warnings
-# ---------------------------------------------------------------------------
+async def test_warn_refuses_higher_ranked_target(
+    db: None, bot: BotApp, scene: SimpleNamespace
+) -> None:
+    scene.target.top_role = 8
+    cog = ModerationCog(bot)
 
-
-async def test_warnings_with_no_entries_sends_none_message(db: None) -> None:
-    cog = ModerationCog(_make_bot())
-    interaction = _make_interaction()
-    member = _make_member()
-
-    await cog.warnings.callback(cog, interaction, member=member)
-
-    interaction.followup.send.assert_awaited()
-    msg: str = interaction.followup.send.call_args[0][0]
-    assert "TestUser" in msg
-
-
-async def test_warnings_with_entries_sends_list_containing_reason(db: None) -> None:
-    await database.add_warning(GUILD_ID, USER_ID, MOD_ID, "bad behaviour")
-    cog = ModerationCog(_make_bot())
-    interaction = _make_interaction()
-    member = _make_member()
-
-    await cog.warnings.callback(cog, interaction, member=member)
-
-    interaction.followup.send.assert_awaited()
-    msg: str = interaction.followup.send.call_args[0][0]
-    assert "bad behaviour" in msg
-
-
-# ---------------------------------------------------------------------------
-# clearwarning (single)
-# ---------------------------------------------------------------------------
-
-
-async def test_clearwarning_success_sends_removed_message_with_id(db: None) -> None:
-    warn_id = await database.add_warning(GUILD_ID, USER_ID, MOD_ID, "test")
-    cog = ModerationCog(_make_bot())
-    interaction = _make_interaction()
-
-    await cog.clearwarning.callback(cog, interaction, warning_id=warn_id)
-
-    interaction.followup.send.assert_awaited()
-    msg: str = interaction.followup.send.call_args[0][0]
-    assert str(warn_id) in msg
-
-
-async def test_clearwarning_not_found_sends_not_found_message(db: None) -> None:
-    cog = ModerationCog(_make_bot())
-    interaction = _make_interaction()
-
-    await cog.clearwarning.callback(cog, interaction, warning_id=99999)
-
-    interaction.followup.send.assert_awaited()
-    msg: str = interaction.followup.send.call_args[0][0]
-    assert "99999" in msg
-
-
-async def test_clearwarning_removes_row_from_db(db: None) -> None:
-    warn_id = await database.add_warning(GUILD_ID, USER_ID, MOD_ID, "test")
-    cog = ModerationCog(_make_bot())
-
-    await cog.clearwarning.callback(cog, _make_interaction(), warning_id=warn_id)
+    await cog.warn.callback(cog, scene.interaction, member=scene.target, reason=None)
 
     assert await database.count_warnings(GUILD_ID, USER_ID) == 0
+    assert sent_messages(scene.interaction) == [
+        EN.mod_target_higher.format(user="TestUser")
+    ]
 
 
-async def test_clearwarning_cannot_delete_another_guilds_warning(db: None) -> None:
-    # Regression test: warning IDs are global, so the delete must be scoped to the guild.
+# ---------------------------------------------------------------------------
+# warnings, clearwarning, clearwarnings
+# ---------------------------------------------------------------------------
+
+
+async def test_warnings_none(db: None, bot: BotApp, scene: SimpleNamespace) -> None:
+    cog = ModerationCog(bot)
+
+    await cog.warnings.callback(cog, scene.interaction, member=scene.target)
+
+    assert sent_messages(scene.interaction) == [
+        EN.warnings_none.format(user="TestUser")
+    ]
+
+
+async def test_warnings_lists_entries(
+    db: None, bot: BotApp, scene: SimpleNamespace
+) -> None:
+    await database.add_warning(GUILD_ID, USER_ID, MOD_ID, "spam")
+    await database.add_warning(GUILD_ID, USER_ID, MOD_ID, None)
+    cog = ModerationCog(bot)
+
+    await cog.warnings.callback(cog, scene.interaction, member=scene.target)
+
+    [message] = sent_messages(scene.interaction)
+    assert message.startswith(EN.warnings_list_header.format(user="TestUser", count=2))
+    assert "spam" in message
+    assert EN.warnings_no_reason in message
+
+
+async def test_long_warning_lists_are_split(
+    db: None, bot: BotApp, scene: SimpleNamespace
+) -> None:
+    for _ in range(40):
+        await database.add_warning(GUILD_ID, USER_ID, MOD_ID, "x" * 90)
+    cog = ModerationCog(bot)
+
+    await cog.warnings.callback(cog, scene.interaction, member=scene.target)
+
+    messages = sent_messages(scene.interaction)
+    assert len(messages) > 1
+    assert all(len(m) <= MESSAGE_LIMIT for m in messages)
+    assert sum(m.count("`#") for m in messages) == 40
+
+
+def test_chunk_lines_respects_limit() -> None:
+    assert chunk_lines(["a" * 6, "b" * 6, "c" * 6], limit=13) == [
+        "a" * 6 + "\n" + "b" * 6,
+        "c" * 6,
+    ]
+
+
+async def test_clearwarning_removes_own_guilds_warning(
+    db: None, bot: BotApp, scene: SimpleNamespace
+) -> None:
+    warning_id = await database.add_warning(GUILD_ID, USER_ID, MOD_ID, "x")
+    cog = ModerationCog(bot)
+
+    await cog.clearwarning.callback(cog, scene.interaction, warning_id=warning_id)
+
+    assert await database.count_warnings(GUILD_ID, USER_ID) == 0
+    assert sent_messages(scene.interaction) == [
+        EN.warning_removed.format(id=warning_id)
+    ]
+
+
+async def test_clearwarning_cannot_delete_another_guilds_warning(
+    db: None, bot: BotApp, scene: SimpleNamespace
+) -> None:
+    # Regression test: warning numbers are global, so the delete must be scoped to the guild.
     other_guild = 222222222222222222
-    warn_id = await database.add_warning(other_guild, USER_ID, MOD_ID, "elsewhere")
-    cog = ModerationCog(_make_bot())
-    interaction = _make_interaction()
+    warning_id = await database.add_warning(other_guild, USER_ID, MOD_ID, "elsewhere")
+    cog = ModerationCog(bot)
 
-    await cog.clearwarning.callback(cog, interaction, warning_id=warn_id)
+    await cog.clearwarning.callback(cog, scene.interaction, warning_id=warning_id)
 
     assert await database.count_warnings(other_guild, USER_ID) == 1
-    msg: str = interaction.followup.send.call_args[0][0]
-    assert "not found" in msg
+    assert sent_messages(scene.interaction) == [
+        EN.warning_not_found.format(id=warning_id)
+    ]
+
+
+async def test_clearwarnings_reports_count(
+    db: None, bot: BotApp, scene: SimpleNamespace
+) -> None:
+    await database.add_warning(GUILD_ID, USER_ID, MOD_ID, "a")
+    await database.add_warning(GUILD_ID, USER_ID, MOD_ID, "b")
+    cog = ModerationCog(bot)
+
+    await cog.clearwarnings.callback(cog, scene.interaction, member=scene.target)
+
+    assert sent_messages(scene.interaction) == [
+        EN.warnings_cleared.format(user="TestUser", count=2)
+    ]
 
 
 # ---------------------------------------------------------------------------
-# clearwarnings (all)
+# kick and ban
 # ---------------------------------------------------------------------------
 
 
-async def test_clearwarnings_removes_all_rows_and_reports_count(db: None) -> None:
-    await database.add_warning(GUILD_ID, USER_ID, MOD_ID, "one")
-    await database.add_warning(GUILD_ID, USER_ID, MOD_ID, "two")
-    cog = ModerationCog(_make_bot())
-    interaction = _make_interaction()
-    member = _make_member()
+@pytest.mark.parametrize("command", ["kick", "ban"])
+async def test_kick_and_ban_pass_the_reason(
+    db: None, bot: BotApp, scene: SimpleNamespace, command: str
+) -> None:
+    cog = ModerationCog(bot)
 
-    await cog.clearwarnings.callback(cog, interaction, member=member)
+    await getattr(cog, command).callback(
+        cog, scene.interaction, member=scene.target, reason="r"
+    )
 
-    assert await database.count_warnings(GUILD_ID, USER_ID) == 0
-    interaction.followup.send.assert_awaited()
-    msg: str = interaction.followup.send.call_args[0][0]
-    assert "2" in msg
-
-
-# ---------------------------------------------------------------------------
-# kick
-# ---------------------------------------------------------------------------
+    getattr(scene.target, command).assert_awaited_once_with(reason="r")
+    success = {"kick": EN.kick_success, "ban": EN.ban_success}[command]
+    assert sent_messages(scene.interaction) == [success.format(user="TestUser")]
 
 
-async def test_kick_calls_member_kick_with_reason(db: None) -> None:
-    cog = ModerationCog(_make_bot())
-    interaction = _make_interaction()
-    member = _make_member()
+@pytest.mark.parametrize("command", ["kick", "ban"])
+async def test_kick_and_ban_report_forbidden(
+    db: None, bot: BotApp, scene: SimpleNamespace, command: str
+) -> None:
+    getattr(scene.target, command).side_effect = forbidden()
+    cog = ModerationCog(bot)
 
-    await cog.kick.callback(cog, interaction, member=member, reason="rule violation")
+    await getattr(cog, command).callback(
+        cog, scene.interaction, member=scene.target, reason=None
+    )
 
-    member.kick.assert_awaited_once_with(reason="rule violation")
-    interaction.followup.send.assert_awaited()
-
-
-async def test_kick_forbidden_sends_error_and_does_not_raise(db: None) -> None:
-    cog = ModerationCog(_make_bot())
-    interaction = _make_interaction()
-    member = _make_member()
-    member.kick.side_effect = discord.Forbidden(MagicMock(), "Missing Permissions")
-
-    await cog.kick.callback(cog, interaction, member=member, reason="rule violation")
-
-    interaction.followup.send.assert_awaited()
-    msg: str = interaction.followup.send.call_args[0][0]
-    assert "kick" in msg.lower() or "TestUser" in msg
+    failed = {"kick": EN.kick_failed, "ban": EN.ban_failed}[command]
+    assert sent_messages(scene.interaction) == [
+        failed.format(user="TestUser", error=forbidden())
+    ]
 
 
-# ---------------------------------------------------------------------------
-# ban
-# ---------------------------------------------------------------------------
+async def test_kick_refuses_member_above_the_bot(
+    db: None, bot: BotApp, scene: SimpleNamespace
+) -> None:
+    scene.interaction.guild.owner = scene.moderator
+    scene.target.top_role = 10
+    cog = ModerationCog(bot)
 
+    await cog.kick.callback(cog, scene.interaction, member=scene.target, reason=None)
 
-async def test_ban_calls_member_ban_with_reason(db: None) -> None:
-    cog = ModerationCog(_make_bot())
-    interaction = _make_interaction()
-    member = _make_member()
-
-    await cog.ban.callback(cog, interaction, member=member, reason="serious violation")
-
-    member.ban.assert_awaited_once_with(reason="serious violation")
-    interaction.followup.send.assert_awaited()
-
-
-async def test_ban_forbidden_sends_error_and_does_not_raise(db: None) -> None:
-    cog = ModerationCog(_make_bot())
-    interaction = _make_interaction()
-    member = _make_member()
-    member.ban.side_effect = discord.Forbidden(MagicMock(), "Missing Permissions")
-
-    await cog.ban.callback(cog, interaction, member=member, reason="serious violation")
-
-    interaction.followup.send.assert_awaited()
-    msg: str = interaction.followup.send.call_args[0][0]
-    assert "ban" in msg.lower() or "TestUser" in msg
+    scene.target.kick.assert_not_awaited()
+    assert sent_messages(scene.interaction) == [
+        EN.mod_bot_too_low.format(user="TestUser")
+    ]

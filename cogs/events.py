@@ -1,11 +1,15 @@
 """Server event listeners: auto-role and welcome message on member join."""
 
 import logging
+from typing import TYPE_CHECKING
 
 import discord
 from discord.ext import commands
 
 from utils import database
+
+if TYPE_CHECKING:
+    from bot import BotApp
 
 log = logging.getLogger(__name__)
 
@@ -13,7 +17,7 @@ log = logging.getLogger(__name__)
 class EventsCog(commands.Cog, name="Events"):
     """Server event listeners and moderation hooks."""
 
-    def __init__(self, bot: commands.Bot) -> None:
+    def __init__(self, bot: "BotApp") -> None:
         self.bot = bot
 
     async def _auto_role(
@@ -60,8 +64,10 @@ class EventsCog(commands.Cog, name="Events"):
         if settings.bot_channel_id is None:
             return
         channel = member.guild.get_channel(settings.bot_channel_id)
+        # There is no interaction on a member join, so the guild's preferred language is used.
+        strings = self.bot.strings_for(member.guild)
         if isinstance(channel, discord.TextChannel) and (
-            msg := self.bot.strings.member_join_welcome.format(member=member.mention)
+            msg := strings.member_join_welcome.format(member=member.mention)
         ):
             await channel.send(msg)
             log.info(f"Welcomed {member} in #{channel.name}.")
@@ -70,5 +76,5 @@ class EventsCog(commands.Cog, name="Events"):
         log.info(f"{self.qualified_name} cog loaded.")
 
 
-async def setup(bot: commands.Bot) -> None:
+async def setup(bot: "BotApp") -> None:
     await bot.add_cog(EventsCog(bot))

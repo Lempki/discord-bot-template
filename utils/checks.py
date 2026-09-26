@@ -8,7 +8,21 @@ from discord import app_commands
 
 from utils import database
 
-__all__ = ["in_bot_channel"]
+__all__ = ["guild_of", "in_bot_channel"]
+
+
+def guild_of(interaction: discord.Interaction) -> discord.Guild:
+    """Returns the guild an interaction happened in.
+
+    Guild-only commands never run outside a guild.
+    This only fails for a command that is missing the guild_only decorator.
+
+    Raises:
+        app_commands.NoPrivateMessage: If the interaction happened outside a guild.
+    """
+    if interaction.guild is None:
+        raise app_commands.NoPrivateMessage()
+    return interaction.guild
 
 
 def in_bot_channel() -> Callable[[Any], Any]:

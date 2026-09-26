@@ -1,20 +1,26 @@
 """Admin configuration commands for guild administrators."""
 
 import logging
+from typing import TYPE_CHECKING
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from utils import database
+from utils.checks import guild_of
+from utils.replies import respond
+
+if TYPE_CHECKING:
+    from bot import BotApp
 
 log = logging.getLogger(__name__)
 
 
 class AdminCog(commands.Cog, name="Admin"):
-    """Per-guild bot configuration. Requires Manage Server permission."""
+    """Per-guild bot configuration. Requires the Manage Server permission."""
 
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: "BotApp") -> None:
         self.bot = bot
 
     admin = app_commands.Group(
@@ -27,71 +33,60 @@ class AdminCog(commands.Cog, name="Admin"):
 
     @admin.command(name="channel")
     @app_commands.describe(
-        channel="The channel to restrict bot commands to, or leave empty to clear."
+        channel="The channel to allow. Leave it empty to allow every channel."
     )
     async def set_channel(
         self,
         interaction: discord.Interaction,
         channel: discord.TextChannel | None = None,
-    ):
-        """Set or clear the channel where the bot accepts commands."""
-        s = self.bot.strings
-        guild_id = interaction.guild_id
+    ) -> None:
+        """Set or clear the only channel where the bot accepts commands."""
+        s = self.bot.strings_for(interaction, private=True)
+        guild = guild_of(interaction)
+        await database.upsert_settings(
+            guild.id, bot_channel_id=channel.id if channel else None
+        )
         if channel:
-            await database.upsert_settings(guild_id, bot_channel_id=channel.id)
-            msg = (
-                s.admin_channel_set.format(channel=channel.mention)
-                or f"Bot channel set to {channel.mention}."
+            await respond(
+                interaction,
+                s.admin_channel_set,
+                ephemeral=True,
+                channel=channel.mention,
             )
         else:
-            await database.upsert_settings(guild_id, bot_channel_id=None)
-            msg = s.admin_channel_cleared or "Bot channel restriction removed."
-        await interaction.response.send_message(msg, ephemeral=True)
+            await respond(interaction, s.admin_channel_cleared, ephemeral=True)
 
     @admin.command(name="autorole")
-    @app_commands.describe(
-        role="Role to assign new members automatically, or leave empty to clear."
-    )
+    @app_commands.describe(role="The role to give. Leave it empty to give no role.")
     async def set_autorole(
         self, interaction: discord.Interaction, role: discord.Role | None = None
-    ):
-        """Set or clear the role automatically assigned to new members."""
-        s = self.bot.strings
-        guild_id = interaction.guild_id
+    ) -> None:
+        """Set or clear the role that new members get automatically."""
+        s = self.bot.strings_for(interaction, private=True)
+        guild = guild_of(interaction)
+        # The ID survives role renames. The legacy name column is always cleared.
+        await database.upsert_settings(
+            guild.id, auto_role_id=role.id if role else None, auto_role_name=None
+        )
         if role:
-            # The ID survives role renames. The legacy name column is cleared.
-            await database.upsert_settings(
-                guild_id, auto_role_id=role.id, auto_role_name=None
-            )
-            msg = (
-                s.admin_autorole_set.format(role=role.name)
-                or f"Auto-role set to **{role.name}**."
+            await respond(
+                interaction, s.admin_autorole_set, ephemeral=True, role=role.mention
             )
         else:
-            await database.upsert_settings(
-                guild_id, auto_role_id=None, auto_role_name=None
-            )
-            msg = s.admin_autorole_cleared or "Auto-role cleared."
-        await interaction.response.send_message(msg, ephemeral=True)
+            await respond(interaction, s.admin_autorole_cleared, ephemeral=True)
 
     @admin.command(name="warnthreshold")
-    @app_commands.describe(
-        count="Number of warnings before automatic action is taken (1–20)."
-    )
+    @app_commands.describe(count="How many warnings trigger the action, from 1 to 20.")
     async def set_threshold(
         self, interaction: discord.Interaction, count: app_commands.Range[int, 1, 20]
-    ):
-        """Set how many warnings trigger an automatic kick or ban."""
-        s = self.bot.strings
-        await database.upsert_settings(interaction.guild_id, warn_threshold=count)
-        msg = (
-            s.admin_threshold_set.format(count=count)
-            or f"Warning threshold set to {count}."
-        )
-        await interaction.response.send_message(msg, ephemeral=True)
+    ) -> None:
+        """Set how many warnings trigger the warning action."""
+        s = self.bot.strings_for(interaction, private=True)
+        await database.upsert_settings(guild_of(interaction).id, warn_threshold=count)
+        await respond(interaction, s.admin_threshold_set, ephemeral=True, count=count)
 
     @admin.command(name="warnaction")
-    @app_commands.describe(action="Action taken when the warning threshold is reached.")
+    @app_commands.describe(action="What happens at the warning limit.")
     @app_commands.choices(
         action=[
             app_commands.Choice(name="Kick", value="kick"),
@@ -100,61 +95,43 @@ class AdminCog(commands.Cog, name="Admin"):
     )
     async def set_action(
         self, interaction: discord.Interaction, action: app_commands.Choice[str]
-    ):
-        """Set whether hitting the warning threshold kicks or bans the member."""
-        s = self.bot.strings
-        await database.upsert_settings(interaction.guild_id, warn_action=action.value)
-        msg = (
-            s.admin_action_set.format(action=action.value)
-            or f"Warning action set to **{action.value}**."
+    ) -> None:
+        """Set what happens when a member reaches the warning limit."""
+        s = self.bot.strings_for(interaction, private=True)
+        await database.upsert_settings(
+            guild_of(interaction).id, warn_action=action.value
         )
-        await interaction.response.send_message(msg, ephemeral=True)
+        name = s.action_ban if action.value == "ban" else s.action_kick
+        await respond(interaction, s.admin_action_set, ephemeral=True, action=name)
 
     @admin.command(name="status")
-    async def status(self, interaction: discord.Interaction):
-        """Show the current bot configuration for this server."""
-        s = self.bot.strings
-        settings = await database.get_settings(interaction.guild_id)
+    async def status(self, interaction: discord.Interaction) -> None:
+        """Show this server's bot settings."""
+        s = self.bot.strings_for(interaction, private=True)
+        settings = await database.get_settings(guild_of(interaction).id)
         channel = (
             f"<#{settings.bot_channel_id}>"
             if settings.bot_channel_id
-            else "any channel"
+            else s.status_any_channel
         )
         if settings.auto_role_id:
             autorole = f"<@&{settings.auto_role_id}>"
         else:
-            autorole = settings.auto_role_name
-        threshold = settings.warn_threshold
-        action = settings.warn_action
-        msg = s.admin_status.format(
+            autorole = settings.auto_role_name or s.status_none
+        action = s.action_ban if settings.warn_action == "ban" else s.action_kick
+        await respond(
+            interaction,
+            s.admin_status,
+            ephemeral=True,
             channel=channel,
-            autorole=autorole or "none",
-            threshold=threshold,
+            autorole=autorole,
+            threshold=settings.warn_threshold,
             action=action,
-        ) or (
-            f"**Bot settings**\n"
-            f"Channel: {channel}\n"
-            f"Auto-role: {autorole or 'none'}\n"
-            f"Warn threshold: {threshold}\n"
-            f"Warn action: {action}"
         )
-        await interaction.response.send_message(msg, ephemeral=True)
-
-    async def cog_app_command_error(
-        self, interaction: discord.Interaction, error: app_commands.AppCommandError
-    ):
-        if isinstance(error, app_commands.CheckFailure):
-            if not interaction.response.is_done():
-                await interaction.response.send_message(
-                    "You need **Manage Server** permission to use this command.",
-                    ephemeral=True,
-                )
-            return
-        raise error
 
     async def cog_load(self) -> None:
         log.info(f"{self.qualified_name} cog loaded.")
 
 
-async def setup(bot: commands.Bot):
+async def setup(bot: "BotApp") -> None:
     await bot.add_cog(AdminCog(bot))

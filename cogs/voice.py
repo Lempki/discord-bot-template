@@ -1,101 +1,94 @@
+"""Voice channel commands: join, leave, and skip."""
+
+import logging
+from typing import TYPE_CHECKING
+
 import discord
 from discord import app_commands
 from discord.ext import commands
 
-from utils.checks import in_bot_channel
+from utils.checks import guild_of, in_bot_channel
+from utils.replies import finish, respond
+
+if TYPE_CHECKING:
+    from bot import BotApp
+
+log = logging.getLogger(__name__)
 
 
 class VoiceCog(commands.Cog, name="Voice"):
-    """Voice channel management: join, leave, skip."""
+    """Voice channel management. The bot leaves on its own once it is alone or idle."""
 
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: "BotApp") -> None:
         self.bot = bot
 
-    async def _say(
-        self, interaction: discord.Interaction, template: str, **kwargs
-    ) -> bool:
-        """Format and send *template*. Returns True if a message was sent."""
-        if not (msg := template.format(**kwargs)):
-            return False
-        if interaction.response.is_done():
-            await interaction.followup.send(msg)
-        else:
-            await interaction.response.send_message(msg)
-        return True
-
     @app_commands.command(name="join")
+    @app_commands.guild_only()
     @in_bot_channel()
-    async def join(self, interaction: discord.Interaction):
-        """Join the voice channel you are currently in."""
+    async def join(self, interaction: discord.Interaction) -> None:
+        """Join your voice channel."""
+        # A voice handshake can take longer than the 3 seconds Discord allows for a reply.
         await interaction.response.defer()
-        s = self.bot.strings
-        if interaction.user.voice is None:
-            if not await self._say(interaction, s.not_in_voice, user=interaction.user):
-                await interaction.delete_original_response()
+        s = self.bot.strings_for(interaction)
+        guild = guild_of(interaction)
+        member = interaction.user
+        if (
+            not isinstance(member, discord.Member)
+            or member.voice is None
+            or member.voice.channel is None
+        ):
+            await respond(interaction, s.not_in_voice, user=member.display_name)
+            await finish(interaction)
             return
-        target = interaction.user.voice.channel
-        vc = interaction.guild.voice_client
-        if vc:
-            if vc.channel == target:
-                if not await self._say(
-                    interaction, s.already_same_channel, user=interaction.user
-                ):
-                    await interaction.delete_original_response()
-                return
-            await vc.move_to(target)
-            if not await self._say(interaction, s.moved_voice, channel=target):
-                await interaction.delete_original_response()
+        target = member.voice.channel
+        current = guild.voice_client
+        if isinstance(current, discord.VoiceClient) and current.channel == target:
+            await respond(interaction, s.already_same_channel, user=member.display_name)
         else:
-            await target.connect()
-            if not await self._say(interaction, s.joined_voice, channel=target):
-                await interaction.delete_original_response()
+            moved = isinstance(current, discord.VoiceClient)
+            await self.bot.voice_presence.connect(target)
+            await respond(
+                interaction,
+                s.moved_voice if moved else s.joined_voice,
+                channel=target.name,
+            )
+        await finish(interaction)
 
     @app_commands.command(name="leave")
+    @app_commands.guild_only()
     @in_bot_channel()
-    async def leave(self, interaction: discord.Interaction):
-        """Leave the current voice channel and stop audio."""
+    async def leave(self, interaction: discord.Interaction) -> None:
+        """Leave the voice channel and stop playing."""
         await interaction.response.defer()
-        s = self.bot.strings
-        vc = interaction.guild.voice_client
-        if vc is None:
-            if not await self._say(
-                interaction, s.bot_not_in_voice, user=interaction.user
-            ):
-                await interaction.delete_original_response()
-            return
-        channel = vc.channel
-        if vc.is_playing():
-            vc.stop()
-        await vc.disconnect()
-        if not await self._say(interaction, s.left_voice, channel=channel):
-            await interaction.delete_original_response()
+        s = self.bot.strings_for(interaction)
+        guild = guild_of(interaction)
+        voice_client = guild.voice_client
+        if not isinstance(voice_client, discord.VoiceClient):
+            await respond(interaction, s.bot_not_in_voice)
+        else:
+            channel = voice_client.channel
+            await self.bot.voice_presence.disconnect(guild)
+            await respond(interaction, s.left_voice, channel=channel.name)
+        await finish(interaction)
 
     @app_commands.command(name="skip")
+    @app_commands.guild_only()
     @in_bot_channel()
-    async def skip(self, interaction: discord.Interaction):
-        """Skip the currently playing audio."""
-        await interaction.response.defer()
-        s = self.bot.strings
-        vc = interaction.guild.voice_client
-        if vc and vc.is_playing():
-            vc.stop()
-            if not await self._say(interaction, s.skipped):
-                await interaction.delete_original_response()
+    async def skip(self, interaction: discord.Interaction) -> None:
+        """Skip the audio that is playing now."""
+        s = self.bot.strings_for(interaction)
+        voice_client = guild_of(interaction).voice_client
+        if isinstance(voice_client, discord.VoiceClient) and voice_client.is_playing():
+            # Stopping ends the current source, and the media queue moves on to the next track.
+            voice_client.stop()
+            await respond(interaction, s.skipped)
         else:
-            if not await self._say(interaction, s.nothing_to_skip):
-                await interaction.delete_original_response()
+            await respond(interaction, s.nothing_playing)
+        await finish(interaction)
 
-    async def cog_app_command_error(
-        self, interaction: discord.Interaction, error: app_commands.AppCommandError
-    ):
-        if isinstance(error, app_commands.CheckFailure):
-            if not interaction.response.is_done() and (
-                msg := self.bot.strings.bot_channel_only
-            ):
-                await interaction.response.send_message(msg, ephemeral=True)
-            return
-        raise error
+    async def cog_load(self) -> None:
+        log.info(f"{self.qualified_name} cog loaded.")
 
 
-async def setup(bot: commands.Bot):
+async def setup(bot: "BotApp") -> None:
     await bot.add_cog(VoiceCog(bot))

@@ -1,187 +1,151 @@
-"""Tests for cogs/admin.py — AdminCog command handlers."""
+"""Tests for cogs/admin.py, run against a real bot and an in-memory database."""
 
-from __future__ import annotations
+from unittest.mock import MagicMock
 
-from unittest.mock import AsyncMock, MagicMock
+import discord
 
+from bot import BotApp
 from cogs.admin import AdminCog
-from localization import ENGLISH
+from config import Config
+from localization import LOCALES
+from tests.conftest import GUILD_ID, make_interaction, sent_messages
 from utils import database
 
-GUILD_ID = 111111111111111111
+CHANNEL_ID = 777777777777777777
+ROLE_ID = 999999999999999999
+EN = LOCALES["en"]
+FI = LOCALES["fi"]
 
 
-def _make_bot() -> MagicMock:
-    bot = MagicMock()
-    bot.strings = ENGLISH
-    return bot
+def choice(value: str) -> MagicMock:
+    return MagicMock(value=value)
 
 
-def _make_interaction(guild_id: int = GUILD_ID) -> MagicMock:
-    interaction = MagicMock()
-    interaction.guild_id = guild_id
-    interaction.response.send_message = AsyncMock()
-    interaction.response.is_done.return_value = False
-    return interaction
-
-
-# ---------------------------------------------------------------------------
-# set_channel
-# ---------------------------------------------------------------------------
-
-
-async def test_set_channel_with_channel_updates_db(db: None) -> None:
-    cog = AdminCog(_make_bot())
-    interaction = _make_interaction()
-    channel = MagicMock()
-    channel.id = 777777777777777777
-    channel.mention = "#bot-commands"
+async def test_set_channel_stores_it(db: None, bot: BotApp) -> None:
+    cog = AdminCog(bot)
+    interaction = make_interaction()
+    channel = MagicMock(id=CHANNEL_ID, mention="<#777>")
 
     await cog.set_channel.callback(cog, interaction, channel=channel)
 
-    settings = await database.get_settings(GUILD_ID)
-    assert settings is not None
-    assert settings.bot_channel_id == channel.id
-    interaction.response.send_message.assert_awaited_once()
+    assert (await database.get_settings(GUILD_ID)).bot_channel_id == CHANNEL_ID
+    assert sent_messages(interaction) == [EN.admin_channel_set.format(channel="<#777>")]
 
 
-async def test_set_channel_with_none_clears_bot_channel_id(db: None) -> None:
-    await database.upsert_settings(GUILD_ID, bot_channel_id=777777777777777777)
-    cog = AdminCog(_make_bot())
-    interaction = _make_interaction()
+async def test_set_channel_without_channel_clears_it(db: None, bot: BotApp) -> None:
+    await database.upsert_settings(GUILD_ID, bot_channel_id=CHANNEL_ID)
+    cog = AdminCog(bot)
 
-    await cog.set_channel.callback(cog, interaction, channel=None)
+    await cog.set_channel.callback(cog, make_interaction(), channel=None)
 
-    settings = await database.get_settings(GUILD_ID)
-    assert settings.bot_channel_id is None
-    interaction.response.send_message.assert_awaited_once()
+    assert (await database.get_settings(GUILD_ID)).bot_channel_id is None
 
 
-# ---------------------------------------------------------------------------
-# set_autorole
-# ---------------------------------------------------------------------------
+async def test_set_autorole_stores_id_and_clears_legacy_name(
+    db: None, bot: BotApp
+) -> None:
+    await database.upsert_settings(GUILD_ID, auto_role_name="Legacy")
+    cog = AdminCog(bot)
+    role = MagicMock(id=ROLE_ID, mention="<@&999>")
 
-
-async def test_set_autorole_with_role_updates_db(db: None) -> None:
-    cog = AdminCog(_make_bot())
-    interaction = _make_interaction()
-    role = MagicMock()
-    role.id = 999999999999999999
-    role.name = "Member"
-
-    await cog.set_autorole.callback(cog, interaction, role=role)
+    await cog.set_autorole.callback(cog, make_interaction(), role=role)
 
     settings = await database.get_settings(GUILD_ID)
-    assert settings.auto_role_id == role.id
-    assert settings.auto_role_name is None
-    interaction.response.send_message.assert_awaited_once()
+    assert (settings.auto_role_id, settings.auto_role_name) == (ROLE_ID, None)
 
 
-async def test_set_autorole_with_none_clears_auto_role(db: None) -> None:
-    await database.upsert_settings(
-        GUILD_ID, auto_role_id=999999999999999999, auto_role_name="Legacy"
-    )
-    cog = AdminCog(_make_bot())
-    interaction = _make_interaction()
+async def test_set_autorole_without_role_clears_it(db: None, bot: BotApp) -> None:
+    await database.upsert_settings(GUILD_ID, auto_role_id=ROLE_ID)
+    cog = AdminCog(bot)
 
-    await cog.set_autorole.callback(cog, interaction, role=None)
+    await cog.set_autorole.callback(cog, make_interaction(), role=None)
 
-    settings = await database.get_settings(GUILD_ID)
-    assert settings.auto_role_id is None
-    assert settings.auto_role_name is None
-    interaction.response.send_message.assert_awaited_once()
+    assert (await database.get_settings(GUILD_ID)).auto_role_id is None
 
 
-# ---------------------------------------------------------------------------
-# set_threshold
-# ---------------------------------------------------------------------------
+async def test_set_threshold(db: None, bot: BotApp) -> None:
+    cog = AdminCog(bot)
+
+    await cog.set_threshold.callback(cog, make_interaction(), count=5)
+
+    assert (await database.get_settings(GUILD_ID)).warn_threshold == 5
 
 
-async def test_set_threshold_writes_warn_threshold_to_db(db: None) -> None:
-    cog = AdminCog(_make_bot())
-    interaction = _make_interaction()
+async def test_set_action_replies_with_localized_action_name(
+    db: None, bot: BotApp
+) -> None:
+    cog = AdminCog(bot)
+    interaction = make_interaction(locale=discord.Locale.finnish)
 
-    await cog.set_threshold.callback(cog, interaction, count=5)
+    await cog.set_action.callback(cog, interaction, action=choice("ban"))
 
-    settings = await database.get_settings(GUILD_ID)
-    assert settings.warn_threshold == 5
-    interaction.response.send_message.assert_awaited_once()
-
-
-# ---------------------------------------------------------------------------
-# set_action
-# ---------------------------------------------------------------------------
+    assert (await database.get_settings(GUILD_ID)).warn_action == "ban"
+    assert sent_messages(interaction) == [
+        FI.admin_action_set.format(action=FI.action_ban)
+    ]
 
 
-async def test_set_action_ban_writes_to_db(db: None) -> None:
-    cog = AdminCog(_make_bot())
-    interaction = _make_interaction()
-    action_choice = MagicMock()
-    action_choice.value = "ban"
-
-    await cog.set_action.callback(cog, interaction, action=action_choice)
-
-    settings = await database.get_settings(GUILD_ID)
-    assert settings.warn_action == "ban"
-    interaction.response.send_message.assert_awaited_once()
-
-
-async def test_set_action_kick_writes_to_db(db: None) -> None:
-    cog = AdminCog(_make_bot())
-    interaction = _make_interaction()
-    action_choice = MagicMock()
-    action_choice.value = "kick"
-
-    await cog.set_action.callback(cog, interaction, action=action_choice)
-
-    settings = await database.get_settings(GUILD_ID)
-    assert settings.warn_action == "kick"
-    interaction.response.send_message.assert_awaited_once()
-
-
-# ---------------------------------------------------------------------------
-# status
-# ---------------------------------------------------------------------------
-
-
-async def test_status_with_no_guild_settings_sends_defaults(db: None) -> None:
-    cog = AdminCog(_make_bot())
-    interaction = _make_interaction()
+async def test_status_shows_defaults(db: None, bot: BotApp) -> None:
+    cog = AdminCog(bot)
+    interaction = make_interaction()
 
     await cog.status.callback(cog, interaction)
 
-    interaction.response.send_message.assert_awaited_once()
-    msg: str = interaction.response.send_message.call_args[0][0]
-    assert "any channel" in msg
-    assert "none" in msg
+    assert sent_messages(interaction) == [
+        EN.admin_status.format(
+            channel=EN.status_any_channel,
+            autorole=EN.status_none,
+            threshold=3,
+            action=EN.action_kick,
+        )
+    ]
 
 
-async def test_status_with_settings_reflects_configured_values(db: None) -> None:
+async def test_status_shows_configured_values(db: None, bot: BotApp) -> None:
     await database.upsert_settings(
         GUILD_ID,
-        bot_channel_id=777777777777777777,
-        auto_role_name="Member",
+        bot_channel_id=CHANNEL_ID,
+        auto_role_id=ROLE_ID,
         warn_threshold=5,
         warn_action="ban",
     )
-    cog = AdminCog(_make_bot())
-    interaction = _make_interaction()
+    cog = AdminCog(bot)
+    interaction = make_interaction()
 
     await cog.status.callback(cog, interaction)
 
-    interaction.response.send_message.assert_awaited_once()
-    msg: str = interaction.response.send_message.call_args[0][0]
-    assert "Member" in msg
-    assert "5" in msg
-    assert "ban" in msg
+    assert sent_messages(interaction) == [
+        EN.admin_status.format(
+            channel=f"<#{CHANNEL_ID}>",
+            autorole=f"<@&{ROLE_ID}>",
+            threshold=5,
+            action=EN.action_ban,
+        )
+    ]
 
 
-async def test_status_shows_auto_role_id_as_mention(db: None) -> None:
-    await database.upsert_settings(GUILD_ID, auto_role_id=999999999999999999)
-    cog = AdminCog(_make_bot())
-    interaction = _make_interaction()
+async def test_status_shows_legacy_role_name(db: None, bot: BotApp) -> None:
+    await database.upsert_settings(GUILD_ID, auto_role_name="Member")
+    cog = AdminCog(bot)
+    interaction = make_interaction()
 
     await cog.status.callback(cog, interaction)
 
-    msg: str = interaction.response.send_message.call_args[0][0]
-    assert "<@&999999999999999999>" in msg
+    [message] = sent_messages(interaction)
+    assert message == EN.admin_status.format(
+        channel=EN.status_any_channel,
+        autorole="Member",
+        threshold=3,
+        action=EN.action_kick,
+    )
+
+
+async def test_admin_replies_even_when_bot_is_silent(db: None) -> None:
+    # Admin replies are ephemeral, so LOCALE=silent must not hide them.
+    silent_bot = BotApp(Config(discord_token="t", locale="silent"))
+    cog = AdminCog(silent_bot)
+    interaction = make_interaction()
+
+    await cog.set_threshold.callback(cog, interaction, count=4)
+
+    assert sent_messages(interaction) == [EN.admin_threshold_set.format(count=4)]

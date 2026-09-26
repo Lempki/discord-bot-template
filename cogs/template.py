@@ -1,50 +1,47 @@
+"""Template cog showing the patterns every cog in this bot follows.
+
+Copy this file and rename the class to add a new feature group.
+Register it by adding its module name to COGS_TO_LOAD in your .env.
+"""
+
 import logging
+from typing import TYPE_CHECKING
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
+from utils.replies import respond
+
+if TYPE_CHECKING:
+    from bot import BotApp
+
 log = logging.getLogger(__name__)
 
 
 class TemplateCog(commands.Cog, name="Template"):
-    """Template cog showing discord.py Application Command patterns.
+    """An example feature group with one command."""
 
-    Copy this file and rename the class to add a new feature group.
-    Register it by adding its module name to COGS_TO_LOAD in your .env.
-    """
-
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: "BotApp") -> None:
         self.bot = bot
 
-    # --- Commands ---
-
+    # The docstring becomes the command description shown in Discord. Keep it under 100 characters.
+    # Translate it by adding the exact English text to COMMAND_TEXT in localization.py.
     @app_commands.command(name="ping")
-    async def ping(self, interaction: discord.Interaction):
-        """Replies with current latency."""
-        await interaction.response.send_message(
-            f"Pong! `{round(self.bot.latency * 1000)}ms`"
+    async def ping(self, interaction: discord.Interaction) -> None:
+        """Show how long the bot takes to reach Discord."""
+        # strings_for picks the user's language. Every message lives in the locale tables.
+        s = self.bot.strings_for(interaction)
+        await respond(
+            interaction,
+            s.ping_reply,
+            ephemeral=True,
+            latency=round(self.bot.latency * 1000),
         )
-
-    # --- Listeners ---
 
     async def cog_load(self) -> None:
         log.info(f"{self.qualified_name} cog loaded.")
 
-    # --- Per-cog error handler ---
 
-    async def cog_app_command_error(
-        self, interaction: discord.Interaction, error: app_commands.AppCommandError
-    ):
-        if isinstance(error, app_commands.CheckFailure):
-            if not interaction.response.is_done():
-                await interaction.response.send_message(
-                    "This command can only be used in the designated bot channel.",
-                    ephemeral=True,
-                )
-            return
-        raise error  # re-raise so the global handler in bot.py still sees it
-
-
-async def setup(bot: commands.Bot):
+async def setup(bot: "BotApp") -> None:
     await bot.add_cog(TemplateCog(bot))

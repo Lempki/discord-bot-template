@@ -1,5 +1,10 @@
+"""Audio queue for YouTube, SoundCloud, and Spotify through discord-api-media."""
+
 import asyncio
+import contextlib
 import logging
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import discord
 from discord import app_commands
@@ -10,197 +15,220 @@ from utils.audio import (
     is_spotify_collection,
     is_url,
     is_youtube_playlist,
+    stream_source,
 )
-from utils.checks import in_bot_channel
+from utils.checks import guild_of, in_bot_channel
+from utils.replies import finish, respond
+
+if TYPE_CHECKING:
+    from bot import BotApp
 
 log = logging.getLogger(__name__)
 
-_FFMPEG_OPTIONS = {
-    "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-    "options": "-vn",
-}
+
+@dataclass(frozen=True)
+class Track:
+    """One queued request.
+
+    Attributes:
+        query: A URL or search text, resolved to a stream only when the track starts.
+        requested_by: The display name of the member who queued it.
+        channel: Where to announce the track.
+            Interaction tokens expire after 15 minutes.
+            The player therefore posts to the channel instead of replying to the command.
+    """
+
+    query: str
+    requested_by: str
+    channel: discord.abc.Messageable
+
+
+class GuildPlayer:
+    """Plays one guild's queue in order until it is empty or the bot leaves voice."""
+
+    def __init__(self, cog: "MediaCog", guild: discord.Guild) -> None:
+        self._cog = cog
+        self._guild = guild
+        self.queue: asyncio.Queue[Track] = asyncio.Queue()
+        self._task: asyncio.Task[None] | None = None
+
+    def enqueue(self, tracks: list[Track]) -> None:
+        """Adds tracks to the queue and starts playing if the player is idle."""
+        for track in tracks:
+            self.queue.put_nowait(track)
+        if self._task is None or self._task.done():
+            self._task = asyncio.create_task(
+                self._run(), name=f"media-player-{self._guild.id}"
+            )
+
+    def clear(self) -> None:
+        """Drops every queued track without touching the current one."""
+        while not self.queue.empty():
+            self.queue.get_nowait()
+
+    def cancel(self) -> None:
+        """Stops the player task, used when the cog unloads."""
+        self.clear()
+        if self._task is not None:
+            self._task.cancel()
+
+    async def _run(self) -> None:
+        while not self.queue.empty():
+            track = self.queue.get_nowait()
+            voice_client = self._guild.voice_client
+            if (
+                not isinstance(voice_client, discord.VoiceClient)
+                or not voice_client.is_connected()
+            ):
+                # The bot left voice, so the rest of the queue has no listener.
+                self.clear()
+                return
+            await self._play(track, voice_client)
+
+    async def _play(self, track: Track, voice_client: discord.VoiceClient) -> None:
+        bot = self._cog.bot
+        s = bot.strings_for(self._guild)
+        try:
+            if is_url(track.query):
+                info = await self._cog.client.get_info(url=track.query)
+            else:
+                info = await self._cog.client.get_info(query=track.query)
+            stream_url = info["stream_url"]
+        except Exception as error:
+            # The service or the source site failed. The queue moves on to the next track.
+            log.warning(f"Could not load '{track.query}': {error}")
+            if message := s.load_error.format(user=track.requested_by):
+                await track.channel.send(message)
+            return
+        title = info.get("title") or track.query
+        if message := s.now_playing.format(
+            title=title, channel=voice_client.channel.name
+        ):
+            await track.channel.send(message)
+        log.info(f"Playing '{title}' in {self._guild}.")
+        try:
+            await bot.voice_presence.play(
+                voice_client, stream_source(stream_url, bot.config.ffmpeg_path)
+            )
+        except Exception as error:
+            log.warning(f"Playback of '{title}' failed: {error}")
 
 
 class MediaCog(commands.Cog, name="Media"):
-    """Audio queue supporting YouTube and Spotify. Concurrent queues per guild."""
+    """Audio queue supporting YouTube and Spotify, with one queue per guild."""
 
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: "BotApp") -> None:
         # Raises ConfigError with the missing variable names, which stops the cog from loading.
         service = bot.config.service("media")
         self.bot = bot
-        self._queues: dict[int, asyncio.Queue] = {}
-        self._playing: dict[int, bool] = {}
-        self._client = MediaAPIClient(base_url=service.url, secret=service.secret)
+        self.client = MediaAPIClient(base_url=service.url, secret=service.secret)
+        self._players: dict[int, GuildPlayer] = {}
 
-    def _queue(self, guild_id: int) -> asyncio.Queue:
-        if guild_id not in self._queues:
-            self._queues[guild_id] = asyncio.Queue()
-        return self._queues[guild_id]
+    def player(self, guild: discord.Guild) -> GuildPlayer:
+        """Returns the guild's player, creating it on first use."""
+        if guild.id not in self._players:
+            self._players[guild.id] = GuildPlayer(self, guild)
+        return self._players[guild.id]
 
-    def _ffmpeg(self) -> str:
-        return self.bot.config.ffmpeg_path
-
-    async def _say(
-        self, interaction: discord.Interaction, template: str, **kwargs
-    ) -> bool:
-        """Format and send *template*. Returns True if a message was sent."""
-        if not (msg := template.format(**kwargs)):
-            return False
-        if interaction.response.is_done():
-            await interaction.followup.send(msg)
-        else:
-            await interaction.response.send_message(msg)
-        return True
+    async def _expand(self, query: str) -> list[str]:
+        """Turns a playlist or album URL into its track URLs, and anything else into itself."""
+        if is_spotify_collection(query) or is_youtube_playlist(query):
+            tracks = await self.client.get_playlist(query)
+            return [t["webpage_url"] for t in tracks if t.get("webpage_url")]
+        return [query]
 
     @app_commands.command(name="play")
+    @app_commands.guild_only()
     @in_bot_channel()
-    async def play(self, interaction: discord.Interaction, url: str):
-        """Add a URL or search query to the queue and start playback if idle.
-
-        Accepts YouTube video URLs, YouTube playlist URLs, Spotify track URLs,
-        Spotify album URLs, Spotify playlist URLs, and plain search queries.
-        """
+    @app_commands.describe(
+        url="A YouTube, SoundCloud, or Spotify link, or text to search for."
+    )
+    async def play(self, interaction: discord.Interaction, url: str) -> None:
+        """Play a link or search result, or add it to the queue."""
         await interaction.response.defer()
-        s = self.bot.strings
-        guild_id = interaction.guild_id
-
-        vc = interaction.guild.voice_client
-        if vc is None and interaction.user.voice is None:
-            if not await self._say(interaction, s.not_in_voice, user=interaction.user):
-                await interaction.delete_original_response()
+        s = self.bot.strings_for(interaction)
+        guild = guild_of(interaction)
+        member = interaction.user
+        if (
+            not isinstance(member, discord.Member)
+            or member.voice is None
+            or member.voice.channel is None
+        ):
+            await respond(interaction, s.not_in_voice, user=member.display_name)
+            await finish(interaction)
+            return
+        if interaction.channel is None or not isinstance(
+            interaction.channel, discord.abc.Messageable
+        ):
+            await finish(interaction)
             return
 
         try:
-            if is_spotify_collection(url) or is_youtube_playlist(url):
-                tracks = await self._client.get_playlist(url)
-                urls = [t["webpage_url"] for t in tracks if t.get("webpage_url")]
-            else:
-                urls = [url]
-        except Exception as e:
-            log.warning(f"Error resolving '{url}': {e}")
-            if not await self._say(interaction, s.load_error, user=interaction.user):
-                await interaction.delete_original_response()
+            queries = await self._expand(url)
+        except Exception as error:
+            log.warning(f"Could not expand '{url}': {error}")
+            await respond(interaction, s.load_error, user=member.display_name)
+            await finish(interaction)
             return
 
-        for u in urls:
-            await self._queue(guild_id).put((interaction, u))
-
-        if len(urls) > 1:
-            sent = await self._say(
-                interaction, s.queued_many, count=len(urls), user=interaction.user
+        await self.bot.voice_presence.connect(member.voice.channel)
+        tracks = [Track(q, member.display_name, interaction.channel) for q in queries]
+        if len(tracks) > 1:
+            await respond(
+                interaction, s.queued_many, count=len(tracks), user=member.display_name
             )
         else:
-            sent = await self._say(interaction, s.queued_one, user=interaction.user)
-        if not sent:
-            await interaction.delete_original_response()
-
-        log.info(f"Queued {len(urls)} item(s) from {interaction.user}")
-
-        if not self._playing.get(guild_id):
-            await self._process_queue(guild_id)
-
-    async def _process_queue(self, guild_id: int):
-        q = self._queue(guild_id)
-        if q.empty():
-            self._playing[guild_id] = False
-            return
-
-        interaction, url = await q.get()
-        s = self.bot.strings
-        vc = interaction.guild.voice_client
-
-        if vc is None:
-            if interaction.user.voice:
-                vc = await interaction.user.voice.channel.connect()
-            else:
-                await self._say(interaction, s.not_in_voice, user=interaction.user)
-                await self._process_queue(guild_id)
-                return
-
-        try:
-            if is_url(url):
-                info = await self._client.get_info(url=url)
-            else:
-                info = await self._client.get_info(query=url)
-            stream_url = info["stream_url"]
-            title = info.get("title", url)
-        except Exception as e:
-            log.warning(f"Error loading '{url}': {e}")
-            await self._say(interaction, s.load_error, user=interaction.user)
-            await self._process_queue(guild_id)
-            return
-
-        source = discord.PCMVolumeTransformer(
-            discord.FFmpegPCMAudio(
-                stream_url, executable=self._ffmpeg(), **_FFMPEG_OPTIONS
-            ),
-            volume=0.5,
-        )
-
-        self._playing[guild_id] = True
-        vc.play(source)
-        await self._say(interaction, s.now_playing, title=title, channel=vc.channel)
-        log.info(f"Playing '{title}'")
-
-        while vc.is_playing() or vc.is_paused():
-            await asyncio.sleep(1)
-
-        self._playing[guild_id] = False
-        await self._process_queue(guild_id)
+            await respond(interaction, s.queued_one, user=member.display_name)
+        log.info(f"Queued {len(tracks)} track(s) from {member} in {guild}.")
+        self.player(guild).enqueue(tracks)
+        await finish(interaction)
 
     @app_commands.command(name="stop")
+    @app_commands.guild_only()
     @in_bot_channel()
-    async def stop(self, interaction: discord.Interaction):
-        """Stop playback and clear the queue."""
-        await interaction.response.defer()
-        s = self.bot.strings
-        guild_id = interaction.guild_id
-        vc = interaction.guild.voice_client
-        if vc is None or (not vc.is_playing() and not vc.is_paused()):
-            if not await self._say(interaction, s.nothing_to_skip):
-                await interaction.delete_original_response()
-            return
-        q = self._queue(guild_id)
-        while not q.empty():
-            try:
-                q.get_nowait()
-            except asyncio.QueueEmpty:
-                break
-        vc.stop()
-        if not await self._say(interaction, s.stopped):
-            await interaction.delete_original_response()
+    async def stop(self, interaction: discord.Interaction) -> None:
+        """Stop playing and clear the queue."""
+        s = self.bot.strings_for(interaction)
+        guild = guild_of(interaction)
+        voice_client = guild.voice_client
+        if not isinstance(voice_client, discord.VoiceClient) or not (
+            voice_client.is_playing() or voice_client.is_paused()
+        ):
+            await respond(interaction, s.nothing_playing)
+        else:
+            self.player(guild).clear()
+            voice_client.stop()
+            await respond(interaction, s.stopped)
+        await finish(interaction)
 
     @app_commands.command(name="pause")
+    @app_commands.guild_only()
     @in_bot_channel()
-    async def pause(self, interaction: discord.Interaction):
-        """Pause or resume the current audio."""
-        await interaction.response.defer()
-        s = self.bot.strings
-        vc = interaction.guild.voice_client
-        if vc is None or (not vc.is_playing() and not vc.is_paused()):
-            if not await self._say(interaction, s.nothing_to_skip):
-                await interaction.delete_original_response()
-            return
-        if vc.is_paused():
-            vc.resume()
-            if not await self._say(interaction, s.resumed):
-                await interaction.delete_original_response()
+    async def pause(self, interaction: discord.Interaction) -> None:
+        """Pause or resume the audio that is playing now."""
+        s = self.bot.strings_for(interaction)
+        voice_client = guild_of(interaction).voice_client
+        if not isinstance(voice_client, discord.VoiceClient) or not (
+            voice_client.is_playing() or voice_client.is_paused()
+        ):
+            await respond(interaction, s.nothing_playing)
+        elif voice_client.is_paused():
+            voice_client.resume()
+            await respond(interaction, s.resumed)
         else:
-            vc.pause()
-            if not await self._say(interaction, s.paused):
-                await interaction.delete_original_response()
+            voice_client.pause()
+            await respond(interaction, s.paused)
+        await finish(interaction)
 
-    async def cog_app_command_error(
-        self, interaction: discord.Interaction, error: app_commands.AppCommandError
-    ):
-        if isinstance(error, app_commands.CheckFailure):
-            if not interaction.response.is_done() and (
-                msg := self.bot.strings.bot_channel_only
-            ):
-                await interaction.response.send_message(msg, ephemeral=True)
-            return
-        raise error
+    async def cog_load(self) -> None:
+        log.info(f"{self.qualified_name} cog loaded.")
+
+    async def cog_unload(self) -> None:
+        for player in self._players.values():
+            player.cancel()
+        with contextlib.suppress(Exception):
+            await self.client.aclose()
 
 
-async def setup(bot: commands.Bot):
+async def setup(bot: "BotApp") -> None:
     await bot.add_cog(MediaCog(bot))
