@@ -137,7 +137,7 @@ All configuration is read from environment variables or from a `.env` file locat
 |---|---|---|---|
 | `DISCORD_TOKEN` | Yes | None | The Discord bot token used to authenticate with the API. |
 | `COGS_TO_LOAD` | No | `help` | A comma-separated list of cog module names to load at startup. Set it to `help,template,voice,media,admin,moderation,events` for the full feature set. |
-| `LOCALE` | No | `silent` | The language used for bot messages. Built-in values are `en` and `silent`. When set to `silent`, the bot sends no messages. New locales can be added in `localization.py`. |
+| `LOCALE` | No | `silent` | The fallback language for users whose Discord language the bot does not speak. Built-in values are `en` and `fi`. `silent` mutes public replies, while admin and moderator replies are still sent because only the person who ran the command sees them. |
 | `DATABASE_PATH` | No | `data/bot.db` | The SQLite file for per-guild settings and moderation data. The directory is created if needed. The Docker image uses `/app/data/bot.db`. |
 | `FFMPEG_PATH` | No | `ffmpeg` | The FFmpeg executable. Leave it unset to use FFmpeg from the system PATH. |
 | `DEV_GUILD_ID` | No | None | A server ID for development. Commands sync to that server instantly instead of globally. |
@@ -157,19 +157,23 @@ Commands synced globally earlier stay visible there as well, so a development se
 discord-bot-template/
 ├── bot.py              # Entry point.
 ├── config.py           # Reads settings and discord-api-* service URLs from the environment.
-├── localization.py     # Strings dataclass and locale presets. Define new languages here.
+├── localization.py     # This bot's own messages and translations, layered on the core ones.
 ├── cogs/
 │   ├── help.py         # /help command. Lists all loaded commands grouped by cog.
 │   ├── template.py     # Template cog. Use this as a starting point for new features.
-│   ├── voice.py        # Voice-related commands such as join, leave, and skip.
-│   ├── media.py        # Audio queue with YouTube and Spotify support.
+│   ├── voice.py        # /join, /leave, and /skip. The bot leaves on its own when alone or idle.
+│   ├── media.py        # Per-server audio queue with YouTube, SoundCloud, and Spotify support.
 │   ├── admin.py        # /admin command group for per-guild configuration.
 │   ├── moderation.py   # /warn, /warnings, /clearwarning, /clearwarnings, /kick, /ban.
 │   └── events.py       # on_member_join: auto-role assignment and welcome message.
 ├── utils/
-│   ├── audio.py        # MediaAPIClient, URL helpers, and local file playback utility.
-│   ├── checks.py       # Custom command checks such as in_bot_channel().
-│   └── database.py     # Versioned SQLite schema, per-guild settings, and warnings.
+│   ├── audio.py        # MediaAPIClient, URL helpers, and audio sources for files, bytes, and streams.
+│   ├── checks.py       # Command checks such as in_bot_channel(), and guild_of().
+│   ├── database.py     # Versioned SQLite schema, per-guild settings, and warnings.
+│   ├── i18n.py         # Picks each user's language and translates command descriptions.
+│   ├── replies.py      # respond() and finish(), which never leave a command "thinking".
+│   ├── strings.py      # Every core message and command translation, in English and Finnish.
+│   └── voice.py        # Joins, plays in, and leaves voice channels for every cog.
 ├── assets/
 │   ├── audio/          # Local Git LFS-managed audio files.
 │   ├── images/         # Local Git LFS-managed image files.
@@ -196,9 +200,18 @@ discord-bot-template/
 
 ## Localization
 
-All user-facing messages are defined in `localization.py` as a `Strings` dataclass. Every field defaults to an empty string, which means the bot sends no messages unless a locale is configured.
+Replies follow the Discord language of the user who ran the command.
+A user whose language the bot does not speak gets the `LOCALE` language, and English after that.
+Messages without an interaction, such as the join welcome, use the server's preferred language.
 
-Setting `LOCALE=en` in `.env` activates the built-in English preset. To add a new language, create a `Strings(...)` instance with your translated strings and register it in the `LOCALES` dictionary at the bottom of the file. No changes to cog code are required.
+Command descriptions, option descriptions, and choice names are localized natively, so each user's Discord client shows them in their own language.
+Command and option names always stay English, so everyone types the same commands.
+
+The core cogs' messages and command translations live in `utils/strings.py`, in English and Finnish.
+A bot adds its own messages in `localization.py`, and it may override any core text to give itself a personality.
+To add a language, add its Discord locale code, such as `de` or `sv-SE`, to `BOT_TEXT` and `BOT_COMMAND_TEXT` in `localization.py`.
+
+The tests list every message or command text a language is missing, and they fail on command texts longer than Discord's 100-character limit.
 
 ## Related services
 
@@ -219,7 +232,7 @@ The template includes generic English-language cogs that can be modified or repl
 
 * Add new bot-specific cogs in the `cogs/` directory.
 * Connect a new discord-api-* service by setting `DISCORD_API_<NAME>_URL` and `DISCORD_API_<NAME>_SECRET`, then read it in a cog with `bot.config.service("<name>")`. No change to `config.py` is needed.
-* Add locale strings to `localization.py` and set `LOCALE` in your `.env` file.
+* Add the bot's own messages to `Strings` and `BOT_TEXT` in `localization.py`, and set the fallback `LOCALE` in your `.env` file.
 * Add audio files to `assets/audio/`, images to `assets/images/`, and videos to `assets/videos/`. Git LFS will manage these automatically based on file extension.
 * Send images and videos to Discord as `discord.File` attachments. `audio.py` and `play_file()` are audio-only and are not used for other asset types.
 * Replace or remove `cogs/template.py` once it is no longer needed.
