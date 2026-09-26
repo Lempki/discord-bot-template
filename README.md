@@ -113,10 +113,21 @@ Alternatively, you can run the bot as a Docker container.
 2. Build and start the container:
 
    ```
-   docker-compose up -d
+   docker compose up -d --build
    ```
 
-The container automatically restarts unless explicitly stopped.
+The container restarts automatically unless you stop it.
+The database lives on the `bot-data` volume, so settings and warnings survive rebuilds and `docker compose down`.
+Only `docker compose down -v` deletes it.
+
+To run the bot together with the discord-api-* services it uses, clone those repositories next to this one and use the stack file instead:
+
+```
+docker compose -f compose.stack.yml up -d --build
+```
+
+The stack builds each service from its sibling folder and connects them on a private network.
+It passes `DISCORD_API_MEDIA_SECRET` from this repository's `.env` to the media service, so the two always agree.
 
 ## Configuration
 
@@ -124,22 +135,28 @@ All configuration is read from environment variables or from a `.env` file locat
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `DISCORD_TOKEN` | Yes | — | The Discord bot token used to authenticate with the API. |
-| `FFMPEG_PATH` | No | system PATH | The absolute path to the FFmpeg binary. Leave this empty to use the system PATH. |
-| `COGS_TO_LOAD` | No | `template` | A comma-separated list of cog module names to load at startup. Set to `help,template,voice,media,admin,moderation,events` for the full feature set. |
-| `DATABASE_PATH` | No | `bot.db` | Path to the SQLite database file for per-guild settings and moderation data. |
+| `DISCORD_TOKEN` | Yes | None | The Discord bot token used to authenticate with the API. |
+| `COGS_TO_LOAD` | No | `help` | A comma-separated list of cog module names to load at startup. Set it to `help,template,voice,media,admin,moderation,events` for the full feature set. |
 | `LOCALE` | No | `silent` | The language used for bot messages. Built-in values are `en` and `silent`. When set to `silent`, the bot sends no messages. New locales can be added in `localization.py`. |
-| `DISCORD_API_MEDIA_URL` | No* | — | Base URL of the [discord-api-media](https://github.com/Lempki/discord-api-media) service. Required when the `media` cog is loaded. |
-| `DISCORD_API_MEDIA_SECRET` | No* | — | Bearer token for discord-api-media. Must match `DISCORD_API_SECRET` in that service. Required when the `media` cog is loaded. |
+| `DATABASE_PATH` | No | `data/bot.db` | The SQLite file for per-guild settings and moderation data. The directory is created if needed. The Docker image uses `/app/data/bot.db`. |
+| `FFMPEG_PATH` | No | `ffmpeg` | The FFmpeg executable. Leave it unset to use FFmpeg from the system PATH. |
+| `DEV_GUILD_ID` | No | None | A server ID for development. Commands sync to that server instantly instead of globally. |
+| `DISCORD_API_<NAME>_URL` | No | None | The base URL of a discord-api-* service, for example `DISCORD_API_MEDIA_URL`. |
+| `DISCORD_API_<NAME>_SECRET` | No | None | The bearer token of that service. It must match `DISCORD_API_SECRET` in the service's own configuration. |
 
-\* Required if the `media` cog is included in `COGS_TO_LOAD`.
+A cog that needs a service asks for it by name, and the bot refuses to load that cog if the URL or the secret is missing.
+The `media` cog needs `DISCORD_API_MEDIA_URL` and `DISCORD_API_MEDIA_SECRET`.
+
+Commands are synced to Discord once each time the bot starts.
+With `DEV_GUILD_ID` set, they appear in that server immediately.
+Commands synced globally earlier stay visible there as well, so a development server may show each command twice until the global ones are removed.
 
 ## Project structure
 
 ```
 discord-bot-template/
 ├── bot.py              # Entry point.
-├── config.py           # Environment variable reader. Extend this file to add new configuration keys.
+├── config.py           # Reads settings and discord-api-* service URLs from the environment.
 ├── localization.py     # Strings dataclass and locale presets. Define new languages here.
 ├── cogs/
 │   ├── help.py         # /help command. Lists all loaded commands grouped by cog.
@@ -152,8 +169,7 @@ discord-bot-template/
 ├── utils/
 │   ├── audio.py        # MediaAPIClient, URL helpers, and local file playback utility.
 │   ├── checks.py       # Custom command checks such as in_bot_channel().
-│   ├── database.py     # aiosqlite singleton, per-guild settings and warnings CRUD.
-│   └── logging.py      # Timestamped console logging helper.
+│   └── database.py     # Versioned SQLite schema, per-guild settings, and warnings.
 ├── assets/
 │   ├── audio/          # Local Git LFS-managed audio files.
 │   ├── images/         # Local Git LFS-managed image files.
@@ -167,7 +183,8 @@ discord-bot-template/
 ├── setup.bat           # Windows setup script.
 ├── setup.sh            # macOS and Linux setup script.
 ├── Dockerfile
-├── docker-compose.yml
+├── docker-compose.yml  # Runs the bot alone, with its database on a volume.
+├── compose.stack.yml   # Runs the bot together with the discord-api-* services it uses.
 └── .dockerignore
 ```
 
@@ -201,7 +218,7 @@ Use the GitHub template button to create a new repository based on this project.
 The template includes generic English-language cogs that can be modified or replaced. A typical customization workflow includes the following steps:
 
 * Add new bot-specific cogs in the `cogs/` directory.
-* Extend the `Config` class in `config.py` to support additional environment variables.
+* Connect a new discord-api-* service by setting `DISCORD_API_<NAME>_URL` and `DISCORD_API_<NAME>_SECRET`, then read it in a cog with `bot.config.service("<name>")`. No change to `config.py` is needed.
 * Add locale strings to `localization.py` and set `LOCALE` in your `.env` file.
 * Add audio files to `assets/audio/`, images to `assets/images/`, and videos to `assets/videos/`. Git LFS will manage these automatically based on file extension.
 * Send images and videos to Discord as `discord.File` attachments. `audio.py` and `play_file()` are audio-only and are not used for other asset types.
@@ -216,4 +233,4 @@ uvx --from git+https://github.com/Lempki/discord-dev-standards@v0.1.1 dev-standa
 ```
 
 Add `--apply` to copy the template's version over every drifted file, then review the result with `git diff` before committing.
-Keep bot-specific changes in files outside the manifest, such as `config.py`, `localization.py`, and the bot's own cogs.
+Keep bot-specific changes in files outside the manifest, such as `localization.py`, `compose.stack.yml`, and the bot's own cogs.
