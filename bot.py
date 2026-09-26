@@ -21,19 +21,12 @@ log = logging.getLogger("bot")
 
 
 class LogFormatter(logging.Formatter):
-    """Formats records as "[time] [LEVEL] logger: message" with aligned columns.
-
-    The level sits tightly in its brackets, and the padding goes after them.
-    """
+    """Formats records as "[time] [LEVEL] logger: message", separated by single spaces."""
 
     def __init__(self) -> None:
         super().__init__(
-            "[{asctime}] {level:<10} {name}: {message}", "%Y-%m-%d %H:%M:%S", "{"
+            "[{asctime}] [{levelname}] {name}: {message}", "%Y-%m-%d %H:%M:%S", "{"
         )
-
-    def format(self, record: logging.LogRecord) -> str:
-        record.level = f"[{record.levelname}]"
-        return super().format(record)
 
 
 class BotApp(commands.Bot):

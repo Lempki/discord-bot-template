@@ -35,7 +35,7 @@ def test_unknown_locale_setting_falls_back_to_english() -> None:
     assert bot.intents.members
 
 
-def test_log_format_keeps_brackets_tight_and_columns_aligned() -> None:
+def test_log_format_uses_single_spaces() -> None:
     formatter = LogFormatter()
     lines = [
         formatter.format(
@@ -43,5 +43,5 @@ def test_log_format_keeps_brackets_tight_and_columns_aligned() -> None:
         )
         for level in (logging.INFO, logging.CRITICAL)
     ]
-    assert "] [INFO]     bot: Hello." in lines[0]
-    assert "] [CRITICAL] bot: Hello." in lines[1]
+    assert lines[0].endswith("] [INFO] bot: Hello.")
+    assert lines[1].endswith("] [CRITICAL] bot: Hello.")
