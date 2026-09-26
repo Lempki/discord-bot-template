@@ -1,0 +1,72 @@
+# Files that bots created from this template keep identical to it.
+# Change these files here first, then carry the change over with dev-standards template-check --apply.
+# Bot-specific files such as config.py, localization.py, and the bot's own cogs are deliberately absent.
+
+[[file]]
+path = "bot.py"
+
+[[file]]
+path = "cogs/__init__.py"
+
+[[file]]
+path = "cogs/admin.py"
+
+[[file]]
+path = "cogs/events.py"
+
+[[file]]
+path = "cogs/help.py"
+
+[[file]]
+path = "cogs/media.py"
+
+[[file]]
+path = "cogs/moderation.py"
+
+[[file]]
+path = "cogs/template.py"
+
+[[file]]
+path = "cogs/voice.py"
+
+[[file]]
+path = "utils/__init__.py"
+
+[[file]]
+path = "utils/audio.py"
+
+[[file]]
+path = "utils/checks.py"
+
+[[file]]
+path = "utils/database.py"
+
+[[file]]
+path = "utils/logging.py"
+
+[[file]]
+path = "tests/test_smoke.py"
+
+[[file]]
+path = "Dockerfile"
+
+[[file]]
+path = ".dockerignore"
+
+[[file]]
+path = "docker-compose.yml"
+
+[[file]]
+path = "setup.sh"
+
+[[file]]
+path = "setup.bat"
+
+[[file]]
+path = ".pre-commit-config.yaml"
+
+[[file]]
+path = ".github/workflows/ci.yml"
+
+[[file]]
+path = ".github/dependabot.yml"

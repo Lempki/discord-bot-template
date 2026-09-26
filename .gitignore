@@ -1,10 +1,23 @@
+# >>> dev-standards managed block. Change it in discord-dev-standards.
 .env
-.claude/
-__pycache__/
-*.py[cod]
 .venv/
 venv/
+__pycache__/
+*.py[cod]
 *.egg-info/
+build/
 dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+.claude/settings.local.json
+# <<< dev-standards managed block.
+
+# Repository-specific entries.
+.claude/
 assets/audio/*
 !assets/audio/.gitkeep
