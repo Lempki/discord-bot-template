@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 import discord
 from discord import app_commands
@@ -11,7 +12,8 @@ from utils.audio import (
     is_youtube_playlist,
 )
 from utils.checks import in_bot_channel
-from utils.logging import log
+
+log = logging.getLogger(__name__)
 
 _FFMPEG_OPTIONS = {
     "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
@@ -23,21 +25,12 @@ class MediaCog(commands.Cog, name="Media"):
     """Audio queue supporting YouTube and Spotify. Concurrent queues per guild."""
 
     def __init__(self, bot: commands.Bot):
-        if (
-            not bot.config.DISCORD_API_MEDIA_URL
-            or not bot.config.DISCORD_API_MEDIA_SECRET
-        ):
-            raise RuntimeError(
-                "DISCORD_API_MEDIA_URL and DISCORD_API_MEDIA_SECRET must be set "
-                "to use the media cog."
-            )
+        # Raises ConfigError with the missing variable names, which stops the cog from loading.
+        service = bot.config.service("media")
         self.bot = bot
         self._queues: dict[int, asyncio.Queue] = {}
         self._playing: dict[int, bool] = {}
-        self._client = MediaAPIClient(
-            base_url=bot.config.DISCORD_API_MEDIA_URL,
-            secret=bot.config.DISCORD_API_MEDIA_SECRET,
-        )
+        self._client = MediaAPIClient(base_url=service.url, secret=service.secret)
 
     def _queue(self, guild_id: int) -> asyncio.Queue:
         if guild_id not in self._queues:
@@ -45,7 +38,7 @@ class MediaCog(commands.Cog, name="Media"):
         return self._queues[guild_id]
 
     def _ffmpeg(self) -> str:
-        return self.bot.config.FFMPEG_PATH or "ffmpeg"
+        return self.bot.config.ffmpeg_path
 
     async def _say(
         self, interaction: discord.Interaction, template: str, **kwargs
@@ -84,7 +77,7 @@ class MediaCog(commands.Cog, name="Media"):
             else:
                 urls = [url]
         except Exception as e:
-            log(f"Error resolving '{url}': {e}")
+            log.warning(f"Error resolving '{url}': {e}")
             if not await self._say(interaction, s.load_error, user=interaction.user):
                 await interaction.delete_original_response()
             return
@@ -101,7 +94,7 @@ class MediaCog(commands.Cog, name="Media"):
         if not sent:
             await interaction.delete_original_response()
 
-        log(f"Queued {len(urls)} item(s) from {interaction.user}")
+        log.info(f"Queued {len(urls)} item(s) from {interaction.user}")
 
         if not self._playing.get(guild_id):
             await self._process_queue(guild_id)
@@ -132,7 +125,7 @@ class MediaCog(commands.Cog, name="Media"):
             stream_url = info["stream_url"]
             title = info.get("title", url)
         except Exception as e:
-            log(f"Error loading '{url}': {e}")
+            log.warning(f"Error loading '{url}': {e}")
             await self._say(interaction, s.load_error, user=interaction.user)
             await self._process_queue(guild_id)
             return
@@ -147,7 +140,7 @@ class MediaCog(commands.Cog, name="Media"):
         self._playing[guild_id] = True
         vc.play(source)
         await self._say(interaction, s.now_playing, title=title, channel=vc.channel)
-        log(f"Playing '{title}'")
+        log.info(f"Playing '{title}'")
 
         while vc.is_playing() or vc.is_paused():
             await asyncio.sleep(1)

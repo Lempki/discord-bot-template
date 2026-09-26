@@ -1,6 +1,10 @@
+import logging
+
 import discord
 from discord import app_commands
 from discord.ext import commands
+
+log = logging.getLogger(__name__)
 
 
 class TemplateCog(commands.Cog, name="Template"):
@@ -24,9 +28,8 @@ class TemplateCog(commands.Cog, name="Template"):
 
     # --- Listeners ---
 
-    @commands.Cog.listener()
-    async def on_ready(self):
-        print(f"[{self.__class__.__name__}] loaded.")
+    async def cog_load(self) -> None:
+        log.info(f"{self.qualified_name} cog loaded.")
 
     # --- Per-cog error handler ---
 
