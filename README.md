@@ -12,11 +12,14 @@ This is a clean and modular Python Discord bot template built with [discord.py](
 * Git LFS is configured for managing large audio, image, and video assets.
 * A `Strings` dataclass defines all user-facing messages as named format strings. The bot is silent by default and messages are enabled by setting a locale in the environment.
 * The `/help` command displays all loaded commands grouped by cog in an ephemeral embed. The output reflects whichever cogs are active at runtime with no additional configuration.
-* Setup scripts for Windows and Unix are included. Running `setup.bat` or `setup.sh` handles virtual environment creation, dependency installation, and initial `.env` configuration in a single step.
+* Dependencies are managed with [uv](https://docs.astral.sh/uv/) and pinned in `uv.lock`, so every machine and container installs the same versions.
+* Setup scripts for Windows and Unix are included. Running `setup.bat` or `setup.sh` installs the dependencies and creates the initial `.env` file in a single step.
+* Tests, linting, and formatting run in CI on every push through the shared [discord-dev-standards](https://github.com/Lempki/discord-dev-standards) workflow.
 
 ## Prerequisites
 
-* You must have Python version 3.10 or newer installed on your system.
+* You must have Python 3.12 installed on your system.
+* You must install [uv](https://docs.astral.sh/uv/). On Windows, run `winget install --id astral-sh.uv`. On macOS or Linux, follow the uv installation guide.
 * You must install [FFmpeg](https://ffmpeg.org/) and ensure that it is available in your system PATH. You may alternatively define a custom path using the `FFMPEG_PATH` environment variable.
 
   * On Windows, install FFmpeg with the following command:
@@ -32,7 +35,7 @@ This is a clean and modular Python Discord bot template built with [discord.py](
     ```
 
   * On Debian or Ubuntu, install FFmpeg with the following command:
-  
+
     ```
     sudo apt install ffmpeg
     ```
@@ -83,20 +86,24 @@ chmod +x setup.sh
 ./setup.sh
 ```
 
-The script creates a `.venv` virtual environment if one does not already exist. It installs all dependencies and copies `.env.template` to `.env` on the first run. You must edit `.env` and set your `DISCORD_TOKEN` before starting the bot.
+The script runs `uv sync`, which creates the `.venv` virtual environment if needed and installs the locked dependencies. It copies `.env.template` to `.env` on the first run. You must edit `.env` and set your `DISCORD_TOKEN` before starting the bot.
 
 If you prefer to perform the setup manually, follow these steps:
 
 ```bash
 git clone https://github.com/Lempki/discord-bot-template.git my-bot
 cd my-bot
-python -m venv .venv
-source .venv/bin/activate  # On Windows use: .venv/Scripts/activate
-pip install -r requirements.txt
+uv sync
 cp .env.template .env
 # Edit .env and set DISCORD_TOKEN and other values as needed.
-python bot.py
+uv run python bot.py
 ```
+
+### Development
+
+Run the tests with `uv run pytest`.
+Run every lint and format check with `uvx pre-commit run --all-files`, or install the hooks once with `uvx pre-commit install` so they run on each commit.
+The coding, prose, and commit conventions are documented in [discord-dev-standards](https://github.com/Lempki/discord-dev-standards).
 
 ### Docker
 
@@ -151,13 +158,17 @@ discord-bot-template/
 │   ├── audio/          # Local Git LFS-managed audio files.
 │   ├── images/         # Local Git LFS-managed image files.
 │   └── videos/         # Local Git LFS-managed video files.
+├── tests/              # Pytest suite. Runs in CI on every push.
 ├── .env.template       # Template for environment variables.
+├── .template-manifest.toml  # Core files that derived bots keep identical to this template.
+├── pyproject.toml      # Project metadata and dependencies.
+├── uv.lock             # Locked dependency versions.
+├── ruff.toml           # Lint and format settings on top of the shared baseline.
 ├── setup.bat           # Windows setup script.
 ├── setup.sh            # macOS and Linux setup script.
 ├── Dockerfile
 ├── docker-compose.yml
-├── .dockerignore
-└── requirements.txt
+└── .dockerignore
 ```
 
 ## Adding a new cog
@@ -196,10 +207,13 @@ The template includes generic English-language cogs that can be modified or repl
 * Send images and videos to Discord as `discord.File` attachments. `audio.py` and `play_file()` are audio-only and are not used for other asset types.
 * Replace or remove `cogs/template.py` once it is no longer needed.
 
-A forked repository does not maintain a git link to this template. To pull in future updates selectively, add this repository as a named remote and cherry-pick the commits you want.
+A forked repository does not maintain a git link to this template.
+Instead, `.template-manifest.toml` lists the core files that every bot keeps identical to the template.
+With both repositories cloned side by side, run this from the bot's directory to see which core files have drifted:
 
 ```bash
-git remote add template https://github.com/Lempki/discord-bot-template.git
-git fetch template
-git cherry-pick <commit-hash>
+uvx --from git+https://github.com/Lempki/discord-dev-standards@v0.1.1 dev-standards template-check --template ../discord-bot-template --diff
 ```
+
+Add `--apply` to copy the template's version over every drifted file, then review the result with `git diff` before committing.
+Keep bot-specific changes in files outside the manifest, such as `config.py`, `localization.py`, and the bot's own cogs.
