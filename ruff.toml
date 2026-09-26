@@ -6,3 +6,8 @@ extend-ignore = ["D", "ANN"]
 
 [lint.isort]
 known-first-party = ["bot", "cogs", "config", "localization", "utils"]
+
+[lint.per-file-ignores]
+# Translation tables pair an English text with its translation on one line, which often exceeds the limit.
+"utils/strings.py" = ["E501"]
+"localization.py" = ["E501"]
