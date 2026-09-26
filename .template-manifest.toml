@@ -45,6 +45,18 @@ path = "utils/checks.py"
 path = "utils/database.py"
 
 [[file]]
+path = "utils/i18n.py"
+
+[[file]]
+path = "utils/replies.py"
+
+[[file]]
+path = "utils/strings.py"
+
+[[file]]
+path = "utils/voice.py"
+
+[[file]]
 path = "tests/__init__.py"
 
 [[file]]
@@ -64,6 +76,27 @@ path = "tests/test_checks.py"
 
 [[file]]
 path = "tests/test_smoke.py"
+
+[[file]]
+path = "tests/test_admin.py"
+
+[[file]]
+path = "tests/test_help.py"
+
+[[file]]
+path = "tests/test_i18n.py"
+
+[[file]]
+path = "tests/test_media.py"
+
+[[file]]
+path = "tests/test_moderation.py"
+
+[[file]]
+path = "tests/test_replies.py"
+
+[[file]]
+path = "tests/test_voice.py"
 
 [[file]]
 path = "Dockerfile"
