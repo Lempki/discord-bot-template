@@ -1,9 +1,12 @@
 # Files that bots created from this template keep identical to it.
 # Change these files here first, then carry the change over with dev-standards template-check --apply.
-# Bot-specific files such as config.py, localization.py, and the bot's own cogs are deliberately absent.
+# Bot-specific files such as localization.py, compose.stack.yml, and the bot's own cogs are deliberately absent.
 
 [[file]]
 path = "bot.py"
+
+[[file]]
+path = "config.py"
 
 [[file]]
 path = "cogs/__init__.py"
@@ -42,7 +45,22 @@ path = "utils/checks.py"
 path = "utils/database.py"
 
 [[file]]
-path = "utils/logging.py"
+path = "tests/__init__.py"
+
+[[file]]
+path = "tests/conftest.py"
+
+[[file]]
+path = "tests/test_bot.py"
+
+[[file]]
+path = "tests/test_config.py"
+
+[[file]]
+path = "tests/test_database.py"
+
+[[file]]
+path = "tests/test_checks.py"
 
 [[file]]
 path = "tests/test_smoke.py"
