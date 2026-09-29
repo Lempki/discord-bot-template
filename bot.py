@@ -40,6 +40,8 @@ class BotApp(commands.Bot):
     def __init__(self, config: Config) -> None:
         intents = discord.Intents.default()
         intents.members = True
+        # Not privileged. It delivers AutoMod executions for the warning escalation.
+        intents.auto_moderation_execution = True
         super().__init__(
             command_prefix=commands.when_mentioned,
             intents=intents,

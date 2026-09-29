@@ -51,23 +51,51 @@ class CoreStrings:
     section_voice: str = ""
 
     # Admin. Placeholders are {channel}, {role}, {count}, {action}, {autorole}, and {threshold}.
+    # admin_timeout_set uses {minutes}.
+    # admin_status also uses {timeout}, {escalation}, {alert}, {keywords}, and {presets}.
     admin_channel_set: str = ""
     admin_channel_cleared: str = ""
     admin_autorole_set: str = ""
     admin_autorole_cleared: str = ""
     admin_threshold_set: str = ""
     admin_action_set: str = ""
+    admin_timeout_set: str = ""
     admin_status: str = ""
     status_any_channel: str = ""
     status_none: str = ""
+    status_unavailable: str = ""
     action_kick: str = ""
     action_ban: str = ""
+    action_timeout: str = ""
 
-    # Moderation. The placeholders are {user}, {count}, {threshold}, and {error}.
+    # AutoMod. Placeholders are {keywords}, {length}, {limit}, {count}, {preset}, and {channel}.
+    # automod_warned uses {user}, {count}, and {threshold}.
+    automod_keywords_invalid: str = ""
+    automod_keywords_limit: str = ""
+    automod_keywords_saved: str = ""
+    automod_keywords_none: str = ""
+    automod_keywords_header: str = ""
+    automod_preset_on: str = ""
+    automod_preset_off: str = ""
+    automod_alert_set: str = ""
+    automod_alert_cleared: str = ""
+    automod_escalation_warn: str = ""
+    automod_escalation_none: str = ""
+    automod_no_permission: str = ""
+    automod_failed: str = ""
+    automod_warned: str = ""
+    escalation_warn: str = ""
+    escalation_none: str = ""
+    preset_profanity: str = ""
+    preset_sexual_content: str = ""
+    preset_slurs: str = ""
+
+    # Moderation. The placeholders are {user}, {count}, {threshold}, {minutes}, and {error}.
     # Warning lists also use {id}, {reason}, and {date}.
     warn_issued: str = ""
     warn_threshold_kick: str = ""
     warn_threshold_ban: str = ""
+    warn_threshold_timeout: str = ""
     warnings_list_header: str = ""
     warnings_list_entry: str = ""
     warnings_no_reason: str = ""
@@ -79,6 +107,7 @@ class CoreStrings:
     kick_failed: str = ""
     ban_success: str = ""
     ban_failed: str = ""
+    timeout_failed: str = ""
     mod_target_self: str = ""
     mod_target_protected: str = ""
     mod_target_higher: str = ""
@@ -122,17 +151,52 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "admin_autorole_cleared": "Auto-role cleared.",
         "admin_threshold_set": "Warning threshold set to {count}.",
         "admin_action_set": "Warning action set to **{action}**.",
+        "admin_timeout_set": "Timeout length set to {minutes} minutes.",
         "admin_status": (
             "**Bot settings**\nChannel: {channel}\nAuto-role: {autorole}\n"
-            "Warning threshold: {threshold}\nWarning action: {action}"
+            "Warning threshold: {threshold}\nWarning action: {action}\n"
+            "Timeout length: {timeout} minutes\nAutoMod escalation: {escalation}\n"
+            "AutoMod alerts: {alert}\nAutoMod keywords: {keywords}\n"
+            "AutoMod presets: {presets}"
         ),
         "status_any_channel": "any channel",
         "status_none": "none",
+        "status_unavailable": "unavailable",
         "action_kick": "kick",
         "action_ban": "ban",
+        "action_timeout": "timeout",
+        "automod_keywords_invalid": (
+            "Give keywords separated by commas, each at most {length} characters long. "
+            "Too long: {keywords}"
+        ),
+        "automod_keywords_limit": "The keyword filter can hold at most {limit} keywords.",
+        "automod_keywords_saved": "The keyword filter now has {count} keyword(s).",
+        "automod_keywords_none": "The keyword filter is empty.",
+        "automod_keywords_header": "**Keyword filter** ({count} in total)",
+        "automod_preset_on": "The {preset} filter is now on.",
+        "automod_preset_off": "The {preset} filter is now off.",
+        "automod_alert_set": "AutoMod alerts now go to {channel}.",
+        "automod_alert_cleared": "AutoMod alerts are off.",
+        "automod_escalation_warn": "Every message that AutoMod blocks now counts as a warning.",
+        "automod_escalation_none": "Messages that AutoMod blocks no longer count as warnings.",
+        "automod_no_permission": "I need the Manage Server permission to manage AutoMod rules.",
+        "automod_failed": "Discord refused the AutoMod change. Reason: {error}",
+        "automod_warned": (
+            "🛡️ AutoMod blocked a message from **{user}**, "
+            "who now has {count}/{threshold} warnings."
+        ),
+        "escalation_warn": "a warning",
+        "escalation_none": "nothing more",
+        "preset_profanity": "profanity",
+        "preset_sexual_content": "sexual content",
+        "preset_slurs": "slurs",
         "warn_issued": "⚠️ **{user}** was warned ({count}/{threshold}).",
         "warn_threshold_kick": "🚨 The warning limit was reached, so **{user}** will be kicked.",
         "warn_threshold_ban": "🚨 The warning limit was reached, so **{user}** will be banned.",
+        "warn_threshold_timeout": (
+            "🚨 The warning limit was reached, so **{user}** will be timed out "
+            "for {minutes} minutes."
+        ),
         "warnings_list_header": "**Warnings for {user}** ({count} in total)",
         "warnings_list_entry": "`#{id}` {reason} _({date})_",
         "warnings_no_reason": "No reason given.",
@@ -144,6 +208,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "kick_failed": "Could not kick **{user}**. Reason: {error}",
         "ban_success": "**{user}** was banned.",
         "ban_failed": "Could not ban **{user}**. Reason: {error}",
+        "timeout_failed": "Could not time out **{user}**. Reason: {error}",
         "mod_target_self": "You cannot moderate yourself.",
         "mod_target_protected": "**{user}** cannot be moderated.",
         "mod_target_higher": "**{user}** has a role equal to or higher than yours.",
@@ -183,17 +248,53 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "admin_autorole_cleared": "Automaattinen rooli poistettiin.",
         "admin_threshold_set": "Varoitusrajaksi asetettiin {count}.",
         "admin_action_set": "Varoitusrajan seuraukseksi asetettiin **{action}**.",
+        "admin_timeout_set": "Aikalisän pituudeksi asetettiin {minutes} minuuttia.",
         "admin_status": (
             "**Botin asetukset**\nKanava: {channel}\nAutomaattinen rooli: {autorole}\n"
-            "Varoitusraja: {threshold}\nSeuraus: {action}"
+            "Varoitusraja: {threshold}\nSeuraus: {action}\n"
+            "Aikalisän pituus: {timeout} minuuttia\nAutoMod-seuraus: {escalation}\n"
+            "AutoMod-hälytykset: {alert}\nAutoMod-avainsanat: {keywords}\n"
+            "AutoMod-esiasetukset: {presets}"
         ),
         "status_any_channel": "mikä tahansa kanava",
         "status_none": "ei asetettu",
+        "status_unavailable": "ei saatavilla",
         "action_kick": "potku",
         "action_ban": "porttikielto",
+        "action_timeout": "aikalisä",
+        "automod_keywords_invalid": (
+            "Anna avainsanat pilkuilla eroteltuina. "
+            "Kukin saa olla enintään {length} merkkiä pitkä. Liian pitkät: {keywords}"
+        ),
+        "automod_keywords_limit": "Avainsanasuodattimessa voi olla enintään {limit} avainsanaa.",
+        "automod_keywords_saved": "Avainsanasuodattimessa on nyt {count} avainsana(a).",
+        "automod_keywords_none": "Avainsanasuodatin on tyhjä.",
+        "automod_keywords_header": "**Avainsanasuodatin** ({count} yhteensä)",
+        "automod_preset_on": "Suodatus luokalle {preset} on nyt käytössä.",
+        "automod_preset_off": "Suodatus luokalle {preset} on nyt pois käytöstä.",
+        "automod_alert_set": "AutoMod-hälytykset ohjataan nyt kanavalle {channel}.",
+        "automod_alert_cleared": "AutoMod-hälytykset on poistettu käytöstä.",
+        "automod_escalation_warn": "Jokainen AutoModin estämä viesti lasketaan nyt varoitukseksi.",
+        "automod_escalation_none": "AutoModin estämiä viestejä ei enää lasketa varoituksiksi.",
+        "automod_no_permission": (
+            "Tarvitsen Hallitse palvelinta -oikeuden AutoMod-sääntöjen hallintaan."
+        ),
+        "automod_failed": "Discord hylkäsi AutoMod-muutoksen. Syy: {error}",
+        "automod_warned": (
+            "🛡️ AutoMod esti käyttäjän **{user}** viestin. "
+            "Hänellä on nyt {count}/{threshold} varoitusta."
+        ),
+        "escalation_warn": "varoitus",
+        "escalation_none": "ei muuta",
+        "preset_profanity": "kiroilu",
+        "preset_sexual_content": "seksuaalinen sisältö",
+        "preset_slurs": "herjaukset",
         "warn_issued": "⚠️ **{user}** sai varoituksen ({count}/{threshold}).",
         "warn_threshold_kick": "🚨 Varoitusraja täyttyi, joten **{user}** potkitaan palvelimelta.",
         "warn_threshold_ban": "🚨 Varoitusraja täyttyi, joten **{user}** saa porttikiellon.",
+        "warn_threshold_timeout": (
+            "🚨 Varoitusraja täyttyi, joten **{user}** saa {minutes} minuutin aikalisän."
+        ),
         "warnings_list_header": "**Käyttäjän {user} varoitukset** ({count} yhteensä)",
         "warnings_list_entry": "`#{id}` {reason} _({date})_",
         "warnings_no_reason": "Syytä ei annettu.",
@@ -205,6 +306,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "kick_failed": "Käyttäjän **{user}** potkaiseminen epäonnistui. Syy: {error}",
         "ban_success": "**{user}** sai porttikiellon.",
         "ban_failed": "Porttikiellon antaminen käyttäjälle **{user}** epäonnistui. Syy: {error}",
+        "timeout_failed": "Aikalisän antaminen käyttäjälle **{user}** epäonnistui. Syy: {error}",
         "mod_target_self": "Et voi moderoida itseäsi.",
         "mod_target_protected": "Käyttäjää **{user}** ei voi moderoida.",
         "mod_target_higher": (
@@ -233,13 +335,34 @@ CORE_COMMAND_TEXT: dict[str, dict[str, str]] = {
         "What happens at the warning limit.": "Mitä varoitusrajalla tapahtuu.",
         "Kick": "Potku",
         "Ban": "Porttikielto",
+        "Timeout": "Aikalisä",
+        "Set how long the timeout warning action lasts.": "Aseta, kuinka kauan aikalisä kestää.",
+        "How long the timeout lasts, from 1 minute to 28 days (40320 minutes).": "Aikalisän pituus 1 minuutista 28 päivään (40320 minuuttia).",
+        "Manage the Discord AutoMod rules that this bot owns.": "Hallitse botin omistamia Discordin AutoMod-sääntöjä.",
+        "Add keywords to the bot's AutoMod keyword filter.": "Lisää avainsanoja botin AutoMod-avainsanasuodattimeen.",
+        "Words or phrases separated by commas. Use * as a wildcard, as in spam*.": "Sanat tai fraasit pilkuilla eroteltuina. Käytä *-merkkiä jokerina, kuten spam*.",
+        "Remove keywords from the bot's AutoMod keyword filter.": "Poista avainsanoja botin AutoMod-avainsanasuodattimesta.",
+        "The keywords to remove, separated by commas.": "Poistettavat avainsanat pilkuilla eroteltuina.",
+        "List the keywords in the bot's AutoMod keyword filter.": "Näytä botin AutoMod-avainsanasuodattimen avainsanat.",
+        "Turn one of Discord's preset word filters on or off.": "Ota Discordin valmis sanasuodatin käyttöön tai pois käytöstä.",
+        "The kind of language that Discord's own word list filters.": "Kielenkäytön laji, jota Discordin oma sanalista suodattaa.",
+        "Whether to filter this category.": "Suodatetaanko tämä luokka.",
+        "Profanity": "Kiroilu",
+        "Sexual content": "Seksuaalinen sisältö",
+        "Slurs": "Herjaukset",
+        "Set or clear the channel for AutoMod alerts and warning reports.": "Aseta tai poista AutoMod-hälytysten ja varoitusilmoitusten kanava.",
+        "The channel for alerts. Leave it empty to turn alerts off.": "Hälytysten kanava. Jätä tyhjäksi poistaaksesi hälytykset käytöstä.",
+        "Choose whether messages that AutoMod blocks count as warnings.": "Valitse, lasketaanko AutoModin estämät viestit varoituksiksi.",
+        "What happens to a member whose message AutoMod blocks.": "Mitä tapahtuu jäsenelle, jonka viestin AutoMod estää.",
+        "Nothing more": "Ei muuta",
+        "Add a warning": "Lisää varoitus",
         "Show this server's bot settings.": "Näytä tämän palvelimen botin asetukset.",
         "Show the commands you can use here.": "Näytä komennot, joita voit käyttää täällä.",
         "Play a link or search result, or add it to the queue.": "Soita linkki tai hakutulos, tai lisää se jonoon.",
         "A YouTube, SoundCloud, or Spotify link, or text to search for.": "YouTube-, SoundCloud- tai Spotify-linkki tai hakuteksti.",
         "Stop playing and clear the queue.": "Pysäytä toisto ja tyhjennä jono.",
         "Pause or resume the audio that is playing now.": "Tauota tai jatka nyt soivaa ääntä.",
-        "Warn a member. Reaching the warning limit kicks or bans them.": "Varoita jäsentä. Varoitusrajan täyttyessä jäsen potkitaan tai saa porttikiellon.",
+        "Warn a member. At the warning limit they are kicked, banned, or timed out.": "Varoita jäsentä. Varoitusrajalla jäsen potkitaan, saa porttikiellon tai aikalisän.",
         "The member to warn.": "Varoitettava jäsen.",
         "Why the member is warned.": "Varoituksen syy.",
         "List a member's warnings in this server.": "Näytä jäsenen varoitukset tällä palvelimella.",

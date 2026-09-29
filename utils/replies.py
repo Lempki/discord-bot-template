@@ -6,13 +6,17 @@ The thinking message then has to be removed instead.
 """
 
 import contextlib
+from collections.abc import Iterable
 from typing import Any
 
 import discord
 
-__all__ = ["finish", "mark_replied", "respond"]
+__all__ = ["MESSAGE_LIMIT", "chunk_lines", "finish", "mark_replied", "respond"]
 
 _REPLIED = "replied"
+
+# Discord rejects messages longer than 2000 characters.
+MESSAGE_LIMIT = 2000
 
 
 async def respond(
@@ -65,3 +69,18 @@ async def finish(interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
     with contextlib.suppress(discord.HTTPException):
         await interaction.delete_original_response()
+
+
+def chunk_lines(lines: Iterable[str], limit: int = MESSAGE_LIMIT) -> list[str]:
+    """Joins lines into as few messages as possible, each within the character limit."""
+    messages: list[str] = []
+    current = ""
+    for line in lines:
+        candidate = f"{current}\n{line}" if current else line
+        if len(candidate) > limit and current:
+            messages.append(current)
+            candidate = line
+        current = candidate[:limit]
+    if current:
+        messages.append(current)
+    return messages

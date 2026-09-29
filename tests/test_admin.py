@@ -85,20 +85,33 @@ async def test_set_action_replies_with_localized_action_name(
     ]
 
 
+def status_text(**overrides: object) -> str:
+    """The English status reply for default settings, with the given values replaced.
+
+    The test bot never logs in, so it cannot read AutoMod rules and reports them unavailable.
+    """
+    values: dict[str, object] = {
+        "channel": EN.status_any_channel,
+        "autorole": EN.status_none,
+        "threshold": 3,
+        "action": EN.action_kick,
+        "timeout": 60,
+        "escalation": EN.escalation_none,
+        "alert": EN.status_none,
+        "keywords": EN.status_unavailable,
+        "presets": EN.status_unavailable,
+    }
+    values.update(overrides)
+    return EN.admin_status.format(**values)
+
+
 async def test_status_shows_defaults(db: None, bot: BotApp) -> None:
     cog = AdminCog(bot)
     interaction = make_interaction()
 
     await cog.status.callback(cog, interaction)
 
-    assert sent_messages(interaction) == [
-        EN.admin_status.format(
-            channel=EN.status_any_channel,
-            autorole=EN.status_none,
-            threshold=3,
-            action=EN.action_kick,
-        )
-    ]
+    assert sent_messages(interaction) == [status_text()]
 
 
 async def test_status_shows_configured_values(db: None, bot: BotApp) -> None:
@@ -107,7 +120,10 @@ async def test_status_shows_configured_values(db: None, bot: BotApp) -> None:
         bot_channel_id=CHANNEL_ID,
         auto_role_id=ROLE_ID,
         warn_threshold=5,
-        warn_action="ban",
+        warn_action="timeout",
+        warn_timeout_minutes=90,
+        automod_escalation="warn",
+        automod_alert_channel_id=CHANNEL_ID,
     )
     cog = AdminCog(bot)
     interaction = make_interaction()
@@ -115,11 +131,14 @@ async def test_status_shows_configured_values(db: None, bot: BotApp) -> None:
     await cog.status.callback(cog, interaction)
 
     assert sent_messages(interaction) == [
-        EN.admin_status.format(
+        status_text(
             channel=f"<#{CHANNEL_ID}>",
             autorole=f"<@&{ROLE_ID}>",
             threshold=5,
-            action=EN.action_ban,
+            action=EN.action_timeout,
+            timeout=90,
+            escalation=EN.escalation_warn,
+            alert=f"<#{CHANNEL_ID}>",
         )
     ]
 
@@ -131,13 +150,17 @@ async def test_status_shows_legacy_role_name(db: None, bot: BotApp) -> None:
 
     await cog.status.callback(cog, interaction)
 
-    [message] = sent_messages(interaction)
-    assert message == EN.admin_status.format(
-        channel=EN.status_any_channel,
-        autorole="Member",
-        threshold=3,
-        action=EN.action_kick,
-    )
+    assert sent_messages(interaction) == [status_text(autorole="Member")]
+
+
+async def test_set_timeout_stores_minutes(db: None, bot: BotApp) -> None:
+    cog = AdminCog(bot)
+    interaction = make_interaction()
+
+    await cog.set_timeout.callback(cog, interaction, minutes=45)
+
+    assert (await database.get_settings(GUILD_ID)).warn_timeout_minutes == 45
+    assert sent_messages(interaction) == [EN.admin_timeout_set.format(minutes=45)]
 
 
 async def test_admin_replies_even_when_bot_is_silent(db: None) -> None:

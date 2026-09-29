@@ -51,6 +51,7 @@ async def _visible_lines(bot: BotApp, permissions: discord.Permissions) -> list[
 async def test_admin_sees_group_subcommands(bot: BotApp) -> None:
     lines = await _visible_lines(bot, discord.Permissions.all())
     assert any(line.startswith("`/admin channel`") for line in lines)
+    assert any(line.startswith("`/admin automod add`") for line in lines)
     assert any(line.startswith("`/ban`") for line in lines)
 
 

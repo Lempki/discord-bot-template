@@ -7,10 +7,11 @@ import discord
 import pytest
 
 from bot import BotApp
-from cogs.moderation import MESSAGE_LIMIT, ModerationCog, blocked_reason, chunk_lines
+from cogs.moderation import ModerationCog, blocked_reason
 from localization import LOCALES
 from tests.conftest import GUILD_ID, make_interaction, sent_messages
 from utils import database
+from utils.replies import MESSAGE_LIMIT, chunk_lines
 
 USER_ID = 333333333333333333
 MOD_ID = 555555555555555555
@@ -26,6 +27,7 @@ def member(member_id: int, top_role: int, name: str) -> MagicMock:
     fake.display_name = name
     fake.kick = AsyncMock()
     fake.ban = AsyncMock()
+    fake.timeout = AsyncMock()
     return fake
 
 
@@ -107,20 +109,39 @@ async def test_warn_records_warning(
     scene.target.kick.assert_not_awaited()
 
 
-@pytest.mark.parametrize("action", ["kick", "ban"])
+@pytest.mark.parametrize("action", ["kick", "ban", "timeout"])
 async def test_warn_at_threshold_applies_action(
     db: None, bot: BotApp, scene: SimpleNamespace, action: str
 ) -> None:
-    await database.upsert_settings(GUILD_ID, warn_threshold=1, warn_action=action)
+    await database.upsert_settings(
+        GUILD_ID, warn_threshold=1, warn_action=action, warn_timeout_minutes=15
+    )
     cog = ModerationCog(bot)
 
     await cog.warn.callback(cog, scene.interaction, member=scene.target, reason=None)
 
     getattr(scene.target, action).assert_awaited_once()
-    announcement = {"kick": EN.warn_threshold_kick, "ban": EN.warn_threshold_ban}[
-        action
-    ]
-    assert announcement.format(user="TestUser") in sent_messages(scene.interaction)
+    announcement = {
+        "kick": EN.warn_threshold_kick,
+        "ban": EN.warn_threshold_ban,
+        "timeout": EN.warn_threshold_timeout,
+    }[action]
+    expected = announcement.format(user="TestUser", minutes=15)
+    assert expected in sent_messages(scene.interaction)
+
+
+async def test_warn_timeout_lasts_the_configured_minutes(
+    db: None, bot: BotApp, scene: SimpleNamespace
+) -> None:
+    await database.upsert_settings(
+        GUILD_ID, warn_threshold=1, warn_action="timeout", warn_timeout_minutes=15
+    )
+    cog = ModerationCog(bot)
+
+    await cog.warn.callback(cog, scene.interaction, member=scene.target, reason=None)
+
+    [duration] = scene.target.timeout.call_args.args
+    assert duration.total_seconds() == 15 * 60
 
 
 async def test_warn_reports_failed_action(
