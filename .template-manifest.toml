@@ -39,6 +39,9 @@ path = "utils/__init__.py"
 path = "utils/audio.py"
 
 [[file]]
+path = "utils/automod.py"
+
+[[file]]
 path = "utils/checks.py"
 
 [[file]]
@@ -46,6 +49,9 @@ path = "utils/database.py"
 
 [[file]]
 path = "utils/i18n.py"
+
+[[file]]
+path = "utils/moderation.py"
 
 [[file]]
 path = "utils/replies.py"
@@ -79,6 +85,9 @@ path = "tests/test_smoke.py"
 
 [[file]]
 path = "tests/test_admin.py"
+
+[[file]]
+path = "tests/test_automod.py"
 
 [[file]]
 path = "tests/test_help.py"
