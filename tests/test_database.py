@@ -183,6 +183,35 @@ async def test_phase1_database_is_upgraded_in_place(tmp_path: Path) -> None:
     assert _user_version(path) == len(database._MIGRATIONS)
 
 
+async def test_version_1_database_gains_automod_settings(tmp_path: Path) -> None:
+    path = tmp_path / "bot.db"
+    await database.init(path)
+    await database.upsert_settings(GUILD, warn_threshold=4, warn_action="ban")
+    await database.close()
+    with sqlite3.connect(path) as conn:
+        # Rebuild the version 1 table, which had no timeout or AutoMod columns.
+        conn.executescript(
+            """
+            CREATE TABLE old AS SELECT guild_id, bot_channel_id, auto_role_id,
+                auto_role_name, warn_threshold, warn_action FROM guild_settings;
+            DROP TABLE guild_settings;
+            ALTER TABLE old RENAME TO guild_settings;
+            PRAGMA user_version = 1;
+            """
+        )
+
+    await database.init(path)
+    try:
+        settings = await database.get_settings(GUILD)
+    finally:
+        await database.close()
+
+    assert settings == GuildSettings(
+        guild_id=GUILD, warn_threshold=4, warn_action="ban"
+    )
+    assert _user_version(path) == len(database._MIGRATIONS)
+
+
 async def test_reopening_an_upgraded_database_changes_nothing(tmp_path: Path) -> None:
     path = tmp_path / "bot.db"
     _create_phase1_database(path)

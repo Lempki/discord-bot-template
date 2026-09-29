@@ -39,6 +39,9 @@ _SETTINGS_COLUMNS = frozenset(
         "auto_role_name",
         "warn_threshold",
         "warn_action",
+        "warn_timeout_minutes",
+        "automod_escalation",
+        "automod_alert_channel_id",
     }
 )
 
@@ -54,7 +57,11 @@ class GuildSettings:
         auto_role_name: A role name from before roles were stored by ID.
             It is resolved to auto_role_id on the next member join.
         warn_threshold: How many warnings trigger warn_action.
-        warn_action: "kick" or "ban".
+        warn_action: "kick", "ban", or "timeout".
+        warn_timeout_minutes: How long the timeout warn action lasts, in minutes.
+        automod_escalation: "warn" turns every message AutoMod blocks into a warning.
+            "none" leaves blocked messages to AutoMod alone.
+        automod_alert_channel_id: The channel for AutoMod alerts and escalation reports, or None.
     """
 
     guild_id: int
@@ -63,6 +70,9 @@ class GuildSettings:
     auto_role_name: str | None = None
     warn_threshold: int = 3
     warn_action: str = "kick"
+    warn_timeout_minutes: int = 60
+    automod_escalation: str = "none"
+    automod_alert_channel_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -159,8 +169,26 @@ async def _migrate_to_1(db: aiosqlite.Connection) -> None:
         await db.execute("DROP TABLE warnings_v0")
 
 
+async def _migrate_to_2(db: aiosqlite.Connection) -> None:
+    """Adds the timeout warn action and the AutoMod settings."""
+    await db.execute(
+        "ALTER TABLE guild_settings "
+        "ADD COLUMN warn_timeout_minutes INTEGER NOT NULL DEFAULT 60"
+    )
+    await db.execute(
+        "ALTER TABLE guild_settings "
+        "ADD COLUMN automod_escalation TEXT NOT NULL DEFAULT 'none'"
+    )
+    await db.execute(
+        "ALTER TABLE guild_settings ADD COLUMN automod_alert_channel_id INTEGER"
+    )
+
+
 # Each entry upgrades the schema by one version. Append new migrations and never edit old ones.
-_MIGRATIONS: list[Callable[[aiosqlite.Connection], Awaitable[None]]] = [_migrate_to_1]
+_MIGRATIONS: list[Callable[[aiosqlite.Connection], Awaitable[None]]] = [
+    _migrate_to_1,
+    _migrate_to_2,
+]
 
 
 async def _migrate(db: aiosqlite.Connection) -> None:
