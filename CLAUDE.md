@@ -16,6 +16,8 @@ The shared conventions live in [discord-dev-standards](https://github.com/Lempki
 * `cogs/` holds one feature group per module.
 * `utils/` holds shared helpers such as the database module and command checks.
 * `utils/strings.py` holds the core cogs' messages in every language, and `localization.py` adds this bot's own.
+* `utils/moderation.py` holds `issue_warning()`, which `/warn` and the AutoMod escalation share.
+* `utils/automod.py` manages the AutoMod rules the bot owns, which it finds by `creator_id`. Discord does the filtering, so the bot needs no Message Content intent.
 
 ## Template rules
 

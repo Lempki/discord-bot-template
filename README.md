@@ -11,6 +11,7 @@ This is a clean and modular Python Discord bot template built with [discord.py](
 * Local development is supported through a `.env` file using `python-dotenv`.
 * Git LFS is configured for managing large audio, image, and video assets.
 * A `Strings` dataclass defines all user-facing messages as named format strings. The bot is silent by default and messages are enabled by setting a locale in the environment.
+* Moderation builds on Discord's own AutoMod. `/admin automod` manages keyword and preset rules, and blocked messages can count as warnings.
 * The `/help` command displays all loaded commands grouped by cog in an ephemeral embed. The output reflects whichever cogs are active at runtime with no additional configuration.
 * Dependencies are managed with [uv](https://docs.astral.sh/uv/) and pinned in `uv.lock`, so every machine and container installs the same versions.
 * Setup scripts for Windows and Unix are included. Running `setup.bat` or `setup.sh` installs the dependencies and creates the initial `.env` file in a single step.
@@ -50,7 +51,9 @@ The bot requires one privileged intent. Enable it in your application's **Bot** 
 |---|---|---|
 | `members` | Server Members Intent | `on_member_join` events, auto-role assignment, and reliable member object caching. |
 
-The **Presence Intent** is not used by this template and does not need to be enabled. The **Message Content Intent** is not required yet but will be needed in a future phase for message-based automoderation.
+The **Presence Intent** and the **Message Content Intent** are not used and should stay disabled.
+AutoMod reads messages on Discord's side, so the bot never needs message content.
+The bot also uses the Auto Moderation Execution intent, which is not privileged and needs no portal setting.
 
 ## Bot permissions
 
@@ -60,14 +63,36 @@ The **Requires OAuth2 Code Grant** toggle in the Bot page is not applicable to s
 
 | Permission | Required for |
 |---|---|
-| View Channels | Reading messages and channel state. |
-| Send Messages | Responding to commands. |
-| Read Message History | Reply functionality. |
+| View Channels | Reading channel state. |
+| Send Messages | Responding to commands and posting AutoMod reports. |
+| Attach Files | Sending generated audio or video files. |
 | Connect | Joining voice channels. |
 | Speak | Playing audio in voice channels. |
 | Manage Roles | Auto-role assignment on member join. |
-| Kick Members | `/kick` and `/warn` threshold enforcement. |
-| Ban Members | `/ban` and `/warn` threshold enforcement when action is `ban`. |
+| Kick Members | `/kick` and the `kick` warning action. |
+| Ban Members | `/ban` and the `ban` warning action. |
+| Moderate Members | The `timeout` warning action. |
+| Manage Server | Managing AutoMod rules and receiving AutoMod executions. |
+
+## Moderation and AutoMod
+
+Discord's own AutoMod does the filtering, so blocked messages never reach the channel.
+The bot manages its rules through the API and never reads message content.
+
+* `/admin automod add` and `/admin automod remove` edit the bot's keyword rule. Keywords are separated by commas, and `*` works as a wildcard.
+* `/admin automod list` shows the keywords, up to Discord's limit of 1000.
+* `/admin automod preset` turns Discord's word lists for profanity, sexual content, and slurs on or off.
+* `/admin automod alert` sets the channel where AutoMod posts alerts and the bot posts warning reports.
+* `/admin automod escalation` decides whether each blocked message also adds a warning. A member gets at most one AutoMod warning in 10 seconds.
+* `/admin warnaction` and `/admin warnthreshold` decide what happens at the warning limit: a kick, a ban, or a timeout. `/admin warntimeout` sets the timeout length.
+
+The bot only changes rules it created itself.
+Rules made in **Server Settings > AutoMod** stay untouched, but their blocked messages also count as warnings when escalation is on.
+An admin can also add a timeout or an allow list to the bot's rules there, and the bot keeps them.
+
+Two features need no bot code.
+Discord's audit log already records every kick, ban, and timeout with the reason the bot passes.
+**Server Settings > Integrations** lets admins choose which roles may use each command.
 
 ## Setup
 
@@ -163,14 +188,16 @@ discord-bot-template/
 │   ├── template.py     # Template cog. Use this as a starting point for new features.
 │   ├── voice.py        # /join, /leave, and /skip. The bot leaves on its own when alone or idle.
 │   ├── media.py        # Per-server audio queue with YouTube, SoundCloud, and Spotify support.
-│   ├── admin.py        # /admin command group for per-guild configuration.
-│   ├── moderation.py   # /warn, /warnings, /clearwarning, /clearwarnings, /kick, /ban.
+│   ├── admin.py        # /admin command group, including /admin automod.
+│   ├── moderation.py   # /warn, /warnings, /clearwarning, /clearwarnings, /kick, /ban, and AutoMod escalation.
 │   └── events.py       # on_member_join: auto-role assignment and welcome message.
 ├── utils/
 │   ├── audio.py        # MediaAPIClient, URL helpers, and audio sources for files, bytes, and streams.
+│   ├── automod.py      # Creates and edits the AutoMod rules that the bot owns.
 │   ├── checks.py       # Command checks such as in_bot_channel(), and guild_of().
 │   ├── database.py     # Versioned SQLite schema, per-guild settings, and warnings.
 │   ├── i18n.py         # Picks each user's language and translates command descriptions.
+│   ├── moderation.py   # issue_warning(), shared by /warn and AutoMod escalation.
 │   ├── replies.py      # respond() and finish(), which never leave a command "thinking".
 │   ├── strings.py      # Every core message and command translation, in English and Finnish.
 │   └── voice.py        # Joins, plays in, and leaves voice channels for every cog.
