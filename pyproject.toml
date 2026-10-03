@@ -22,6 +22,9 @@ dev = [
 [tool.uv]
 # The bot is an application run from its directory, not an installable package.
 package = false
+# discord.py 2.7.1 caps PyNaCl below 1.6, but PyNaCl 1.6.2 fixes GHSA-mrfv-m5wm-5w6w in libsodium.
+# discord.py's main branch already allows PyNaCl 1.6.x. Remove this override once a release does.
+override-dependencies = ["pynacl>=1.6.2,<1.7"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
