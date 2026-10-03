@@ -1,5 +1,6 @@
 # Files that bots created from this template keep identical to it.
-# Change these files here first, then carry the change over with dev-standards template-check --apply.
+# Change these files here first.
+# Then run dev-standards template-check --template <path-to-this-template> --apply in each derived repository.
 # Bot-specific files such as localization.py, compose.stack.yml, and the bot's own cogs are deliberately absent.
 
 [[file]]
