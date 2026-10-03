@@ -277,3 +277,8 @@ uvx --from git+https://github.com/Lempki/discord-dev-standards@v0.1.3 dev-standa
 
 Add `--apply` to copy the template's version over every drifted file, then review the result with `git diff` before committing.
 Keep bot-specific changes in files outside the manifest, such as `localization.py`, `compose.stack.yml`, and the bot's own cogs.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
+You may use, change, and share it, as long as every copy keeps the copyright notice and the license text.
