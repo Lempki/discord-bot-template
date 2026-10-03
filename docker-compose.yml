@@ -1,4 +1,4 @@
-# Runs the bot alone. Use compose.stack.yml to also run the discord-api-* services it depends on.
+# Runs the bot alone. Use compose.stack.yml to also run the api-* services it depends on.
 services:
   bot:
     build: .

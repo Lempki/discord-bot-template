@@ -146,14 +146,14 @@ The container restarts automatically unless you stop it.
 The database lives on the `bot-data` volume, so settings and warnings survive rebuilds and `docker compose down`.
 Only `docker compose down -v` deletes it.
 
-To run the bot together with the discord-api-* services it uses, clone those repositories next to this one and use the stack file instead:
+To run the bot together with the api-* services it uses, clone those repositories next to this one and use the stack file instead:
 
 ```
 docker compose -f compose.stack.yml up -d --build
 ```
 
 The stack builds each service from its sibling folder and connects them on a private network.
-It passes `DISCORD_API_MEDIA_SECRET` from this repository's `.env` to the media service, so the two always agree.
+It passes `API_MEDIA_SECRET` from this repository's `.env` to the media service, so the two always agree.
 
 ## Configuration
 
@@ -167,11 +167,11 @@ All configuration is read from environment variables or from a `.env` file locat
 | `DATABASE_PATH` | No | `data/bot.db` | The SQLite file for per-guild settings and moderation data. The directory is created if needed. The Docker image uses `/app/data/bot.db`. |
 | `FFMPEG_PATH` | No | `ffmpeg` | The FFmpeg executable. Leave it unset to use FFmpeg from the system PATH. |
 | `DEV_GUILD_ID` | No | None | A server ID for development. Commands sync to that server instantly instead of globally. |
-| `DISCORD_API_<NAME>_URL` | No | None | The base URL of a discord-api-* service, for example `DISCORD_API_MEDIA_URL`. |
-| `DISCORD_API_<NAME>_SECRET` | No | None | The bearer token of that service. It must match `DISCORD_API_SECRET` in the service's own configuration. |
+| `API_<NAME>_URL` | No | None | The base URL of a api-* service, for example `API_MEDIA_URL`. |
+| `API_<NAME>_SECRET` | No | None | The bearer token of that service. It must match `API_SECRET` in the service's own configuration. |
 
 A cog that needs a service asks for it by name. If the URL or the secret is missing, the bot stops at startup with an error that names both variables.
-The `media` cog needs `DISCORD_API_MEDIA_URL` and `DISCORD_API_MEDIA_SECRET`.
+The `media` cog needs `API_MEDIA_URL` and `API_MEDIA_SECRET`.
 
 Commands are synced to Discord once each time the bot starts.
 With `DEV_GUILD_ID` set, they appear in that server immediately.
@@ -182,7 +182,7 @@ Commands synced globally earlier stay visible there as well, so a development se
 ```
 discord-bot-template/
 ├── bot.py              # Entry point.
-├── config.py           # Reads settings and discord-api-* service URLs from the environment.
+├── config.py           # Reads settings and api-* service URLs from the environment.
 ├── localization.py     # This bot's own messages and translations, layered on the core ones.
 ├── cogs/
 │   ├── help.py         # /help command. Lists the loaded commands the user may run, grouped by cog.
@@ -216,7 +216,7 @@ discord-bot-template/
 ├── setup.sh            # macOS and Linux setup script.
 ├── Dockerfile
 ├── docker-compose.yml  # Runs the bot alone, with its database on a volume.
-├── compose.stack.yml   # Runs the bot together with the discord-api-* services it uses.
+├── compose.stack.yml   # Runs the bot together with the api-* services it uses.
 └── .dockerignore
 ```
 
@@ -249,10 +249,10 @@ The following services work alongside bots built from this template and handle f
 
 | Service | Description |
 |---|---|
-| [discord-api-media](https://github.com/Lempki/discord-api-media) | Resolves YouTube, SoundCloud, and Spotify track metadata and stream URLs. Supports Spotify tracks, albums, and playlists. |
-| [discord-api-scraper](https://github.com/Lempki/discord-api-scraper) | Scrapes structured data from external websites using configurable CSS or XPath selectors. |
-| [discord-api-scheduler](https://github.com/Lempki/discord-api-scheduler) | Schedules persistent reminders that survive bot restarts and are delivered via Discord webhooks. |
-| [discord-api-morshu](https://github.com/Lempki/discord-api-morshu) | Generates Morshu TTS audio and video from text. |
+| [api-media](https://github.com/Lempki/api-media) | Resolves YouTube, SoundCloud, and Spotify track metadata and stream URLs. Supports Spotify tracks, albums, and playlists. |
+| [api-scraper](https://github.com/Lempki/api-scraper) | Scrapes structured data from external websites using configurable CSS or XPath selectors. |
+| [api-scheduler](https://github.com/Lempki/api-scheduler) | Schedules persistent reminders that survive bot restarts and are delivered via Discord webhooks. |
+| [api-morshu](https://github.com/Lempki/api-morshu) | Generates Morshu TTS audio and video from text. |
 
 ## Forking this template
 
@@ -261,7 +261,7 @@ Use the GitHub template button to create a new repository based on this project.
 The template includes generic English-language cogs that can be modified or replaced. A typical customization workflow includes the following steps:
 
 * Add new bot-specific cogs in the `cogs/` directory.
-* Connect a new discord-api-* service by setting `DISCORD_API_<NAME>_URL` and `DISCORD_API_<NAME>_SECRET`, then read it in a cog with `bot.config.service("<name>")`. No change to `config.py` is needed.
+* Connect a new api-* service by setting `API_<NAME>_URL` and `API_<NAME>_SECRET`, then read it in a cog with `bot.config.service("<name>")`. No change to `config.py` is needed.
 * Add the bot's own messages to `Strings` and `BOT_TEXT` in `localization.py`, and set the fallback `LOCALE` in your `.env` file.
 * Add audio files to `assets/audio/`, images to `assets/images/`, and videos to `assets/videos/`. Git LFS will manage these automatically based on file extension.
 * Send images and videos to Discord as `discord.File` attachments. `audio.py` and `play_file()` are audio-only and are not used for other asset types.

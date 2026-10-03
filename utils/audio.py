@@ -1,4 +1,4 @@
-"""Audio sources and the client for discord-api-media."""
+"""Audio sources and the client for api-media."""
 
 import io
 from pathlib import Path
@@ -25,7 +25,7 @@ _STREAM_OPTIONS = {
 
 
 class MediaAPIClient:
-    """HTTP client for discord-api-media.
+    """HTTP client for api-media.
 
     Args:
         base_url: The service's base URL.

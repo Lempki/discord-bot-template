@@ -41,10 +41,10 @@ def test_services_are_discovered_by_name() -> None:
     config = Config.from_env(
         {
             "DISCORD_TOKEN": "t",
-            "DISCORD_API_MEDIA_URL": "http://media:8000",
-            "DISCORD_API_MEDIA_SECRET": "s1",
-            "DISCORD_API_MORSHU_URL": "http://morshu:8000",
-            "DISCORD_API_MORSHU_SECRET": "s2",
+            "API_MEDIA_URL": "http://media:8000",
+            "API_MEDIA_SECRET": "s1",
+            "API_MORSHU_URL": "http://morshu:8000",
+            "API_MORSHU_SECRET": "s2",
         }
     )
     assert config.service("media") == ServiceConfig("http://media:8000", "s1")
@@ -52,8 +52,6 @@ def test_services_are_discovered_by_name() -> None:
 
 
 def test_service_without_secret_is_not_configured() -> None:
-    config = Config.from_env(
-        {"DISCORD_TOKEN": "t", "DISCORD_API_MEDIA_URL": "http://x"}
-    )
-    with pytest.raises(ConfigError, match="DISCORD_API_MEDIA_SECRET"):
+    config = Config.from_env({"DISCORD_TOKEN": "t", "API_MEDIA_URL": "http://x"})
+    with pytest.raises(ConfigError, match="API_MEDIA_SECRET"):
         config.service("media")

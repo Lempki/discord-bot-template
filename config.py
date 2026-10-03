@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 __all__ = ["Config", "ConfigError", "ServiceConfig"]
 
-_SERVICE_URL = re.compile(r"^DISCORD_API_([A-Z0-9_]+)_URL$")
+_SERVICE_URL = re.compile(r"^API_([A-Z0-9_]+)_URL$")
 
 
 class ConfigError(Exception):
@@ -19,7 +19,7 @@ class ConfigError(Exception):
 
 @dataclass(frozen=True)
 class ServiceConfig:
-    """Connection settings for one discord-api-* service.
+    """Connection settings for one api-* service.
 
     Attributes:
         url: The service's base URL, such as http://localhost:8001.
@@ -41,7 +41,7 @@ class Config:
         locale: The key of the locale in localization.LOCALES.
         ffmpeg_path: The FFmpeg executable, either a name on PATH or an absolute path.
         dev_guild_id: A guild that receives commands instantly, or None for global sync.
-        services: The discord-api-* services found in the environment, keyed by name.
+        services: The api-* services found in the environment, keyed by name.
     """
 
     discord_token: str
@@ -96,10 +96,10 @@ class Config:
         )
 
     def service(self, name: str) -> ServiceConfig:
-        """Returns the settings of one discord-api-* service.
+        """Returns the settings of one api-* service.
 
         Args:
-            name: The service name, such as "media" for DISCORD_API_MEDIA_URL.
+            name: The service name, such as "media" for API_MEDIA_URL.
 
         Returns:
             The service's URL and secret.
@@ -110,21 +110,21 @@ class Config:
         try:
             return self.services[name.lower()]
         except KeyError:
-            prefix = f"DISCORD_API_{name.upper()}"
+            prefix = f"API_{name.upper()}"
             raise ConfigError(
                 f"{prefix}_URL and {prefix}_SECRET must both be set."
             ) from None
 
 
 def _read_services(environ: Mapping[str, str]) -> dict[str, ServiceConfig]:
-    """Pairs every DISCORD_API_<NAME>_URL with its DISCORD_API_<NAME>_SECRET."""
+    """Pairs every API_<NAME>_URL with its API_<NAME>_SECRET."""
     services: dict[str, ServiceConfig] = {}
     for key, url in environ.items():
         match = _SERVICE_URL.match(key)
         if not match or not url.strip():
             continue
         name = match.group(1)
-        secret = environ.get(f"DISCORD_API_{name}_SECRET", "").strip()
+        secret = environ.get(f"API_{name}_SECRET", "").strip()
         if secret:
             services[name.lower()] = ServiceConfig(url=url.strip(), secret=secret)
     return services

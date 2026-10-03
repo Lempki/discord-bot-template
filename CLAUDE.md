@@ -24,7 +24,7 @@ The shared conventions live in [discord-dev-standards](https://github.com/Lempki
 * `.template-manifest.toml` lists the core files that every derived bot keeps identical to this template.
 * Change a core file here first. Derived bots then pick it up with `dev-standards template-check --apply`.
 * Bot-specific behavior belongs in files outside the manifest, such as `localization.py`, `compose.stack.yml`, and the bot's own cogs.
-* `config.py` is generic. A cog reads a discord-api-* service with `bot.config.service("<name>")`, which maps to `DISCORD_API_<NAME>_URL` and `DISCORD_API_<NAME>_SECRET`.
+* `config.py` is generic. A cog reads a api-* service with `bot.config.service("<name>")`, which maps to `API_<NAME>_URL` and `API_<NAME>_SECRET`.
 
 ## Messages and languages
 

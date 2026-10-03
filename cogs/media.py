@@ -1,4 +1,4 @@
-"""Audio queue for YouTube, SoundCloud, and Spotify through discord-api-media."""
+"""Audio queue for YouTube, SoundCloud, and Spotify through api-media."""
 
 import asyncio
 import contextlib
