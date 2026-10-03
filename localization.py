@@ -6,7 +6,7 @@ Overrides are how a bot gets its own voice.
 Replies follow each user's Discord language.
 LOCALE in .env picks the fallback language, and LOCALE=silent mutes public replies.
 
-To add a language, add its Discord locale code to BOT_TEXT and COMMAND_TEXT.
+To add a language, add its Discord locale code to BOT_TEXT and BOT_COMMAND_TEXT.
 Examples of codes are "de" and "sv-SE".
 Any core text a language leaves out falls back to silence, and a test lists the gaps.
 """

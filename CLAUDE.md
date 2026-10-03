@@ -28,10 +28,10 @@ The shared conventions live in [discord-dev-standards](https://github.com/Lempki
 
 ## Messages and languages
 
-* Never hard-code user-facing text in a cog. Add a field to `Strings`, give it text in every language, and send it with `respond()`.
-* Pick the language with `self.bot.strings_for(interaction)`. Pass `private=True` for ephemeral admin and moderator replies, which stay on even when `LOCALE=silent`.
+* Never hard-code user-facing text in a cog. Add a field to `CoreStrings` in `utils/strings.py` for a core cog, or to `Strings` in `localization.py` for the bot's own cog. Give it text in every language, and send it with `respond()`.
+* Pick the language with `self.bot.strings_for(interaction)`. Pass `private=True` for ephemeral replies such as admin and moderator replies, which stay on even when `LOCALE=silent`. Public replies are muted under `LOCALE=silent`, which is the default.
 * A command that defers must end with `finish(interaction)`, so it never keeps showing "is thinking...".
 * A reply sent without `respond()`, such as a file follow-up, must be followed by `mark_replied(interaction)`.
-* A command's docstring is its Discord description. Keep it under 100 characters, describe every option, and add the Finnish translation of each text to the command text table.
+* A command's docstring is its Discord description. Keep it under 100 characters, describe every option, and add the Finnish translation of each text to `CORE_COMMAND_TEXT` for a core cog or `BOT_COMMAND_TEXT` for the bot's own cog.
 * Voice goes through `self.bot.voice_presence`, which joins, plays, and leaves idle or empty channels.
 * `uv run pytest` fails when a language misses a message or a command translation.

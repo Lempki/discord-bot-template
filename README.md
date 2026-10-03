@@ -10,9 +10,9 @@ This is a clean and modular Python Discord bot template built with [discord.py](
 * Per-guild audio queue support is included. This ensures safe operation across multiple servers.
 * Local development is supported through a `.env` file using `python-dotenv`.
 * Git LFS is configured for managing large audio, image, and video assets.
-* A `Strings` dataclass defines all user-facing messages as named format strings. The bot is silent by default and messages are enabled by setting a locale in the environment.
+* A `Strings` dataclass defines all user-facing messages as named format strings, in English and Finnish. Replies follow each user's Discord language, and `LOCALE` picks the fallback language. The default, `LOCALE=silent`, mutes public replies but still sends private ones such as `/help` and admin replies.
 * Moderation builds on Discord's own AutoMod. `/admin automod` manages keyword and preset rules, and blocked messages can count as warnings.
-* The `/help` command displays all loaded commands grouped by cog in an ephemeral embed. The output reflects whichever cogs are active at runtime with no additional configuration.
+* The `/help` command lists the loaded commands that the user may run, grouped by cog, in an ephemeral embed. The output reflects whichever cogs are active at runtime with no additional configuration.
 * Dependencies are managed with [uv](https://docs.astral.sh/uv/) and pinned in `uv.lock`, so every machine and container installs the same versions.
 * Setup scripts for Windows and Unix are included. Running `setup.bat` or `setup.sh` installs the dependencies and creates the initial `.env` file in a single step.
 * Tests, linting, and formatting run in CI on every push through the shared [discord-dev-standards](https://github.com/Lempki/discord-dev-standards) workflow.
@@ -64,8 +64,7 @@ The **Requires OAuth2 Code Grant** toggle in the Bot page is not applicable to s
 | Permission | Required for |
 |---|---|
 | View Channels | Reading channel state. |
-| Send Messages | Responding to commands and posting AutoMod reports. |
-| Attach Files | Sending generated audio or video files. |
+| Send Messages | Posting the welcome message, media track updates, and AutoMod reports. |
 | Connect | Joining voice channels. |
 | Speak | Playing audio in voice channels. |
 | Manage Roles | Auto-role assignment on member join. |
@@ -73,6 +72,8 @@ The **Requires OAuth2 Code Grant** toggle in the Bot page is not applicable to s
 | Ban Members | `/ban` and the `ban` warning action. |
 | Moderate Members | The `timeout` warning action. |
 | Manage Server | Managing AutoMod rules and receiving AutoMod executions. |
+
+None of the core cogs send files. Add **Attach Files** if one of your own cogs does.
 
 ## Moderation and AutoMod
 
@@ -162,14 +163,14 @@ All configuration is read from environment variables or from a `.env` file locat
 |---|---|---|---|
 | `DISCORD_TOKEN` | Yes | None | The Discord bot token used to authenticate with the API. |
 | `COGS_TO_LOAD` | No | `help` | A comma-separated list of cog module names to load at startup. Set it to `help,template,voice,media,admin,moderation,events` for the full feature set. |
-| `LOCALE` | No | `silent` | The fallback language for users whose Discord language the bot does not speak. Built-in values are `en` and `fi`. `silent` mutes public replies, while admin and moderator replies are still sent because only the person who ran the command sees them. |
+| `LOCALE` | No | `silent` | The fallback language for users whose Discord language the bot does not speak. Built-in values are `en` and `fi`. `silent` mutes public replies. Private replies, such as `/help`, admin and moderator replies, and error messages, are still sent because only the person who ran the command sees them. |
 | `DATABASE_PATH` | No | `data/bot.db` | The SQLite file for per-guild settings and moderation data. The directory is created if needed. The Docker image uses `/app/data/bot.db`. |
 | `FFMPEG_PATH` | No | `ffmpeg` | The FFmpeg executable. Leave it unset to use FFmpeg from the system PATH. |
 | `DEV_GUILD_ID` | No | None | A server ID for development. Commands sync to that server instantly instead of globally. |
 | `DISCORD_API_<NAME>_URL` | No | None | The base URL of a discord-api-* service, for example `DISCORD_API_MEDIA_URL`. |
 | `DISCORD_API_<NAME>_SECRET` | No | None | The bearer token of that service. It must match `DISCORD_API_SECRET` in the service's own configuration. |
 
-A cog that needs a service asks for it by name, and the bot refuses to load that cog if the URL or the secret is missing.
+A cog that needs a service asks for it by name. If the URL or the secret is missing, the bot stops at startup with an error that names both variables.
 The `media` cog needs `DISCORD_API_MEDIA_URL` and `DISCORD_API_MEDIA_SECRET`.
 
 Commands are synced to Discord once each time the bot starts.
@@ -184,7 +185,7 @@ discord-bot-template/
 ├── config.py           # Reads settings and discord-api-* service URLs from the environment.
 ├── localization.py     # This bot's own messages and translations, layered on the core ones.
 ├── cogs/
-│   ├── help.py         # /help command. Lists all loaded commands grouped by cog.
+│   ├── help.py         # /help command. Lists the loaded commands the user may run, grouped by cog.
 │   ├── template.py     # Template cog. Use this as a starting point for new features.
 │   ├── voice.py        # /join, /leave, and /skip. The bot leaves on its own when alone or idle.
 │   ├── media.py        # Per-server audio queue with YouTube, SoundCloud, and Spotify support.
@@ -229,6 +230,7 @@ discord-bot-template/
 
 Replies follow the Discord language of the user who ran the command.
 A user whose language the bot does not speak gets the `LOCALE` language, and English after that.
+With the default `LOCALE=silent`, public replies stay muted for everyone, so set `LOCALE` to turn them on.
 Messages without an interaction, such as the join welcome, use the server's preferred language.
 
 Command descriptions, option descriptions, and choice names are localized natively, so each user's Discord client shows them in their own language.
@@ -237,6 +239,7 @@ Command and option names always stay English, so everyone types the same command
 The core cogs' messages and command translations live in `utils/strings.py`, in English and Finnish.
 A bot adds its own messages in `localization.py`, and it may override any core text to give itself a personality.
 To add a language, add its Discord locale code, such as `de` or `sv-SE`, to `BOT_TEXT` and `BOT_COMMAND_TEXT` in `localization.py`.
+The core texts exist only in English and Finnish, so a new language also needs every core message in `BOT_TEXT` and every core command text in `BOT_COMMAND_TEXT`.
 
 The tests list every message or command text a language is missing, and they fail on command texts longer than Discord's 100-character limit.
 
@@ -269,7 +272,7 @@ Instead, `.template-manifest.toml` lists the core files that every bot keeps ide
 With both repositories cloned side by side, run this from the bot's directory to see which core files have drifted:
 
 ```bash
-uvx --from git+https://github.com/Lempki/discord-dev-standards@v0.1.1 dev-standards template-check --template ../discord-bot-template --diff
+uvx --from git+https://github.com/Lempki/discord-dev-standards@v0.1.2 dev-standards template-check --template ../discord-bot-template --diff
 ```
 
 Add `--apply` to copy the template's version over every drifted file, then review the result with `git diff` before committing.
