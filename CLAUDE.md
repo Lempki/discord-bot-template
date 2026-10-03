@@ -1,7 +1,8 @@
 # discord-bot-template
 
 A discord.py bot template. Bots such as discord-bot-alijohtaja and discord-bot-morshu are created from it.
-The shared conventions live in [discord-dev-standards](https://github.com/Lempki/discord-dev-standards), and its README is the rulebook for code, prose, and commits.
+The shared conventions live in [dev-standards](https://github.com/Lempki/dev-standards), and its README is the rulebook for code, prose, commits, and engineering guidelines.
+Read it before changing code. When the repositories are cloned side by side, the local copy is `../dev-standards/README.md`.
 
 ## Commands
 
