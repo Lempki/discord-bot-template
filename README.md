@@ -9,7 +9,7 @@ This is a clean and modular Python Discord bot template built with [discord.py](
 * FFmpeg is resolved automatically from the system PATH or from a configurable environment variable.
 * Per-guild audio queue support is included. This ensures safe operation across multiple servers.
 * Local development is supported through a `.env` file using `python-dotenv`.
-* Git LFS is configured for managing large audio, image, and video assets.
+* Audio, image, and video assets are stored as regular files that Git marks as binary.
 * A `Strings` dataclass defines all user-facing messages as named format strings, in English and Finnish. Replies follow each user's Discord language, and `LOCALE` picks the fallback language. The default, `LOCALE=silent`, mutes public replies but still sends private ones such as `/help` and admin replies.
 * Moderation builds on Discord's own AutoMod. `/admin automod` manages keyword and preset rules, and blocked messages can count as warnings.
 * The `/help` command lists the loaded commands that the user may run, grouped by cog, in an ephemeral embed. The output reflects whichever cogs are active at runtime with no additional configuration.
@@ -40,8 +40,6 @@ This is a clean and modular Python Discord bot template built with [discord.py](
     ```
     sudo apt install ffmpeg
     ```
-
-* You must install [Git LFS](https://git-lfs.com/) if you plan to version control audio or image assets.
 
 ## Privileged intents
 
@@ -203,9 +201,9 @@ discord-bot-template/
 │   ├── strings.py      # Every core message and command translation, in English and Finnish.
 │   └── voice.py        # Joins, plays in, and leaves voice channels for every cog.
 ├── assets/
-│   ├── audio/          # Local Git LFS-managed audio files.
-│   ├── images/         # Local Git LFS-managed image files.
-│   └── videos/         # Local Git LFS-managed video files.
+│   ├── audio/          # Audio files.
+│   ├── images/         # Image files.
+│   └── videos/         # Video files.
 ├── tests/              # Pytest suite. Runs in CI on every push.
 ├── .env.template       # Template for environment variables.
 ├── .template-manifest.toml  # Core files that derived bots keep identical to this template.
@@ -263,7 +261,7 @@ The template includes generic English-language cogs that can be modified or repl
 * Add new bot-specific cogs in the `cogs/` directory.
 * Connect a new api-* service by setting `API_<NAME>_URL` and `API_<NAME>_SECRET`, then read it in a cog with `bot.config.service("<name>")`. No change to `config.py` is needed.
 * Add the bot's own messages to `Strings` and `BOT_TEXT` in `localization.py`, and set the fallback `LOCALE` in your `.env` file.
-* Add audio files to `assets/audio/`, images to `assets/images/`, and videos to `assets/videos/`. Git LFS will manage these automatically based on file extension.
+* Add audio files to `assets/audio/`, images to `assets/images/`, and videos to `assets/videos/`. Keep each file under 1 MB, because a pre-commit hook rejects larger ones.
 * Send images and videos to Discord as `discord.File` attachments. `audio.py` and `play_file()` are audio-only and are not used for other asset types.
 * Replace or remove `cogs/template.py` once it is no longer needed.
 
