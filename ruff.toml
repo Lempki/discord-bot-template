@@ -1,13 +1,9 @@
 extend = ".ruff-base.toml"
 
-[lint]
-# Docstring and annotation rules are switched on once the existing code meets them.
-extend-ignore = ["D", "ANN"]
-
 [lint.isort]
 known-first-party = ["bot", "cogs", "config", "localization", "utils"]
 
-[lint.per-file-ignores]
+[lint.extend-per-file-ignores]
 # Translation tables pair an English text with its translation on one line, which often exceeds the limit.
 "utils/strings.py" = ["E501"]
 "localization.py" = ["E501"]
