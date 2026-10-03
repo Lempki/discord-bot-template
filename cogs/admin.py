@@ -411,6 +411,7 @@ class AdminCog(commands.Cog, name="Admin"):
         await respond(interaction, text, ephemeral=True)
 
     async def cog_load(self) -> None:
+        """Logs that the cog is ready."""
         log.info(f"{self.qualified_name} cog loaded.")
 
 
@@ -429,4 +430,5 @@ def _preset_name(s: "Strings", preset: str) -> str:
 
 
 async def setup(bot: "BotApp") -> None:
+    """Adds the cog. discord.py calls this when the extension loads."""
     await bot.add_cog(AdminCog(bot))

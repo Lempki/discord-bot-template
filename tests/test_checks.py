@@ -1,7 +1,6 @@
-"""Tests for utils/checks.py — in_bot_channel() predicate logic."""
+"""Tests for the in_bot_channel() check in utils/checks.py."""
 
-from __future__ import annotations
-
+from collections.abc import Awaitable, Callable
 from unittest.mock import MagicMock
 
 import discord
@@ -21,13 +20,12 @@ def _make_interaction(guild_id: int, channel_id: int) -> MagicMock:
     return interaction
 
 
-def _get_predicate():
-    """Extract the raw async predicate from the in_bot_channel() check.
+def _get_predicate() -> Callable[[discord.Interaction], Awaitable[bool]]:
+    """Extracts the raw async predicate from the in_bot_channel() check.
 
-    app_commands.check() stores predicates in __discord_app_commands_checks__
-    on the decorated callable — it has no .predicate attribute (unlike
-    ext.commands.check). Apply the decorator to a throwaway coroutine so we
-    can pull the predicate back out.
+    app_commands.check() stores predicates in __discord_app_commands_checks__ on the callable.
+    Unlike ext.commands.check, it sets no .predicate attribute.
+    Decorating a throwaway coroutine lets the test pull the predicate back out.
     """
 
     async def _dummy(interaction: discord.Interaction) -> bool: ...  # noqa: E704
@@ -36,8 +34,7 @@ def _get_predicate():
     return _dummy.__discord_app_commands_checks__[0]
 
 
-# Every predicate test needs a live DB connection because the predicate calls
-# database.get_settings(), which requires _conn to be initialised.
+# Every predicate test needs the db fixture, because the predicate reads the guild's settings.
 
 
 async def test_in_bot_channel_no_settings_returns_true(db: None) -> None:
@@ -71,7 +68,7 @@ async def test_in_bot_channel_wrong_channel_returns_false(db: None) -> None:
 
 
 async def test_in_bot_channel_channel_cleared_returns_true(db: None) -> None:
-    # Set a channel, then clear it — should be unrestricted again.
+    # Setting a channel and then clearing it leaves every channel allowed again.
     await database.upsert_settings(GUILD_ID, bot_channel_id=CHANNEL_ID)
     await database.upsert_settings(GUILD_ID, bot_channel_id=None)
     interaction = _make_interaction(GUILD_ID, OTHER_CHANNEL_ID)

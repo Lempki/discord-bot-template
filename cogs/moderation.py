@@ -341,8 +341,10 @@ class ModerationCog(commands.Cog, name="Moderation"):
             log.warning(f"Could not report an AutoMod warning in {channel_id}: {error}")
 
     async def cog_load(self) -> None:
+        """Logs that the cog is ready."""
         log.info(f"{self.qualified_name} cog loaded.")
 
 
 async def setup(bot: "BotApp") -> None:
+    """Adds the cog. discord.py calls this when the extension loads."""
     await bot.add_cog(ModerationCog(bot))

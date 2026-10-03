@@ -83,7 +83,7 @@ async def test_translator_translates_descriptions_by_language_part() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Coverage of this bot's languages
+# Coverage of this bot's languages.
 # ---------------------------------------------------------------------------
 
 

@@ -54,7 +54,7 @@ def forbidden() -> discord.Forbidden:
 
 
 # ---------------------------------------------------------------------------
-# Hierarchy guard
+# The hierarchy guard.
 # ---------------------------------------------------------------------------
 
 
@@ -91,7 +91,7 @@ def test_blocked_reason_refuses_self_owner_and_bot(scene: SimpleNamespace) -> No
 
 
 # ---------------------------------------------------------------------------
-# warn
+# The warn command.
 # ---------------------------------------------------------------------------
 
 
@@ -172,7 +172,7 @@ async def test_warn_refuses_higher_ranked_target(
 
 
 # ---------------------------------------------------------------------------
-# warnings, clearwarning, clearwarnings
+# The warnings, clearwarning, and clearwarnings commands.
 # ---------------------------------------------------------------------------
 
 
@@ -268,7 +268,7 @@ async def test_clearwarnings_reports_count(
 
 
 # ---------------------------------------------------------------------------
-# kick and ban
+# The kick and ban commands.
 # ---------------------------------------------------------------------------
 
 

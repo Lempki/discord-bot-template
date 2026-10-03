@@ -115,7 +115,7 @@ class GuildPlayer:
 
 
 class MediaCog(commands.Cog, name="Media"):
-    """Audio queue supporting YouTube and Spotify, with one queue per guild."""
+    """Audio queue supporting YouTube, SoundCloud, and Spotify, with one queue per guild."""
 
     def __init__(self, bot: "BotApp") -> None:
         # Raises ConfigError with the missing variable names, which stops the cog from loading.
@@ -221,9 +221,11 @@ class MediaCog(commands.Cog, name="Media"):
         await finish(interaction)
 
     async def cog_load(self) -> None:
+        """Logs that the cog is ready."""
         log.info(f"{self.qualified_name} cog loaded.")
 
     async def cog_unload(self) -> None:
+        """Stops every player and closes the media API client."""
         for player in self._players.values():
             player.cancel()
         with contextlib.suppress(Exception):
@@ -231,4 +233,5 @@ class MediaCog(commands.Cog, name="Media"):
 
 
 async def setup(bot: "BotApp") -> None:
+    """Adds the cog. discord.py calls this when the extension loads."""
     await bot.add_cog(MediaCog(bot))
