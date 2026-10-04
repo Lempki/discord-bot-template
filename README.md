@@ -116,7 +116,7 @@ The script asks before it installs or starts anything, and it does the following
 2. It offers to install Docker, and the tools that the Docker image includes for running outside Docker, such as FFmpeg. It uses winget on Windows, Homebrew on macOS, and the system package manager on Linux.
 3. It runs `uv sync`, which installs the locked dependencies into `.venv`.
 4. It copies `.env.template` to `.env` on the first run and asks for the bot token, which it reads without showing it.
-5. It prepares `compose.stack.yml`. It fills each API secret that the stack needs and reuses the service's own `API_SECRET` when that service is already set up. It clones the api-* repositories that the stack builds when they are missing, starts Docker Desktop when it is not running, and offers to start the bot and its services in Docker.
+5. It prepares `compose.stack.yml`. It fills each API secret that the stack needs and reuses the service's own `API_SECRET` when that service is already set up. When an api-* repository that the stack builds is missing, it renames a downloaded release folder such as `api-media-2.1.0`, or clones the repository. It then starts Docker Desktop when it is not running, and offers to start the bot and its services in Docker.
 
 A step that fails says what went wrong, why it matters, and what to do next, and the summary at the end lists it again.
 The steps live in `scripts/bootstrap.py`, which needs only the Python standard library.
@@ -152,6 +152,7 @@ The script also takes an action, such as `run.bat stop` on Windows or `./run.sh 
 | `local` | Runs the project in the terminal without Docker. Press Ctrl+C to stop it. |
 
 When a service crashes right after it starts, the script shows the end of its log and stops it, so it does not restart over and over.
+The `update` action needs a Git clone. In a downloaded release, it explains how to replace the files by hand instead.
 
 The `update` action also pulls the api-* repositories that the stack builds.
 The `local` action runs only the bot, which reaches its services at the URLs in `.env`.
