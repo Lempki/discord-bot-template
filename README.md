@@ -95,9 +95,9 @@ Discord's audit log already records every kick, ban, and timeout with the reason
 
 ## Setup
 
-You can use the included setup script to prepare the project in a single step.
+The setup script prepares the project in a single run, and it is safe to run again at any time.
 
-On Windows, run the following command:
+On Windows, double-click `setup.bat` or run it from a terminal:
 
 ```
 setup.bat
@@ -110,7 +110,16 @@ chmod +x setup.sh
 ./setup.sh
 ```
 
-The script runs `uv sync`, which creates the `.venv` virtual environment if needed and installs the locked dependencies. It copies `.env.template` to `.env` on the first run. You must edit `.env` and set your `DISCORD_TOKEN` before starting the bot.
+The script asks before it installs or starts anything, and it does the following:
+
+1. It installs [uv](https://docs.astral.sh/uv/) when uv is missing. uv also provides Python 3.12 when the machine lacks it.
+2. It offers to install Docker, and the tools that the Docker image includes for running outside Docker, such as FFmpeg. It uses winget on Windows, Homebrew on macOS, and the system package manager on Linux.
+3. It runs `uv sync`, which installs the locked dependencies into `.venv`.
+4. It copies `.env.template` to `.env` on the first run and asks for the bot token, which it reads without showing it.
+5. It prepares `compose.stack.yml`. It fills each API secret that the stack needs and reuses the service's own `API_SECRET` when that service is already set up. It clones the api-* repositories that the stack builds when they are missing, starts Docker Desktop when it is not running, and offers to start the bot and its services in Docker.
+
+A step that fails says what went wrong, why it matters, and what to do next, and the summary at the end lists it again.
+The steps live in `scripts/bootstrap.py`, which needs only the Python standard library.
 
 If you prefer to perform the setup manually, follow these steps:
 
@@ -212,6 +221,7 @@ discord-bot-template/
 ├── ruff.toml           # Lint and format settings on top of the shared baseline.
 ├── setup.bat           # Windows setup script.
 ├── setup.sh            # macOS and Linux setup script.
+├── scripts/bootstrap.py  # The steps that both setup scripts run.
 ├── Dockerfile
 ├── docker-compose.yml  # Runs the bot alone, with its database on a volume.
 ├── compose.stack.yml   # Runs the bot together with the api-* services it uses.

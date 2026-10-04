@@ -124,6 +124,12 @@ path = "setup.sh"
 path = "setup.bat"
 
 [[file]]
+path = "scripts/bootstrap.py"
+
+[[file]]
+path = "tests/test_bootstrap.py"
+
+[[file]]
 path = ".pre-commit-config.yaml"
 
 [[file]]

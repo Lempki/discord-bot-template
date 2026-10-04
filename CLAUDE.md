@@ -23,6 +23,7 @@ Read it before changing code. When the repositories are cloned side by side, the
 ## Template rules
 
 * `.template-manifest.toml` lists the core files that every derived bot keeps identical to this template.
+* `setup.bat` and `setup.sh` only install uv and then run `scripts/bootstrap.py`, which does every other step. Keep it on the standard library, because it runs before the dependencies exist. It is identical in api-template and discord-bot-template, so change it in both.
 * Change a core file here first. Derived bots then pick it up with `dev-standards template-check --apply`.
 * Bot-specific behavior belongs in files outside the manifest, such as `localization.py`, `compose.stack.yml`, and the bot's own cogs.
 * `config.py` is generic. A cog reads a api-* service with `bot.config.service("<name>")`, which maps to `API_<NAME>_URL` and `API_<NAME>_SECRET`.
