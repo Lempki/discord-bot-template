@@ -132,6 +132,30 @@ cp .env.template .env
 uv run python bot.py
 ```
 
+### Running
+
+After setup has run once, the run script starts the bot.
+Double-click `run.bat` on Windows, or run `./run.sh` on macOS and Linux.
+It builds and starts the bot and the api-* services in `compose.stack.yml` in Docker in the background.
+It then waits until every service is ready and shows their status.
+The containers then start again whenever Docker starts.
+
+The script also takes an action, such as `run.bat stop` on Windows or `./run.sh stop` elsewhere:
+
+| Action | What it does |
+|---|---|
+| `start` | Builds and starts everything in Docker and waits until it is ready. It is the default. |
+| `stop` | Stops the containers. They stay stopped until the next start. |
+| `status` | Shows whether each container runs and is healthy. |
+| `logs` | Follows the logs. Press Ctrl+C to stop following. |
+| `update` | Pulls the latest code, rebuilds on fresh base images, and restarts. |
+| `local` | Runs the project in the terminal without Docker. Press Ctrl+C to stop it. |
+
+When a service crashes right after it starts, the script shows the end of its log and stops it, so it does not restart over and over.
+
+The `update` action also pulls the api-* repositories that the stack builds.
+The `local` action runs only the bot, which reaches its services at the URLs in `.env`.
+
 ### Development
 
 Run the tests with `uv run pytest`.
@@ -188,43 +212,46 @@ Commands synced globally earlier stay visible there as well, so a development se
 
 ```
 discord-bot-template/
-├── bot.py              # Entry point.
-├── config.py           # Reads settings and api-* service URLs from the environment.
-├── localization.py     # This bot's own messages and translations, layered on the core ones.
+├── bot.py                  # Entry point.
+├── config.py               # Reads settings and api-* service URLs from the environment.
+├── localization.py         # This bot's own messages and translations, layered on the core ones.
 ├── cogs/
-│   ├── help.py         # /help command. Lists the loaded commands the user may run, grouped by cog.
-│   ├── template.py     # Template cog. Use this as a starting point for new features.
-│   ├── voice.py        # /join, /leave, and /skip. The bot leaves on its own when alone or idle.
-│   ├── media.py        # Per-server audio queue with YouTube, SoundCloud, and Spotify support.
-│   ├── admin.py        # /admin command group, including /admin automod.
-│   ├── moderation.py   # /warn, /warnings, /clearwarning, /clearwarnings, /kick, /ban, and AutoMod escalation.
-│   └── events.py       # on_member_join: auto-role assignment and welcome message.
+│   ├── help.py             # /help command. Lists the loaded commands the user may run, grouped by cog.
+│   ├── template.py         # Template cog. Use this as a starting point for new features.
+│   ├── voice.py            # /join, /leave, and /skip. The bot leaves on its own when alone or idle.
+│   ├── media.py            # Per-server audio queue with YouTube, SoundCloud, and Spotify support.
+│   ├── admin.py            # /admin command group, including /admin automod.
+│   ├── moderation.py       # /warn, /warnings, /clearwarning, /clearwarnings, /kick, /ban, and AutoMod escalation.
+│   └── events.py           # on_member_join: auto-role assignment and welcome message.
 ├── utils/
-│   ├── audio.py        # MediaAPIClient, URL helpers, and audio sources for files, bytes, and streams.
-│   ├── automod.py      # Creates and edits the AutoMod rules that the bot owns.
-│   ├── checks.py       # Command checks such as in_bot_channel(), and guild_of().
-│   ├── database.py     # Versioned SQLite schema, per-guild settings, and warnings.
-│   ├── i18n.py         # Picks each user's language and translates command descriptions.
-│   ├── moderation.py   # issue_warning(), shared by /warn and AutoMod escalation.
-│   ├── replies.py      # respond() and finish(), which never leave a command "thinking".
-│   ├── strings.py      # Every core message and command translation, in English and Finnish.
-│   └── voice.py        # Joins, plays in, and leaves voice channels for every cog.
+│   ├── audio.py            # MediaAPIClient, URL helpers, and audio sources for files, bytes, and streams.
+│   ├── automod.py          # Creates and edits the AutoMod rules that the bot owns.
+│   ├── checks.py           # Command checks such as in_bot_channel(), and guild_of().
+│   ├── database.py         # Versioned SQLite schema, per-guild settings, and warnings.
+│   ├── i18n.py             # Picks each user's language and translates command descriptions.
+│   ├── moderation.py       # issue_warning(), shared by /warn and AutoMod escalation.
+│   ├── replies.py          # respond() and finish(), which never leave a command "thinking".
+│   ├── strings.py          # Every core message and command translation, in English and Finnish.
+│   └── voice.py            # Joins, plays in, and leaves voice channels for every cog.
 ├── assets/
-│   ├── audio/          # Audio files.
-│   ├── images/         # Image files.
-│   └── videos/         # Video files.
-├── tests/              # Pytest suite. Runs in CI on every push.
-├── .env.template       # Template for environment variables.
-├── .template-manifest.toml  # Core files that derived bots keep identical to this template.
-├── pyproject.toml      # Project metadata and dependencies.
-├── uv.lock             # Locked dependency versions.
-├── ruff.toml           # Lint and format settings on top of the shared baseline.
-├── setup.bat           # Windows setup script.
-├── setup.sh            # macOS and Linux setup script.
-├── scripts/bootstrap.py  # The steps that both setup scripts run.
+│   ├── audio/              # Audio files.
+│   ├── images/             # Image files.
+│   └── videos/             # Video files.
+├── tests/                  # Pytest suite. Runs in CI on every push.
+├── .env.template           # Template for environment variables.
+├── .template-manifest.toml # Core files that derived bots keep identical to this template.
+├── pyproject.toml          # Project metadata and dependencies.
+├── uv.lock                 # Locked dependency versions.
+├── ruff.toml               # Lint and format settings on top of the shared baseline.
+├── setup.bat               # Windows setup script.
+├── setup.sh                # macOS and Linux setup script.
+├── scripts/bootstrap.py    # The steps that both setup scripts run.
+├── scripts/run.py          # The actions that both run scripts take.
+├── run.bat                 # Windows run script.
+├── run.sh                  # macOS and Linux run script.
 ├── Dockerfile
-├── docker-compose.yml  # Runs the bot alone, with its database on a volume.
-├── compose.stack.yml   # Runs the bot together with the api-* services it uses.
+├── docker-compose.yml      # Runs the bot alone, with its database on a volume.
+├── compose.stack.yml       # Runs the bot together with the api-* services it uses.
 └── .dockerignore
 ```
 

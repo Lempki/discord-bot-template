@@ -130,6 +130,18 @@ path = "scripts/bootstrap.py"
 path = "tests/test_bootstrap.py"
 
 [[file]]
+path = "run.bat"
+
+[[file]]
+path = "run.sh"
+
+[[file]]
+path = "scripts/run.py"
+
+[[file]]
+path = "tests/test_run.py"
+
+[[file]]
 path = ".pre-commit-config.yaml"
 
 [[file]]
