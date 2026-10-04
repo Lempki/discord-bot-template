@@ -116,7 +116,7 @@ The script asks before it installs or starts anything, and it does the following
 2. It offers to install Docker, and the tools that the Docker image includes for running outside Docker, such as FFmpeg. It uses winget on Windows, Homebrew on macOS, and the system package manager on Linux.
 3. It runs `uv sync`, which installs the locked dependencies into `.venv`.
 4. It copies `.env.template` to `.env` on the first run and asks for the bot token, which it reads without showing it.
-5. It prepares `compose.stack.yml`. It fills each API secret that the stack needs and reuses the service's own `API_SECRET` when that service is already set up. When an api-* repository that the stack builds is missing, it renames a downloaded release folder such as `api-media-2.1.0`, or clones the repository. It then starts Docker Desktop when it is not running, and offers to start the bot and its services in Docker.
+5. It prepares `compose.stack.yml`. It fills each API secret that the stack needs and reuses the service's own `API_SECRET` when that service is already set up. When an api-* repository that the stack builds is missing, it looks for a downloaded release of it, also inside the extra folder that Windows' Extract All creates, and moves it into place. Otherwise it clones the repository. It then starts Docker Desktop when it is not running, and offers to start the bot and its services in Docker.
 
 A step that fails says what went wrong, why it matters, and what to do next, and the summary at the end lists it again.
 The steps live in `scripts/bootstrap.py`, which needs only the Python standard library.
