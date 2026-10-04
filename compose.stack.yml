@@ -26,6 +26,9 @@ services:
     environment:
       # One secret, read from this repository's .env, so the bot and the service always agree.
       API_SECRET: ${API_MEDIA_SECRET:?Set API_MEDIA_SECRET in .env}
+    volumes:
+      # An optional YouTube cookies file. YDL_COOKIES_FILE in ../api-media/.env names it.
+      - ../api-media/cookies:/app/cookies:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
