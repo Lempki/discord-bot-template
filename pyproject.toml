@@ -1,6 +1,6 @@
 [project]
 name = "discord-bot-template"
-version = "1.0.2"
+version = "1.0.3"
 license = "MIT"
 license-files = ["LICENSE"]
 description = "A modular discord.py bot template with cogs, per-guild settings, and locale-aware messages."
