@@ -17,6 +17,7 @@ class CoreStrings:
     # General. The placeholder of ping_reply is {latency}.
     bot_channel_only: str = ""
     command_failed: str = ""
+    command_unavailable: str = ""
     ping_reply: str = ""
 
     # Voice. Placeholders are {user} and {channel}.
@@ -121,6 +122,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
     "en": {
         "bot_channel_only": "This command can only be used in the bot channel.",
         "command_failed": "Something went wrong. Try again later.",
+        "command_unavailable": "This command is no longer available. Discord removes it from the menu shortly.",
         "ping_reply": "Pong! {latency} ms.",
         "not_in_voice": "You are not in a voice channel, `{user}`.",
         "bot_not_in_voice": "I am not in a voice channel.",
@@ -218,6 +220,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
     "fi": {
         "bot_channel_only": "Tätä komentoa voi käyttää vain bottikanavalla.",
         "command_failed": "Jokin meni pieleen. Yritä myöhemmin uudelleen.",
+        "command_unavailable": "Tätä komentoa ei ole enää käytössä. Discord poistaa sen valikosta pian.",
         "ping_reply": "Pong! {latency} ms.",
         "not_in_voice": "Et ole äänikanavalla, `{user}`.",
         "bot_not_in_voice": "En ole äänikanavalla.",

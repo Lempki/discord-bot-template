@@ -50,6 +50,7 @@ class BotApp(commands.Bot):
         self.config = config
         self.voice_presence = VoicePresence(self)
         self.tree.on_error = self._on_command_error
+        self._guild_commands_checked = False
         if config.locale not in LOCALES:
             log.warning(f"Unknown LOCALE '{config.locale}'. Falling back to English.")
 
@@ -86,6 +87,10 @@ class BotApp(commands.Bot):
         s = self.strings_for(interaction, private=True)
         if isinstance(error, app_commands.CheckFailure):
             text = s.bot_channel_only
+        elif isinstance(error, app_commands.CommandNotFound):
+            # Discord can still offer a command from a cog that this run did not load.
+            log.info(f"Answered /{error.name}, which this run does not have.")
+            text = s.command_unavailable
         else:
             name = (
                 interaction.command.qualified_name if interaction.command else "unknown"
@@ -123,6 +128,31 @@ class BotApp(commands.Bot):
         """Logs the connected identity. This runs after every reconnect as well."""
         if self.user is not None:
             log.info(f"Logged in as {self.user} (ID: {self.user.id}).")
+        # The servers are only known once the bot is connected, so this cannot run in setup_hook.
+        if self.config.dev_guild_id is None and not self._guild_commands_checked:
+            self._guild_commands_checked = True
+            await self.remove_guild_commands()
+
+    async def remove_guild_commands(self) -> None:
+        """Removes the commands that a development run registered in a single server.
+
+        A run with DEV_GUILD_ID registers its commands in that server only, and they stay there.
+        Without DEV_GUILD_ID every command is global, so a command in one server is a leftover.
+        Discord would offer it next to the global commands, and it would fail.
+        """
+        for guild in self.guilds:
+            try:
+                leftovers = await self.tree.fetch_commands(guild=guild)
+                if not leftovers:
+                    continue
+                self.tree.clear_commands(guild=guild)
+                await self.tree.sync(guild=guild)
+            except discord.HTTPException as error:
+                log.warning(
+                    f"Could not check the commands registered in {guild}: {error}"
+                )
+                continue
+            log.info(f"Removed {len(leftovers)} leftover command(s) from {guild}.")
 
     async def close(self) -> None:
         """Leaves voice, disconnects from Discord, and closes the database."""
