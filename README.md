@@ -113,10 +113,11 @@ chmod +x setup.sh
 The script asks before it installs or starts anything, and it does the following:
 
 1. It installs [uv](https://docs.astral.sh/uv/) when uv is missing. uv also provides Python 3.12 when the machine lacks it.
-2. It offers to install Docker, and the tools that the Docker image includes for running outside Docker, such as FFmpeg. It uses winget on Windows, Homebrew on macOS, and the system package manager on Linux. On Windows it also turns on WSL, which Docker Desktop needs, and says when Windows needs a restart or virtualization is turned off in the firmware. It shows the computer's RAM and offers to cap the memory of Docker Desktop's virtual machine, at a suggested or your own size.
-3. It runs `uv sync`, which installs the locked dependencies into `.venv`.
+2. It offers to install Docker, and in a Git clone also the tools that the Docker image includes for running outside Docker, such as FFmpeg. It uses winget on Windows, Homebrew on macOS, and the system package manager on Linux. On Windows it also turns on WSL, which Docker Desktop needs, and says when Windows needs a restart or virtualization is turned off in the firmware. It shows the computer's RAM and offers to cap the memory of Docker Desktop's virtual machine, at a suggested or your own size.
+3. In a Git clone, it runs `uv sync`, which installs the locked dependencies into `.venv`.
 4. It copies `.env.template` to `.env` on the first run and asks for the bot token, which it reads without showing it.
-5. It prepares `compose.stack.yml`. It fills each API secret that the stack needs and reuses the service's own `API_SECRET` when that service is already set up. When an api-* repository that the stack builds is missing, it looks for a downloaded release of it, also inside the extra folder that Windows' Extract All creates, and moves it into place. Otherwise it clones the repository. It then starts Docker Desktop when it is not running, and offers to start the bot and its services in Docker.
+5. It prepares `compose.stack.yml`. It fills each API secret that the stack needs and reuses the service's own `API_SECRET` when that service is already set up. A downloaded release runs the images that GitHub publishes, so it needs no other repository. In a Git clone, when an api-* repository that the stack builds is missing, it looks for a downloaded release of it, also inside the extra folder that Windows' Extract All creates, and moves it into place. Otherwise it clones the repository. It then starts Docker Desktop when it is not running, and offers to start the bot and its services in Docker.
+6. In a downloaded release, it offers to install new releases automatically every night.
 
 A step that fails says what went wrong, why it matters, and what to do next, and the summary at the end lists it again.
 The steps live in `scripts/bootstrap.py`, which needs only the Python standard library.
@@ -136,7 +137,7 @@ uv run python bot.py
 
 After setup has run once, the run script starts the bot.
 Double-click `run.bat` on Windows, or run `./run.sh` on macOS and Linux.
-It builds and starts the bot and the api-* services in `compose.stack.yml` in Docker in the background.
+It starts the bot and the api-* services in `compose.stack.yml` in Docker in the background.
 It then waits until every service is ready and shows their status.
 The containers then start again whenever Docker starts.
 
@@ -144,18 +145,38 @@ The script also takes an action, such as `run.bat stop` on Windows or `./run.sh 
 
 | Action | What it does |
 |---|---|
-| `start` | Builds and starts everything in Docker and waits until it is ready. It is the default. |
+| `start` | Starts everything in Docker and waits until it is ready. It is the default. |
 | `stop` | Stops the containers. They stay stopped until the next start. |
-| `status` | Shows whether each container runs and is healthy. |
+| `status` | Shows whether each container runs and is healthy, its version, and whether updates are automatic. |
 | `logs` | Follows the logs. Press Ctrl+C to stop following. |
-| `update` | Pulls the latest code, rebuilds on fresh base images, and restarts. |
+| `update` | Installs the newest release. In a Git clone, it pulls the latest code, rebuilds on fresh base images, and restarts. |
+| `schedule` | Installs new releases automatically every night at 04:00. |
+| `unschedule` | Stops installing new releases automatically. |
 | `local` | Runs the project in the terminal without Docker. Press Ctrl+C to stop it. |
 
 When a service crashes right after it starts, the script shows the end of its log and stops it, so it does not restart over and over.
-The `update` action needs a Git clone. In a downloaded release, it explains how to replace the files by hand instead.
-
-The `update` action also pulls the api-* repositories that the stack builds.
+In a Git clone, the `update` action also pulls the api-* repositories that the stack builds.
 The `local` action runs only the bot, which reaches its services at the URLs in `.env`.
+
+### Updates
+
+A downloaded release runs the Docker images that GitHub publishes for every release, such as `ghcr.io/lempki/api-media`.
+A Git clone builds the images from its own files instead.
+
+In a downloaded release, the `update` action takes these steps:
+
+1. It downloads the newest image of the bot and of each service in `compose.stack.yml`.
+2. When the bot's image is new, it replaces the run, setup, and compose files with the ones from the new release. `.env` and the other settings stay as they are.
+3. It restarts everything and waits until every service is ready.
+4. When the new release fails to start, it puts the previous images and files back and starts them again. Later updates skip that release until a newer one appears.
+
+The `schedule` action runs this update every night at 04:00.
+On Windows it adds a task to the Task Scheduler, which runs as soon as the computer is on again when it was off or asleep at that time.
+On macOS and Linux it adds a line to your crontab.
+Each scheduled update writes what it did into `update.log` in the project folder.
+
+A private image needs a GitHub sign-in.
+The first download asks for a [token with the `read:packages` scope](https://github.com/settings/tokens/new?scopes=read:packages&description=Docker+updates), which Docker then remembers.
 
 ### Development
 
@@ -185,6 +206,7 @@ docker compose -f compose.stack.yml up -d --build
 ```
 
 The stack builds each service from its sibling folder and connects them on a private network.
+It also names each service's published image, which a downloaded release runs instead of building it.
 It passes `API_MEDIA_SECRET` from this repository's `.env` to the media service, so the two always agree.
 
 ## Configuration
@@ -308,7 +330,7 @@ Instead, `.template-manifest.toml` lists the core files that every bot keeps ide
 With both repositories cloned side by side, run this from the bot's directory to see which core files have drifted:
 
 ```bash
-uvx --from git+https://github.com/Lempki/dev-standards@v0.2.1 dev-standards template-check --template ../discord-bot-template --diff
+uvx --from git+https://github.com/Lempki/dev-standards@v0.3.0 dev-standards template-check --template ../discord-bot-template --diff
 ```
 
 Add `--apply` to copy the template's version over every drifted file, then review the result with `git diff` before committing.

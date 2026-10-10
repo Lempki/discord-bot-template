@@ -149,3 +149,6 @@ path = ".github/workflows/ci.yml"
 
 [[file]]
 path = ".github/dependabot.yml"
+
+[[file]]
+path = ".github/workflows/release.yml"

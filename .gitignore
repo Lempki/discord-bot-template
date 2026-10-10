@@ -21,3 +21,7 @@ dist/
 .claude/
 assets/audio/*
 !assets/audio/.gitkeep
+
+# What run update leaves in a downloaded release: the previous version and the update log.
+.update/
+update.log
