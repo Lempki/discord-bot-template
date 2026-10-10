@@ -152,3 +152,6 @@ path = ".github/dependabot.yml"
 
 [[file]]
 path = ".github/workflows/release.yml"
+
+[[file]]
+path = ".github/ISSUE_TEMPLATE/idea.yml"
