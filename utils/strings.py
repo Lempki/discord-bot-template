@@ -30,7 +30,7 @@ class CoreStrings:
     skipped: str = ""
     nothing_playing: str = ""
 
-    # Media. Placeholders are {user}, {count}, {title}, and {channel}.
+    # Media. Placeholders are {user}, {count}, {title}, {channel}, and {position}.
     queued_one: str = ""
     queued_many: str = ""
     now_playing: str = ""
@@ -38,6 +38,11 @@ class CoreStrings:
     stopped: str = ""
     paused: str = ""
     resumed: str = ""
+    queue_empty: str = ""
+    queue_now_playing: str = ""
+    queue_next: str = ""
+    queue_line: str = ""
+    queue_more: str = ""
 
     # Help. A section_<cog> field names the section of that cog.
     # A cog without a section field falls back to its own name.
@@ -139,6 +144,11 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "stopped": "Stopped and cleared the queue.",
         "paused": "Paused.",
         "resumed": "Resumed.",
+        "queue_empty": "Nothing is playing, and the queue is empty.",
+        "queue_now_playing": "Now playing: `{title}`",
+        "queue_next": "Up next:",
+        "queue_line": "{position}. {title}, queued by `{user}`",
+        "queue_more": "...and {count} more.",
         "help_title": "Commands",
         "help_empty": "No commands are available to you here.",
         "section_admin": "Admin",
@@ -237,6 +247,11 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "stopped": "Toisto pysäytetty ja jono tyhjennetty.",
         "paused": "Tauotettu.",
         "resumed": "Jatkettu.",
+        "queue_empty": "Mitään ei soi, ja jono on tyhjä.",
+        "queue_now_playing": "Nyt soi: `{title}`",
+        "queue_next": "Seuraavaksi:",
+        "queue_line": "{position}. {title}, jonoon lisännyt `{user}`",
+        "queue_more": "...ja {count} muuta.",
         "help_title": "Komennot",
         "help_empty": "Sinulla ei ole täällä käytettävissä komentoja.",
         "section_admin": "Ylläpito",
@@ -365,6 +380,7 @@ CORE_COMMAND_TEXT: dict[str, dict[str, str]] = {
         "A YouTube, SoundCloud, or Spotify link, or text to search for.": "YouTube-, SoundCloud- tai Spotify-linkki tai hakuteksti.",
         "Stop playing and clear the queue.": "Pysäytä toisto ja tyhjennä jono.",
         "Pause or resume the audio that is playing now.": "Tauota tai jatka nyt soivaa ääntä.",
+        "Show the song playing now and the songs in the queue.": "Näytä nyt soiva kappale ja jonossa olevat kappaleet.",
         "Warn a member. At the warning limit they are kicked, banned, or timed out.": "Varoita jäsentä. Varoitusrajalla jäsen potkitaan, saa porttikiellon tai aikalisän.",
         "The member to warn.": "Varoitettava jäsen.",
         "Why the member is warned.": "Varoituksen syy.",

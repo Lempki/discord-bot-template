@@ -7,7 +7,7 @@ This is a clean and modular Python Discord bot template built with [discord.py](
 * The template uses a cog-based architecture. Each feature group is implemented as an isolated and reloadable module.
 * All configuration is handled through environment variables. No tokens or IDs are hardcoded in the source code.
 * FFmpeg is resolved automatically from the system PATH or from a configurable environment variable.
-* Per-guild audio queue support is included. This ensures safe operation across multiple servers.
+* Per-guild audio queue support is included. This ensures safe operation across multiple servers. `/queue` shows the song playing now and the next songs. The audio streams through api-media, which downloads it with yt-dlp, so YouTube cannot cut a song off partway.
 * Local development is supported through a `.env` file using `python-dotenv`.
 * Audio, image, and video assets are stored as regular files that Git marks as binary.
 * A `Strings` dataclass defines all user-facing messages as named format strings, in English and Finnish. Replies follow each user's Discord language, and `LOCALE` picks the fallback language. The default, `LOCALE=silent`, mutes public replies but still sends private ones such as `/help` and admin replies.
@@ -285,7 +285,7 @@ The following services work alongside bots built from this template and handle f
 
 | Service | Description |
 |---|---|
-| [api-media](https://github.com/Lempki/api-media) | Resolves YouTube, SoundCloud, and Spotify track metadata and stream URLs. Supports Spotify tracks, albums, and playlists. |
+| [api-media](https://github.com/Lempki/api-media) | Resolves YouTube, SoundCloud, and Spotify track metadata, and streams their audio for playback. Supports Spotify tracks, albums, and playlists. |
 | [api-scraper](https://github.com/Lempki/api-scraper) | Scrapes structured data from external websites using configurable CSS or XPath selectors. |
 | [api-scheduler](https://github.com/Lempki/api-scheduler) | Schedules persistent reminders that survive bot restarts and are delivered via Discord webhooks. |
 | [api-morshu](https://github.com/Lempki/api-morshu) | Generates Morshu TTS audio and video from text. |

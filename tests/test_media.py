@@ -7,17 +7,13 @@ import discord
 import pytest
 
 from bot import BotApp
-from cogs.media import GuildPlayer, MediaCog, Track
+from cogs.media import QUEUE_SHOWN, GuildPlayer, MediaCog, Track
 from config import Config, ServiceConfig
 from localization import LOCALES
+from tests.conftest import GUILD_ID, make_interaction, sent_messages
+from utils.audio import MediaAPIClient
 
 EN = LOCALES["en"]
-
-
-@pytest.fixture(autouse=True)
-def no_ffmpeg(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Replaces real FFmpeg sources, which would start an ffmpeg process per track."""
-    monkeypatch.setattr("cogs.media.stream_source", lambda url, ffmpeg: MagicMock())
 
 
 async def media_cog() -> tuple[BotApp, MediaCog]:
@@ -53,7 +49,7 @@ def connected_guild() -> MagicMock:
 async def test_player_plays_queue_in_order_and_announces_each_track() -> None:
     bot, cog = await media_cog()
     cog.client.get_info = AsyncMock(
-        side_effect=lambda **kw: {"stream_url": "s", "title": kw["url"]}
+        side_effect=lambda **kw: {"webpage_url": kw["url"], "title": kw["url"]}
     )
     played: list[str] = []
     bot.voice_presence.play = AsyncMock(
@@ -74,10 +70,29 @@ async def test_player_plays_queue_in_order_and_announces_each_track() -> None:
     ]
 
 
+async def test_player_streams_the_page_url_through_the_service() -> None:
+    bot, cog = await media_cog()
+    cog.client.get_info = AsyncMock(
+        return_value={"webpage_url": "https://youtu.be/x", "title": "Song"}
+    )
+    playing: list[str | None] = []
+    player = GuildPlayer(cog, connected_guild())
+    bot.voice_presence.play = AsyncMock(
+        side_effect=lambda vc, source: playing.append(player.now_playing)
+    )  # type: ignore[method-assign]
+
+    player.enqueue([Track("song name", "Ada", MagicMock(send=AsyncMock()))])
+    await asyncio.wait_for(player._task, timeout=1)  # type: ignore[arg-type]
+
+    assert cog.client.audio_source.call_args.args[0] == "https://youtu.be/x"
+    assert playing == ["Song"]
+    assert player.now_playing is None
+
+
 async def test_player_skips_a_track_that_fails_to_load() -> None:
     bot, cog = await media_cog()
     cog.client.get_info = AsyncMock(
-        side_effect=[RuntimeError("down"), {"stream_url": "s"}]
+        side_effect=[RuntimeError("down"), {"webpage_url": "https://a/2"}]
     )
     bot.voice_presence.play = AsyncMock()  # type: ignore[method-assign]
     channel = MagicMock()
@@ -104,4 +119,69 @@ async def test_player_drops_the_queue_when_the_bot_left_voice() -> None:
     await asyncio.wait_for(player._task, timeout=1)  # type: ignore[arg-type]
 
     cog.client.get_info.assert_not_awaited()
-    assert player.queue.empty()
+    assert not player.queue
+
+
+async def test_audio_source_streams_from_the_service_with_the_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ffmpeg = MagicMock()
+    monkeypatch.setattr("utils.audio.discord.FFmpegPCMAudio", ffmpeg)
+    monkeypatch.setattr("utils.audio.discord.PCMVolumeTransformer", MagicMock())
+    client = MediaAPIClient("http://media:8000/", "s3cret")
+
+    client.audio_source("https://youtu.be/x?si=a&t=1", "ffmpeg")
+    await client.aclose()
+
+    url = ffmpeg.call_args.args[0]
+    options = ffmpeg.call_args.kwargs["before_options"]
+    assert (
+        url
+        == "http://media:8000/media/stream?url=https%3A%2F%2Fyoutu.be%2Fx%3Fsi%3Da%26t%3D1"
+    )
+    assert "Authorization: Bearer s3cret\r\n" in options
+    # A reconnect would make the service start the track again from the beginning.
+    assert "-reconnect" not in options
+
+
+@pytest.mark.parametrize(
+    ("track", "label"),
+    [
+        (Track("https://youtu.be/x", "Ada", MagicMock(), "Easy Lover"), "Easy Lover"),
+        (Track("https://youtu.be/x", "Ada", MagicMock()), "<https://youtu.be/x>"),
+        (Track("hotel california", "Ada", MagicMock()), "hotel california"),
+    ],
+)
+def test_track_label(track: Track, label: str) -> None:
+    assert track.label == label
+
+
+async def test_queue_command_lists_the_current_and_waiting_tracks() -> None:
+    _, cog = await media_cog()
+    player = cog.player(MagicMock(id=GUILD_ID))
+    player.now_playing = "Hotel {California}"
+    waiting = [
+        Track(f"https://youtu.be/{n}", "Ada", MagicMock(), f"Song {n}")
+        for n in range(QUEUE_SHOWN + 2)
+    ]
+    player.queue.extend(waiting)
+    interaction = make_interaction()
+
+    await cog.show_queue.callback(cog, interaction)  # type: ignore[arg-type]
+
+    text = "\n".join(sent_messages(interaction))
+    lines = text.splitlines()
+    assert lines[0] == EN.queue_now_playing.format(title="Hotel {California}")
+    assert lines[1] == EN.queue_next
+    assert lines[2] == EN.queue_line.format(position=1, title="Song 0", user="Ada")
+    assert lines[-1] == EN.queue_more.format(count=2)
+    assert len(lines) == 2 + QUEUE_SHOWN + 1
+
+
+async def test_queue_command_without_music() -> None:
+    _, cog = await media_cog()
+    interaction = make_interaction()
+
+    await cog.show_queue.callback(cog, interaction)  # type: ignore[arg-type]
+
+    assert sent_messages(interaction) == [EN.queue_empty]

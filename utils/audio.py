@@ -3,6 +3,7 @@
 import io
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 import discord
 import httpx
@@ -33,11 +34,42 @@ class MediaAPIClient:
     """
 
     def __init__(self, base_url: str, secret: str) -> None:
+        self._base_url = base_url.rstrip("/")
+        self._secret = secret
         self._http = httpx.AsyncClient(
             base_url=base_url,
             headers={"Authorization": f"Bearer {secret}"},
             timeout=120.0,
         )
+
+    def audio_source(
+        self, track_url: str, ffmpeg: str, volume: float = 0.5
+    ) -> discord.AudioSource:
+        """Returns an audio source that plays a track through api-media's /media/stream.
+
+        api-media downloads the audio with yt-dlp, which survives YouTube resetting connections.
+        A direct stream URL held open for a whole track does not.
+        The FFmpeg reconnect options are left out on purpose.
+        A reconnect would make api-media start the track again from the beginning.
+
+        Args:
+            track_url: The track's page URL, the webpage_url that get_info() returns.
+            ffmpeg: The FFmpeg executable.
+            volume: The playback volume, where 1.0 is unchanged.
+
+        Returns:
+            A volume-adjusted audio source.
+        """
+        url = f"{self._base_url}/media/stream?{urlencode({'url': track_url})}"
+        # FFmpeg takes extra request headers as one string in which each line ends in CRLF.
+        headers = f"Authorization: Bearer {self._secret}\r\n"
+        source = discord.FFmpegPCMAudio(
+            url,
+            executable=ffmpeg,
+            before_options=f'-headers "{headers}"',
+            options="-vn",
+        )
+        return discord.PCMVolumeTransformer(source, volume=volume)
 
     async def get_info(
         self, url: str | None = None, query: str | None = None
