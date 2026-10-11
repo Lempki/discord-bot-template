@@ -3,7 +3,7 @@
 import io
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 import discord
 import httpx
@@ -15,8 +15,17 @@ __all__ = [
     "is_spotify_collection",
     "is_url",
     "is_youtube_playlist",
+    "source_name",
     "stream_source",
 ]
+
+# The sites that messages name, by the domain of a link.
+_SOURCE_NAMES = (
+    ("youtube.com", "YouTube"),
+    ("youtu.be", "YouTube"),
+    ("soundcloud.com", "SoundCloud"),
+    ("spotify.com", "Spotify"),
+)
 
 # Reconnect options keep long streams alive when the remote host briefly drops the connection.
 _STREAM_OPTIONS = {
@@ -98,6 +107,17 @@ class MediaAPIClient:
 def is_url(text: str) -> bool:
     """Returns whether text is an HTTP or HTTPS URL rather than a search query."""
     return text.startswith(("http://", "https://"))
+
+
+def source_name(query: str) -> str:
+    """Names the site that a link comes from, for messages. Search text goes to YouTube."""
+    if not is_url(query):
+        return "YouTube"
+    host = (urlsplit(query).hostname or "").removeprefix("www.")
+    for domain, name in _SOURCE_NAMES:
+        if host == domain or host.endswith(f".{domain}"):
+            return name
+    return host
 
 
 def is_spotify_collection(url: str) -> bool:

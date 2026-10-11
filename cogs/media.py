@@ -3,9 +3,10 @@
 import asyncio
 import contextlib
 import logging
+import time
 from collections import deque
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import discord
 from discord import app_commands
@@ -16,6 +17,7 @@ from utils.audio import (
     is_spotify_collection,
     is_url,
     is_youtube_playlist,
+    source_name,
 )
 from utils.checks import guild_of, in_bot_channel
 from utils.replies import chunk_lines, finish, respond
@@ -39,13 +41,15 @@ class Track:
         channel: Where to announce the track.
             Interaction tokens expire after 15 minutes.
             The player therefore posts to the channel instead of replying to the command.
-        title: The title when it is known before the track starts, as for playlist entries.
+        title: The title when it is known before the track starts.
+        duration: The length in seconds when it is known, which the wait estimate needs.
     """
 
     query: str
     requested_by: str
     channel: discord.abc.Messageable
     title: str | None = None
+    duration: int | None = None
 
     @property
     def label(self) -> str:
@@ -65,11 +69,49 @@ class GuildPlayer:
         # A deque rather than an asyncio.Queue, so that /queue can list the waiting tracks.
         self.queue: deque[Track] = deque()
         self.now_playing: str | None = None
+        # When the current track started and how long it is, for the wait estimate.
+        self.started_at: float | None = None
+        self.now_playing_duration: int | None = None
         self._task: asyncio.Task[None] | None = None
 
-    def enqueue(self, tracks: list[Track]) -> None:
-        """Adds tracks to the queue and starts playing if the player is idle."""
-        self.queue.extend(tracks)
+    @property
+    def idle(self) -> bool:
+        """Whether nothing plays and nothing waits, so a new track starts at once."""
+        busy = self._task is not None and not self._task.done()
+        return not busy and self.now_playing is None and not self.queue
+
+    def wait_seconds(self, position: int) -> int | None:
+        """Estimates how long until the track at a queue position starts.
+
+        Args:
+            position: The place in the queue, where 1 is the track after the current one.
+
+        Returns:
+            The seconds, or None when a track ahead has an unknown length.
+        """
+        total = 0.0
+        if self.now_playing is not None:
+            if self.now_playing_duration is None or self.started_at is None:
+                return None
+            played = time.monotonic() - self.started_at
+            total += max(0.0, self.now_playing_duration - played)
+        for track in list(self.queue)[: position - 1]:
+            if track.duration is None:
+                return None
+            total += track.duration
+        return round(total)
+
+    def enqueue(self, tracks: list[Track], *, first: bool = False) -> None:
+        """Adds tracks to the queue and starts playing if the player is idle.
+
+        Args:
+            tracks: The tracks in the order they should play.
+            first: Whether they go before the waiting tracks, right after the current one.
+        """
+        if first:
+            self.queue.extendleft(reversed(tracks))
+        else:
+            self.queue.extend(tracks)
         if self._task is None or self._task.done():
             self._task = asyncio.create_task(
                 self._run(), name=f"media-player-{self._guild.id}"
@@ -120,6 +162,8 @@ class GuildPlayer:
             await track.channel.send(message)
         log.info(f"Playing '{title}' in {self._guild}.")
         self.now_playing = title
+        self.now_playing_duration = info.get("duration_seconds") or track.duration
+        self.started_at = time.monotonic()
         source = self._cog.client.audio_source(page_url, bot.config.ffmpeg_path)
         try:
             await bot.voice_presence.play(voice_client, source)
@@ -127,6 +171,8 @@ class GuildPlayer:
             log.warning(f"Playback of '{title}' failed: {error}")
         finally:
             self.now_playing = None
+            self.now_playing_duration = None
+            self.started_at = None
 
 
 class MediaCog(commands.Cog, name="Media"):
@@ -145,28 +191,36 @@ class MediaCog(commands.Cog, name="Media"):
             self._players[guild.id] = GuildPlayer(self, guild)
         return self._players[guild.id]
 
-    async def _expand(self, query: str) -> list[tuple[str, str | None]]:
-        """Turns a playlist or album URL into its tracks, and anything else into itself.
+    async def _resolve(self, query: str) -> list[dict[str, Any]]:
+        """Looks up the tracks that a link or search text stands for.
+
+        A playlist or album gives its tracks.
+        Anything else gives the one track that it resolves to, such as a search's first result.
+        Queueing that track's own page URL makes the player play exactly the track it named.
 
         Returns:
-            Pairs of the track's URL or search text and its title, which is known for playlists.
+            The tracks' api-media fields, at least webpage_url, in playing order.
         """
         if is_spotify_collection(query) or is_youtube_playlist(query):
             tracks = await self.client.get_playlist(query)
-            return [
-                (t["webpage_url"], t.get("title") or None)
-                for t in tracks
-                if t.get("webpage_url")
-            ]
-        return [(query, None)]
+            return [t for t in tracks if t.get("webpage_url")]
+        if is_url(query):
+            info = await self.client.get_info(url=query)
+        else:
+            info = await self.client.get_info(query=query)
+        return [info]
 
     @app_commands.command(name="play")
     @app_commands.guild_only()
     @in_bot_channel()
+    @app_commands.rename(play_next="next")
     @app_commands.describe(
-        url="A YouTube, SoundCloud, or Spotify link, or text to search for."
+        url="A YouTube, SoundCloud, or Spotify link, or text to search for.",
+        play_next="Put the track first in the queue, so it plays after the current one.",
     )
-    async def play(self, interaction: discord.Interaction, url: str) -> None:
+    async def play(
+        self, interaction: discord.Interaction, url: str, play_next: bool = False
+    ) -> None:
         """Play a link or search result, or add it to the queue."""
         await interaction.response.defer()
         s = self.bot.strings_for(interaction)
@@ -187,26 +241,51 @@ class MediaCog(commands.Cog, name="Media"):
             return
 
         try:
-            queries = await self._expand(url)
+            found = await self._resolve(url)
         except Exception as error:
-            log.warning(f"Could not expand '{url}': {error}")
+            log.warning(f"Could not load '{url}': {error}")
+            found = []
+        if not found:
             await respond(interaction, s.load_error, user=member.display_name)
             await finish(interaction)
             return
 
         await self.bot.voice_presence.connect(member.voice.channel)
         tracks = [
-            Track(q, member.display_name, interaction.channel, title)
-            for q, title in queries
-        ]
-        if len(tracks) > 1:
-            await respond(
-                interaction, s.queued_many, count=len(tracks), user=member.display_name
+            Track(
+                info["webpage_url"],
+                member.display_name,
+                interaction.channel,
+                info.get("title") or None,
+                info.get("duration_seconds"),
             )
-        else:
-            await respond(interaction, s.queued_one, user=member.display_name)
+            for info in found
+        ]
+        player = self.player(guild)
+        idle = player.idle
+        position = 1 if play_next else len(player.queue) + 1
+        wait = player.wait_seconds(position)
+        player.enqueue(tracks, first=play_next)
         log.info(f"Queued {len(tracks)} track(s) from {member} in {guild}.")
-        self.player(guild).enqueue(tracks)
+
+        values = {
+            "user": member.display_name,
+            "source": source_name(url),
+            "position": position,
+            "count": len(tracks),
+            # A title comes from the site, so markdown in it must not change the message.
+            "title": discord.utils.escape_markdown(tracks[0].label),
+        }
+        if len(tracks) > 1:
+            template = s.queued_many
+        elif idle:
+            template = s.queued_now
+        elif wait is not None:
+            template = s.queued_one_wait
+            values["minutes"] = max(1, round(wait / 60))
+        else:
+            template = s.queued_one
+        await respond(interaction, template, **values)
         await finish(interaction)
 
     @app_commands.command(name="stop")
