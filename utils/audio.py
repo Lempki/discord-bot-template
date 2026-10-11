@@ -139,12 +139,17 @@ class MediaAPIClient:
         data: dict[str, Any] = response.json()
         return data
 
-    async def get_playlist(self, url: str) -> list[dict[str, Any]]:
-        """Expands a YouTube playlist or a Spotify album or playlist into its tracks."""
+    async def get_playlist(self, url: str) -> tuple[str | None, list[dict[str, Any]]]:
+        """Expands a YouTube playlist or a Spotify album or playlist into its tracks.
+
+        Returns:
+            The playlist's or album's name, when the site gives one, and its tracks.
+        """
         response = await self._http.get("/media/playlist", params={"url": url})
         response.raise_for_status()
-        tracks: list[dict[str, Any]] = response.json().get("tracks", [])
-        return tracks
+        data = response.json()
+        tracks: list[dict[str, Any]] = data.get("tracks", [])
+        return data.get("title") or None, tracks
 
     async def aclose(self) -> None:
         """Closes the underlying HTTP connection pool."""

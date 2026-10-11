@@ -41,17 +41,23 @@ class CoreStrings:
     queued_one: str = ""
     queued_one_wait: str = ""
     queued_many: str = ""
-    now_playing: str = ""
+    # queued_many_now also uses {more}, the tracks added after the one that starts.
+    queued_many_now: str = ""
+    # A playlist's or album's name with its site, which fills {source}.
+    # The placeholders are {collection} and {source}.
+    collection_on: str = ""
     load_error: str = ""
     play_failed: str = ""
     stopped: str = ""
     paused: str = ""
     resumed: str = ""
+    # /queue. Placeholders are {title}, {position}, {user}, {page}, {pages}, {count}, and {length}.
     queue_empty: str = ""
+    queue_title: str = ""
     queue_now_playing: str = ""
     queue_next: str = ""
     queue_line: str = ""
-    queue_more: str = ""
+    queue_footer: str = ""
     # Queue control. Placeholders are {title}, {position}, and {count}.
     queue_removed: str = ""
     queue_moved: str = ""
@@ -77,6 +83,28 @@ class CoreStrings:
     lyrics_none: str = ""
     lyrics_unavailable: str = ""
     lyrics_footer: str = ""
+    # The now-playing panel.
+    # Placeholders are {source}, {user}, {duration}, {ends}, {started}, {progress}, {count}, {loop}, {volume}.
+    # {ends} and {started} are Discord timestamps, which count in each reader's language.
+    # An empty panel_playing posts no panel.
+    panel_playing: str = ""
+    panel_paused: str = ""
+    panel_ended: str = ""
+    panel_details: str = ""
+    panel_ends: str = ""
+    panel_started: str = ""
+    panel_paused_at: str = ""
+    panel_next: str = ""
+    panel_next_none: str = ""
+    panel_more: str = ""
+    panel_footer: str = ""
+    panel_loop_off: str = ""
+    panel_loop_track: str = ""
+    panel_loop_queue: str = ""
+    panel_shuffle: str = ""
+    panel_queue: str = ""
+    panel_lyrics: str = ""
+    panel_not_listening: str = ""
 
     # Help. A section_<cog> field names the section of that cog.
     # A cog without a section field falls back to its own name.
@@ -180,17 +208,19 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queued_one": "Added **{title}** from {source} to the queue at #{position}.",
         "queued_one_wait": "Added **{title}** from {source} to the queue at #{position}. It plays in about {minutes} min.",
         "queued_many": "Added {count} tracks from {source} to the queue, starting at #{position}.",
-        "now_playing": "Now playing **{title}** from {source} in `{channel}`, added by {user}.",
+        "queued_many_now": "Playing **{title}** from {source}, and added {more} more tracks to the queue.",
+        "collection_on": "{collection} on {source}",
         "load_error": "Could not load the audio. Try again.",
         "play_failed": "Could not play **{title}**, added by {user}. Moving on to the next track.",
         "stopped": "Stopped and cleared the queue.",
         "paused": "Paused.",
         "resumed": "Resumed.",
         "queue_empty": "Nothing is playing, and the queue is empty.",
-        "queue_now_playing": "Now playing: `{title}`",
-        "queue_next": "Up next:",
-        "queue_line": "{position}. {title}, queued by `{user}`",
-        "queue_more": "...and {count} more.",
+        "queue_title": "Queue",
+        "queue_now_playing": "**Now playing:** {title}",
+        "queue_next": "**Up next:**",
+        "queue_line": "`{position}.` {title} · {user}",
+        "queue_footer": "Page {page} of {pages} · {count} tracks · {length}",
         "queue_removed": "Removed **{title}** from the queue.",
         "queue_moved": "Moved **{title}** to #{position}.",
         "queue_shuffled": "Shuffled {count} tracks.",
@@ -211,6 +241,24 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "lyrics_none": "No lyrics were found for **{title}**.",
         "lyrics_unavailable": "The lyrics service could not be reached. Try again later.",
         "lyrics_footer": "Lyrics from LRCLIB",
+        "panel_playing": "Now playing",
+        "panel_paused": "Paused",
+        "panel_ended": "Finished playing",
+        "panel_details": "From {source}, added by {user}",
+        "panel_ends": "{duration} · ends {ends}",
+        "panel_started": "Started {started}",
+        "panel_paused_at": "Paused at {progress}",
+        "panel_next": "Up next",
+        "panel_next_none": "Nothing yet. /play adds more.",
+        "panel_more": "…and {count} more",
+        "panel_footer": "Repeat: {loop} · Volume: {volume}%",
+        "panel_loop_off": "off",
+        "panel_loop_track": "this song",
+        "panel_loop_queue": "the whole queue",
+        "panel_shuffle": "Shuffle",
+        "panel_queue": "Queue",
+        "panel_lyrics": "Lyrics",
+        "panel_not_listening": "Join the bot's voice channel to control the music.",
         "help_title": "Commands",
         "about_text": "**{name}** {version}\nOnline since {since}\nResponse time: {latency} ms\nServers: {servers}",
         "about_link": "Source code: <{url}>",
@@ -309,17 +357,19 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queued_one": "Lisätty **{title}** ({source}) jonoon sijalle {position}.",
         "queued_one_wait": "Lisätty **{title}** ({source}) jonoon sijalle {position}. Se soi noin {minutes} min päästä.",
         "queued_many": "Lisätty jonoon {count} kappaletta ({source}) sijalta {position} alkaen.",
-        "now_playing": "Nyt soi **{title}** ({source}) kanavalla `{channel}`, lisännyt {user}.",
+        "queued_many_now": "Soitetaan **{title}** ({source}), ja jonoon lisätty {more} muuta kappaletta.",
+        "collection_on": "{collection} – {source}",
         "load_error": "Äänen lataaminen epäonnistui. Yritä uudelleen.",
         "play_failed": "Kappaletta **{title}** ei voitu soittaa, lisännyt {user}. Siirrytään seuraavaan.",
         "stopped": "Toisto pysäytetty ja jono tyhjennetty.",
         "paused": "Tauotettu.",
         "resumed": "Jatkettu.",
         "queue_empty": "Mitään ei soi, ja jono on tyhjä.",
-        "queue_now_playing": "Nyt soi: `{title}`",
-        "queue_next": "Seuraavaksi:",
-        "queue_line": "{position}. {title}, jonoon lisännyt `{user}`",
-        "queue_more": "...ja {count} muuta.",
+        "queue_title": "Jono",
+        "queue_now_playing": "**Nyt soi:** {title}",
+        "queue_next": "**Seuraavaksi:**",
+        "queue_line": "`{position}.` {title} · {user}",
+        "queue_footer": "Sivu {page}/{pages} · {count} kappaletta · {length}",
         "queue_removed": "Poistettu **{title}** jonosta.",
         "queue_moved": "Siirretty **{title}** sijalle {position}.",
         "queue_shuffled": "Sekoitettu {count} kappaletta.",
@@ -340,6 +390,24 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "lyrics_none": "Kappaleelle **{title}** ei löytynyt sanoja.",
         "lyrics_unavailable": "Sanapalveluun ei saatu yhteyttä. Yritä myöhemmin uudelleen.",
         "lyrics_footer": "Sanat: LRCLIB",
+        "panel_playing": "Nyt soi",
+        "panel_paused": "Tauolla",
+        "panel_ended": "Soitto päättyi",
+        "panel_details": "Lähde: {source}, lisännyt {user}",
+        "panel_ends": "{duration} · päättyy {ends}",
+        "panel_started": "Alkoi {started}",
+        "panel_paused_at": "Tauolla kohdassa {progress}",
+        "panel_next": "Seuraavaksi",
+        "panel_next_none": "Ei vielä mitään. /play lisää kappaleita.",
+        "panel_more": "…ja {count} muuta",
+        "panel_footer": "Toisto: {loop} · Äänenvoimakkuus: {volume} %",
+        "panel_loop_off": "pois",
+        "panel_loop_track": "tämä kappale",
+        "panel_loop_queue": "koko jono",
+        "panel_shuffle": "Sekoita",
+        "panel_queue": "Jono",
+        "panel_lyrics": "Sanat",
+        "panel_not_listening": "Liity botin äänikanavalle ohjataksesi musiikkia.",
         "help_title": "Komennot",
         "about_text": "**{name}** {version}\nPäällä {since} alkaen\nVasteaika: {latency} ms\nPalvelimia: {servers}",
         "about_link": "Lähdekoodi: <{url}>",
@@ -494,7 +562,7 @@ CORE_COMMAND_TEXT: dict[str, dict[str, str]] = {
         "A song to look up. Leave it out for the playing song.": "Haettava kappale. Jätä pois, niin haetaan soiva kappale.",
         "Stop playing and clear the queue.": "Pysäytä toisto ja tyhjennä jono.",
         "Pause or resume the audio that is playing now.": "Tauota tai jatka nyt soivaa ääntä.",
-        "Show the song playing now and the songs in the queue.": "Näytä nyt soiva kappale ja jonossa olevat kappaleet.",
+        "Show the playing song and the queue, only to you.": "Näytä soiva kappale ja jono vain sinulle.",
         "Warn a member. At the warning limit they are kicked, banned, or timed out.": "Varoita jäsentä. Varoitusrajalla jäsen potkitaan, saa porttikiellon tai aikalisän.",
         "The member to warn.": "Varoitettava jäsen.",
         "Why the member is warned.": "Varoituksen syy.",
