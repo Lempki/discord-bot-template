@@ -6,14 +6,16 @@ import logging
 import random
 import time
 from collections import OrderedDict, deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 import discord
+import httpx
 from discord import app_commands
 from discord.ext import commands
 
 from utils import database
+from utils.about import IDLE_STATUS, listening_to
 from utils.audio import (
     MediaAPIClient,
     is_spotify_collection,
@@ -22,7 +24,7 @@ from utils.audio import (
     source_name,
 )
 from utils.checks import guild_of, in_bot_channel
-from utils.replies import chunk_lines, finish, respond
+from utils.replies import chunk_lines, finish, mark_replied, respond
 
 if TYPE_CHECKING:
     from bot import BotApp
@@ -57,6 +59,25 @@ SEARCH_SOURCES = [
 ]
 SEARCH_SITE_NAMES = {choice.value: choice.name for choice in SEARCH_SOURCES}
 
+LOOP_MODES = [
+    app_commands.Choice(name="Off", value="off"),
+    app_commands.Choice(name="This song", value="track"),
+    app_commands.Choice(name="The whole queue", value="queue"),
+]
+
+# /previous can go back this many songs.
+HISTORY_SIZE = 20
+
+# A song that stopped this close to its end counts as finished, not skipped.
+END_TOLERANCE_SECONDS = 3
+
+# The voice channel status shows this before the song's title, and holds 500 characters.
+CHANNEL_STATUS_PREFIX = "🎵 "
+CHANNEL_STATUS_LIMIT = 500
+
+# An embed's text holds this many characters, so longer lyrics are cut at a line break.
+LYRICS_LIMIT = 4096
+
 
 def escape(text: str) -> str:
     """Shows a title or a member's name as typed, so markdown in it cannot change a message."""
@@ -67,6 +88,23 @@ def escape(text: str) -> str:
 def link(text: str, url: str) -> str:
     """Makes text a link to url without the preview card that Discord adds to bare links."""
     return f"[{escape(text)}](<{url}>)"
+
+
+def clock(seconds: float) -> str:
+    """Formats seconds as M:SS, or as H:MM:SS from an hour on."""
+    whole = max(0, int(seconds))
+    hours, rest = divmod(whole, 3600)
+    minutes, secs = divmod(rest, 60)
+    return f"{hours}:{minutes:02d}:{secs:02d}" if hours else f"{minutes}:{secs:02d}"
+
+
+def cut_lyrics(lyrics: str, limit: int = LYRICS_LIMIT) -> str:
+    """Shortens lyrics to fit an embed, ending at a whole line with an ellipsis."""
+    if len(lyrics) <= limit:
+        return lyrics
+    cut = lyrics[: limit - 2]
+    end = cut.rfind("\n")
+    return (cut[:end] if end > 0 else cut).rstrip() + "\n…"
 
 
 @dataclass(frozen=True)
@@ -119,6 +157,14 @@ class GuildPlayer:
         # When the current track started and how long it is, for the wait estimate.
         self.started_at: float | None = None
         self.now_playing_duration: int | None = None
+        # The playing track with its page and title filled in, for /nowplaying and repeats.
+        self.current: Track | None = None
+        # The tracks that played, newest last, for /previous.
+        self.history: deque[Track] = deque(maxlen=HISTORY_SIZE)
+        # off, track, or queue, as /loop sets it.
+        self.loop = "off"
+        # Set while /previous stops the current track, which then stays out of the history.
+        self.going_back = False
         self._task: asyncio.Task[None] | None = None
 
     @property
@@ -225,17 +271,39 @@ class GuildPlayer:
             self._task.cancel()
 
     async def _run(self) -> None:
-        while self.queue:
-            track = self.queue.popleft()
-            voice_client = self._guild.voice_client
-            if (
-                not isinstance(voice_client, discord.VoiceClient)
-                or not voice_client.is_connected()
-            ):
-                # The bot left voice, so the rest of the queue has no listener.
-                self.clear()
-                return
-            await self._play(track, voice_client)
+        channel: discord.abc.Connectable | None = None
+        try:
+            while self.queue:
+                track = self.queue.popleft()
+                voice_client = self._guild.voice_client
+                if (
+                    not isinstance(voice_client, discord.VoiceClient)
+                    or not voice_client.is_connected()
+                ):
+                    # The bot left voice, so the rest of the queue has no listener.
+                    self.clear()
+                    return
+                channel = voice_client.channel
+                await self._play(track, voice_client)
+        finally:
+            # The statuses keep the last song between tracks and clear when the music ends.
+            await self._cog.show_idle(channel)
+
+    def _after(self, played: Track, finished: bool) -> None:
+        """Records a track that stopped and repeats it as /loop asks.
+
+        Args:
+            played: The track with its page and title filled in.
+            finished: Whether it played to its end rather than being skipped.
+        """
+        if self.going_back:
+            self.going_back = False
+        else:
+            self.history.append(played)
+        if self.loop == "track" and finished:
+            self.queue.appendleft(played)
+        elif self.loop == "queue":
+            self.queue.append(played)
 
     async def _play(self, track: Track, voice_client: discord.VoiceClient) -> None:
         bot = self._cog.bot
@@ -263,9 +331,14 @@ class GuildPlayer:
         ):
             await track.channel.send(message)
         log.info(f"Playing '{title}' in {self._guild}.")
+        duration = info.get("duration_seconds") or track.duration
+        played = replace(track, query=page_url, title=title, duration=duration)
+        self.current = played
         self.now_playing = title
-        self.now_playing_duration = info.get("duration_seconds") or track.duration
-        self.started_at = time.monotonic()
+        self.now_playing_duration = duration
+        started = time.monotonic()
+        self.started_at = started
+        await self._cog.show_playing(voice_client.channel, title)
         volume = await self._cog.volume(self._guild.id) / 100
         source = self._cog.client.audio_source(
             page_url, bot.config.ffmpeg_path, volume=volume
@@ -275,9 +348,13 @@ class GuildPlayer:
         except Exception as error:
             log.warning(f"Playback of '{title}' failed: {error}")
         finally:
+            listened = time.monotonic() - started
+            finished = duration is None or listened >= duration - END_TOLERANCE_SECONDS
+            self.current = None
             self.now_playing = None
             self.now_playing_duration = None
             self.started_at = None
+            self._after(played, finished)
 
 
 class MediaCog(commands.Cog, name="Media"):
@@ -293,6 +370,9 @@ class MediaCog(commands.Cog, name="Media"):
         self._suggestions: OrderedDict[
             tuple[str, str], list[app_commands.Choice[str]]
         ] = OrderedDict()
+        self._status = IDLE_STATUS
+        # Servers that refused the voice channel status, which are not asked again.
+        self._status_refused: set[int] = set()
 
     def player(self, guild: discord.Guild) -> GuildPlayer:
         """Returns the guild's player, creating it on first use."""
@@ -400,7 +480,7 @@ class MediaCog(commands.Cog, name="Media"):
         player.enqueue(tracks, first=play_next)
         log.info(f"Queued {len(tracks)} track(s) from {member} in {guild}.")
 
-        values = {
+        values: dict[str, Any] = {
             "user": member.display_name,
             "source": named,
             "position": position,
@@ -658,16 +738,180 @@ class MediaCog(commands.Cog, name="Media"):
             voice_client.source.volume = percent / 100
         await self._queue_reply(interaction, s.volume_set, volume=percent)
 
+    @app_commands.command(name="previous")
+    @app_commands.guild_only()
+    @in_bot_channel()
+    @app_commands.checks.cooldown(CONTROL_RATE, CONTROL_PER_SECONDS)
+    async def previous(self, interaction: discord.Interaction) -> None:
+        """Go back to the song that played before."""
+        s = self.bot.strings_for(interaction)
+        guild = guild_of(interaction)
+        player = self.player(guild)
+        voice_client = guild.voice_client
+        if not isinstance(voice_client, discord.VoiceClient) or not (
+            voice_client.is_connected()
+        ):
+            await self._queue_reply(interaction, s.bot_not_in_voice)
+            return
+        if not player.history:
+            await self._queue_reply(interaction, s.previous_none)
+            return
+        earlier = player.history.pop()
+        if player.current is not None and (
+            voice_client.is_playing() or voice_client.is_paused()
+        ):
+            # The current song comes back after the earlier one, from its start.
+            player.queue.appendleft(player.current)
+            player.queue.appendleft(earlier)
+            player.going_back = True
+            voice_client.stop()
+        else:
+            player.enqueue([earlier], first=True)
+        await self._queue_reply(
+            interaction, s.previous_playing, title=earlier.linked_title
+        )
+
+    @app_commands.command(name="loop")
+    @app_commands.guild_only()
+    @in_bot_channel()
+    @app_commands.checks.cooldown(CONTROL_RATE, CONTROL_PER_SECONDS)
+    @app_commands.describe(mode="What to repeat.")
+    @app_commands.choices(mode=LOOP_MODES)
+    async def loop(
+        self, interaction: discord.Interaction, mode: app_commands.Choice[str]
+    ) -> None:
+        """Repeat the current song or the whole queue."""
+        s = self.bot.strings_for(interaction)
+        self.player(guild_of(interaction)).loop = mode.value
+        template = {"off": s.loop_off, "track": s.loop_track, "queue": s.loop_queue}
+        await self._queue_reply(interaction, template[mode.value])
+
+    @app_commands.command(name="nowplaying")
+    @app_commands.guild_only()
+    async def now_playing(self, interaction: discord.Interaction) -> None:
+        """Show the playing song and its link, only to you."""
+        s = self.bot.strings_for(interaction, private=True)
+        player = self._players.get(guild_of(interaction).id)
+        track = player.current if player is not None else None
+        if player is None or track is None or player.started_at is None:
+            await respond(interaction, s.nothing_playing, ephemeral=True)
+            return
+        elapsed = time.monotonic() - player.started_at
+        values: dict[str, Any] = {
+            "title": track.linked_title,
+            "source": track.source or source_name(track.query),
+            "user": escape(track.requested_by),
+            "elapsed": clock(elapsed),
+        }
+        if track.duration:
+            template = s.nowplaying_text
+            values["elapsed"] = clock(min(elapsed, track.duration))
+            values["duration"] = clock(track.duration)
+        else:
+            template = s.nowplaying_open
+        await respond(interaction, template, ephemeral=True, **values)
+
+    @app_commands.command(name="lyrics")
+    @app_commands.guild_only()
+    @in_bot_channel()
+    @app_commands.checks.cooldown(CONTROL_RATE, CONTROL_PER_SECONDS)
+    @app_commands.describe(song="A song to look up. Leave it out for the playing song.")
+    async def lyrics(
+        self, interaction: discord.Interaction, song: str | None = None
+    ) -> None:
+        """Show the lyrics of the playing song, or of a song you name."""
+        await interaction.response.defer(ephemeral=True)
+        s = self.bot.strings_for(interaction, private=True)
+        player = self._players.get(guild_of(interaction).id)
+        title, duration = song, None
+        if title is None and player is not None and player.current is not None:
+            title, duration = player.current.title, player.current.duration
+        if not title:
+            await respond(interaction, s.lyrics_nothing, ephemeral=True)
+            await finish(interaction)
+            return
+        try:
+            found = await self.client.get_lyrics(title, duration)
+        except httpx.HTTPStatusError as error:
+            missing = error.response.status_code == 404
+            template = s.lyrics_none if missing else s.lyrics_unavailable
+            await respond(interaction, template, ephemeral=True, title=escape(title))
+            await finish(interaction)
+            return
+        except httpx.HTTPError as error:
+            log.warning(f"Could not look up lyrics for '{title}': {error!r}")
+            await respond(interaction, s.lyrics_unavailable, ephemeral=True)
+            await finish(interaction)
+            return
+        embed = discord.Embed(
+            title=f"{found['track']} – {found['artist']}"[:256],
+            description=cut_lyrics(found["lyrics"]),
+        )
+        if s.lyrics_footer:
+            embed.set_footer(text=s.lyrics_footer)
+        await interaction.followup.send(embed=embed, ephemeral=True)
+        mark_replied(interaction)
+
     async def cog_load(self) -> None:
         """Logs that the cog is ready."""
         log.info(f"{self.qualified_name} cog loaded.")
 
     async def cog_unload(self) -> None:
-        """Stops every player and closes the media API client."""
+        """Stops every player, restores the bot's status, and closes the media API client."""
         for player in self._players.values():
             player.cancel()
         with contextlib.suppress(Exception):
+            await self._set_bot_status(IDLE_STATUS)
+        with contextlib.suppress(Exception):
             await self.client.aclose()
+
+    async def show_playing(self, channel: discord.abc.Connectable, title: str) -> None:
+        """Shows a song that starts in its voice channel's status and in the bot's status."""
+        await self._set_channel_status(channel, f"{CHANNEL_STATUS_PREFIX}{title}")
+        await self._refresh_bot_status()
+
+    async def show_idle(self, channel: discord.abc.Connectable | None) -> None:
+        """Clears the voice channel's status and the bot's status when the music ends."""
+        if channel is not None:
+            await self._set_channel_status(channel, None)
+        await self._refresh_bot_status()
+
+    async def _refresh_bot_status(self) -> None:
+        """Shows the song while exactly one server plays, because the status is the same in all."""
+        playing = [p.now_playing for p in self._players.values() if p.now_playing]
+        await self._set_bot_status(playing[0] if len(playing) == 1 else IDLE_STATUS)
+
+    async def _set_bot_status(self, name: str) -> None:
+        if name == self._status:
+            return
+        self._status = name
+        try:
+            await self.bot.change_presence(activity=listening_to(name))
+        except Exception as error:
+            log.warning(f"Could not change the bot's status: {error!r}")
+
+    async def _set_channel_status(
+        self, channel: discord.abc.Connectable, status: str | None
+    ) -> None:
+        """Sets the text under a voice channel's name, or clears it with None.
+
+        It needs the Set Voice Channel Status permission, which a server may not grant.
+        A server that refuses is not asked again until the bot restarts.
+        """
+        if not isinstance(channel, discord.VoiceChannel):
+            return
+        if channel.guild.id in self._status_refused:
+            return
+        text = status[:CHANNEL_STATUS_LIMIT] if status else None
+        try:
+            await channel.edit(status=text)
+        except discord.Forbidden:
+            self._status_refused.add(channel.guild.id)
+            log.info(
+                f"{channel.guild} does not let the bot set voice channel statuses."
+            )
+        except discord.HTTPException as error:
+            log.warning(f"Could not set the status of {channel}: {error}")
 
 
 def suggestion_name(result: dict[str, Any]) -> str:

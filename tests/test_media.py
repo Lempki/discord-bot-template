@@ -2,11 +2,13 @@
 
 import asyncio
 import time
+from dataclasses import replace
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import discord
+import httpx
 import pytest
 from discord import app_commands
 
@@ -16,6 +18,8 @@ from cogs.media import (
     GuildPlayer,
     MediaCog,
     Track,
+    clock,
+    cut_lyrics,
     link,
     suggestion_name,
 )
@@ -639,3 +643,250 @@ async def test_play_names_the_chosen_search_site() -> None:
 
     cog.client.get_info.assert_awaited_once_with(query="b", source="soundcloud")
     assert "from SoundCloud" in sent_messages(interaction)[0]
+
+
+def song(name: str, duration: int | None = 210) -> Track:
+    return Track(f"https://youtu.be/{name}", "Ada", MagicMock(), name, duration)
+
+
+def playing_guild(*, playing: bool = True) -> tuple[MagicMock, MagicMock]:
+    """An interaction in a guild where the bot is connected and maybe playing."""
+    interaction = make_interaction()
+    voice_client = MagicMock(spec=discord.VoiceClient)
+    voice_client.is_connected.return_value = True
+    voice_client.is_playing.return_value = playing
+    voice_client.is_paused.return_value = False
+    interaction.guild.voice_client = voice_client
+    return interaction, voice_client
+
+
+async def test_previous_plays_the_last_song_and_then_the_current_one_again() -> None:
+    _, cog = await media_cog()
+    player = queued_player(cog, 1)
+    player.history.append(song("Earlier"))
+    player.current = song("Current")
+    interaction, voice_client = playing_guild()
+
+    await cog.previous.callback(cog, interaction)  # type: ignore[arg-type]
+
+    assert titles(player) == ["Earlier", "Current", "Song 1"]
+    assert player.going_back
+    voice_client.stop.assert_called_once()
+    assert sent_messages(interaction) == [
+        EN.previous_playing.format(title="[Earlier](<https://youtu.be/Earlier>)")
+    ]
+
+
+async def test_previous_without_history_says_so() -> None:
+    _, cog = await media_cog()
+    interaction, _ = playing_guild()
+
+    await cog.previous.callback(cog, interaction)  # type: ignore[arg-type]
+
+    assert sent_messages(interaction) == [EN.previous_none]
+
+
+@pytest.mark.parametrize(
+    ("loop", "finished", "queue", "history"),
+    [
+        ("off", True, [], ["Song"]),
+        ("track", True, ["Song"], ["Song"]),
+        ("track", False, [], ["Song"]),
+        ("queue", False, ["Song"], ["Song"]),
+    ],
+    ids=["off", "track-finished", "track-skipped", "queue"],
+)
+async def test_a_stopped_song_is_recorded_and_repeated_as_loop_says(
+    loop: str, finished: bool, queue: list[str], history: list[str]
+) -> None:
+    _, cog = await media_cog()
+    player = cog.player(MagicMock(id=GUILD_ID))
+    player.loop = loop
+
+    player._after(song("Song"), finished)
+
+    assert titles(player) == queue
+    assert [t.title for t in player.history] == history
+
+
+async def test_going_back_leaves_the_stopped_song_out_of_the_history() -> None:
+    _, cog = await media_cog()
+    player = cog.player(MagicMock(id=GUILD_ID))
+    player.going_back = True
+
+    player._after(song("Current"), finished=False)
+
+    assert not player.history
+    assert not player.going_back
+
+
+async def test_loop_sets_the_mode() -> None:
+    _, cog = await media_cog()
+    interaction = make_interaction()
+    mode = app_commands.Choice(name="The whole queue", value="queue")
+
+    await cog.loop.callback(cog, interaction, mode)  # type: ignore[arg-type]
+
+    assert cog.player(MagicMock(id=GUILD_ID)).loop == "queue"
+    assert sent_messages(interaction) == [EN.loop_queue]
+
+
+@pytest.mark.parametrize(
+    ("seconds", "text"), [(0, "0:00"), (75.9, "1:15"), (3725, "1:02:05")]
+)
+def test_clock(seconds: float, text: str) -> None:
+    assert clock(seconds) == text
+
+
+async def test_nowplaying_shows_the_song_and_its_progress_privately() -> None:
+    _, cog = await media_cog()
+    player = cog.player(MagicMock(id=GUILD_ID))
+    player.current = replace(song("Current"), source="Spotify")
+    player.now_playing = "Current"
+    player.started_at = time.monotonic() - 75
+    interaction = make_interaction()
+
+    await cog.now_playing.callback(cog, interaction)  # type: ignore[arg-type]
+
+    assert sent_messages(interaction) == [
+        EN.nowplaying_text.format(
+            title="[Current](<https://youtu.be/Current>)",
+            source="Spotify",
+            user="Ada",
+            elapsed="1:15",
+            duration="3:30",
+        )
+    ]
+    assert interaction.response.send_message.call_args.kwargs["ephemeral"] is True
+
+
+async def test_nowplaying_without_music() -> None:
+    _, cog = await media_cog()
+    interaction = make_interaction()
+
+    await cog.now_playing.callback(cog, interaction)  # type: ignore[arg-type]
+
+    assert sent_messages(interaction) == [EN.nothing_playing]
+
+
+def test_long_lyrics_end_at_a_whole_line() -> None:
+    lyrics = "\n".join(f"Line {n} of the song" for n in range(500))
+
+    cut = cut_lyrics(lyrics)
+
+    assert len(cut) <= 4096
+    assert cut.endswith("of the song\n…")
+
+
+async def test_lyrics_of_the_playing_song_come_in_a_private_embed() -> None:
+    _, cog = await media_cog()
+    player = cog.player(MagicMock(id=GUILD_ID))
+    player.current = song("Eagles - Hotel California", duration=391)
+    cog.client.get_lyrics = AsyncMock(
+        return_value={
+            "track": "Hotel California",
+            "artist": "Eagles",
+            "lyrics": "On a dark desert highway",
+        }
+    )
+    interaction = make_interaction()
+
+    await cog.lyrics.callback(cog, interaction, None)  # type: ignore[arg-type]
+
+    cog.client.get_lyrics.assert_awaited_once_with("Eagles - Hotel California", 391)
+    kwargs = interaction.followup.send.call_args.kwargs
+    assert kwargs["ephemeral"] is True
+    assert kwargs["embed"].title == "Hotel California – Eagles"
+    assert kwargs["embed"].description == "On a dark desert highway"
+    assert kwargs["embed"].footer.text == EN.lyrics_footer
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (
+            httpx.HTTPStatusError(
+                "404", request=MagicMock(), response=MagicMock(status_code=404)
+            ),
+            EN.lyrics_none.format(title="Some song"),
+        ),
+        (httpx.ConnectError("down"), EN.lyrics_unavailable),
+    ],
+    ids=["not-found", "unreachable"],
+)
+async def test_lyrics_explain_why_none_came(error: Exception, expected: str) -> None:
+    _, cog = await media_cog()
+    cog.client.get_lyrics = AsyncMock(side_effect=error)
+    interaction = make_interaction()
+
+    await cog.lyrics.callback(cog, interaction, "Some song")  # type: ignore[arg-type]
+
+    assert sent_messages(interaction) == [expected]
+
+
+async def test_lyrics_need_a_song() -> None:
+    _, cog = await media_cog()
+    interaction = make_interaction()
+
+    await cog.lyrics.callback(cog, interaction, None)  # type: ignore[arg-type]
+
+    assert sent_messages(interaction) == [EN.lyrics_nothing]
+
+
+def voice_channel(guild_id: int = GUILD_ID) -> MagicMock:
+    channel = MagicMock(spec=discord.VoiceChannel)
+    channel.guild = MagicMock(id=guild_id)
+    channel.edit = AsyncMock()
+    return channel
+
+
+async def test_a_playing_song_shows_in_the_channel_and_the_bot_status() -> None:
+    bot, cog = await media_cog()
+    bot.change_presence = AsyncMock()  # type: ignore[method-assign]
+    cog.player(MagicMock(id=GUILD_ID)).now_playing = "Hotel California"
+    channel = voice_channel()
+
+    await cog.show_playing(channel, "Hotel California")
+    await cog.show_playing(channel, "Hotel California")
+
+    channel.edit.assert_awaited_with(status="🎵 Hotel California")
+    # An unchanged bot status is not sent to Discord again.
+    bot.change_presence.assert_awaited_once()
+    assert bot.change_presence.call_args.kwargs["activity"].name == "Hotel California"
+
+
+async def test_the_statuses_clear_when_the_music_ends() -> None:
+    bot, cog = await media_cog()
+    bot.change_presence = AsyncMock()  # type: ignore[method-assign]
+    player = cog.player(MagicMock(id=GUILD_ID))
+    player.now_playing = "Song"
+    channel = voice_channel()
+    await cog.show_playing(channel, "Song")
+    player.now_playing = None
+
+    await cog.show_idle(channel)
+
+    channel.edit.assert_awaited_with(status=None)
+    assert bot.change_presence.call_args.kwargs["activity"].name == "/help"
+
+
+async def test_the_bot_status_stays_on_help_while_two_servers_play() -> None:
+    bot, cog = await media_cog()
+    bot.change_presence = AsyncMock()  # type: ignore[method-assign]
+    cog.player(MagicMock(id=1)).now_playing = "One"
+    cog.player(MagicMock(id=2)).now_playing = "Two"
+
+    await cog.show_playing(voice_channel(1), "One")
+
+    bot.change_presence.assert_not_awaited()
+
+
+async def test_a_server_that_refuses_the_channel_status_is_not_asked_again() -> None:
+    _, cog = await media_cog()
+    channel = voice_channel()
+    channel.edit.side_effect = discord.Forbidden(MagicMock(status=403), "Missing")
+
+    await cog.show_playing(channel, "Song")
+    await cog.show_playing(channel, "Song")
+
+    channel.edit.assert_awaited_once()

@@ -121,6 +121,24 @@ class MediaAPIClient:
         results: list[dict[str, Any]] = response.json().get("results", [])
         return results
 
+    async def get_lyrics(self, title: str, duration: int | None) -> dict[str, Any]:
+        """Looks up a song's lyrics through api-media, which asks LRCLIB.
+
+        Args:
+            title: The song's title, such as a YouTube title with the artist first.
+            duration: The song's length in seconds, which picks the right recording.
+
+        Raises:
+            httpx.HTTPStatusError: With status 404 when no lyrics were found.
+        """
+        params: dict[str, str | int] = {"title": title}
+        if duration:
+            params["duration"] = duration
+        response = await self._http.get("/media/lyrics", params=params)
+        response.raise_for_status()
+        data: dict[str, Any] = response.json()
+        return data
+
     async def get_playlist(self, url: str) -> list[dict[str, Any]]:
         """Expands a YouTube playlist or a Spotify album or playlist into its tracks."""
         response = await self._http.get("/media/playlist", params={"url": url})

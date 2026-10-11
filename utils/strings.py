@@ -63,6 +63,20 @@ class CoreStrings:
     # Volume. The placeholder is {volume}, in percent.
     volume_now: str = ""
     volume_set: str = ""
+    # History and repeat. The placeholder is {title}.
+    previous_playing: str = ""
+    previous_none: str = ""
+    loop_off: str = ""
+    loop_track: str = ""
+    loop_queue: str = ""
+    # /nowplaying. Placeholders are {title}, {source}, {user}, {elapsed}, and {duration}.
+    nowplaying_text: str = ""
+    nowplaying_open: str = ""
+    # /lyrics. The placeholder is {title}.
+    lyrics_nothing: str = ""
+    lyrics_none: str = ""
+    lyrics_unavailable: str = ""
+    lyrics_footer: str = ""
 
     # Help. A section_<cog> field names the section of that cog.
     # A cog without a section field falls back to its own name.
@@ -186,6 +200,17 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queue_nothing_waiting": "No tracks are waiting in the queue.",
         "volume_now": "The volume is {volume}%.",
         "volume_set": "Volume set to {volume}%.",
+        "previous_playing": "Going back to **{title}**.",
+        "previous_none": "There is no earlier song to go back to.",
+        "loop_off": "Repeat is off.",
+        "loop_track": "Repeating the current song.",
+        "loop_queue": "Repeating the whole queue.",
+        "nowplaying_text": "**{title}** from {source}, added by {user}\n{elapsed} / {duration}",
+        "nowplaying_open": "**{title}** from {source}, added by {user}\n{elapsed} played",
+        "lyrics_nothing": "Nothing is playing. Name a song to look up.",
+        "lyrics_none": "No lyrics were found for **{title}**.",
+        "lyrics_unavailable": "The lyrics service could not be reached. Try again later.",
+        "lyrics_footer": "Lyrics from LRCLIB",
         "help_title": "Commands",
         "about_text": "**{name}** {version}\nOnline since {since}\nResponse time: {latency} ms\nServers: {servers}",
         "about_link": "Source code: <{url}>",
@@ -304,6 +329,17 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queue_nothing_waiting": "Jonossa ei odota kappaleita.",
         "volume_now": "Äänenvoimakkuus on {volume} %.",
         "volume_set": "Äänenvoimakkuudeksi asetettu {volume} %.",
+        "previous_playing": "Palataan kappaleeseen **{title}**.",
+        "previous_none": "Aiempaa kappaletta ei ole.",
+        "loop_off": "Toisto on pois päältä.",
+        "loop_track": "Toistetaan nykyistä kappaletta.",
+        "loop_queue": "Toistetaan koko jonoa.",
+        "nowplaying_text": "**{title}** ({source}), lisännyt {user}\n{elapsed} / {duration}",
+        "nowplaying_open": "**{title}** ({source}), lisännyt {user}\nSoinut {elapsed}",
+        "lyrics_nothing": "Mitään ei soi. Kerro haettava kappale.",
+        "lyrics_none": "Kappaleelle **{title}** ei löytynyt sanoja.",
+        "lyrics_unavailable": "Sanapalveluun ei saatu yhteyttä. Yritä myöhemmin uudelleen.",
+        "lyrics_footer": "Sanat: LRCLIB",
         "help_title": "Komennot",
         "about_text": "**{name}** {version}\nPäällä {since} alkaen\nVasteaika: {latency} ms\nPalvelimia: {servers}",
         "about_link": "Lähdekoodi: <{url}>",
@@ -447,6 +483,15 @@ CORE_COMMAND_TEXT: dict[str, dict[str, str]] = {
         "Skip to a track in the queue, dropping the tracks before it.": "Hyppää jonon kappaleeseen ja ohita sitä edeltävät.",
         "Show or change the music volume, from 0 to 100 percent.": "Näytä tai muuta musiikin äänenvoimakkuutta 0–100 prosenttiin.",
         "The new volume. Leave it out to see the current one.": "Uusi äänenvoimakkuus. Jätä pois nähdäksesi nykyisen.",
+        "Go back to the song that played before.": "Palaa edelliseen kappaleeseen.",
+        "Repeat the current song or the whole queue.": "Toista nykyistä kappaletta tai koko jonoa.",
+        "What to repeat.": "Mitä toistetaan.",
+        "Off": "Pois",
+        "This song": "Tämä kappale",
+        "The whole queue": "Koko jono",
+        "Show the playing song and its link, only to you.": "Näytä soiva kappale ja sen linkki vain sinulle.",
+        "Show the lyrics of the playing song, or of a song you name.": "Näytä soivan tai nimeämäsi kappaleen sanat.",
+        "A song to look up. Leave it out for the playing song.": "Haettava kappale. Jätä pois, niin haetaan soiva kappale.",
         "Stop playing and clear the queue.": "Pysäytä toisto ja tyhjennä jono.",
         "Pause or resume the audio that is playing now.": "Tauota tai jatka nyt soivaa ääntä.",
         "Show the song playing now and the songs in the queue.": "Näytä nyt soiva kappale ja jonossa olevat kappaleet.",

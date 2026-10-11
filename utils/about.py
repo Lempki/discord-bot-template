@@ -1,4 +1,4 @@
-"""Reads the bot's name, version, and repository link from its pyproject.toml.
+"""Reads the bot's name, version, and repository link, and builds its status.
 
 The file ships in the Docker image too, so /about shows the release that actually runs.
 """
@@ -8,11 +8,26 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-__all__ = ["ProjectInfo", "read_project_info"]
+import discord
+
+__all__ = ["IDLE_STATUS", "ProjectInfo", "listening_to", "read_project_info"]
 
 log = logging.getLogger(__name__)
 
 PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
+
+# The bot's status while no song plays, which points members to the help command.
+IDLE_STATUS = "/help"
+
+# Discord cuts an activity name at 128 characters.
+ACTIVITY_LIMIT = 128
+
+
+def listening_to(name: str) -> discord.Activity:
+    """Returns the "Listening to ..." status that shows under the bot's name."""
+    return discord.Activity(
+        type=discord.ActivityType.listening, name=name[:ACTIVITY_LIMIT]
+    )
 
 
 @dataclass(frozen=True)
