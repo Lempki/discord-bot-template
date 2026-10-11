@@ -23,4 +23,9 @@ RUN mkdir -p /app/data && chown appuser:appuser /app/data
 ENV PATH="/app/.venv/bin:$PATH" \
     DATABASE_PATH=/app/data/bot.db
 USER appuser
+# While connected to Discord, the bot refreshes /tmp/bot-healthy every 30 seconds.
+# A file older than 90 seconds, or none at all, marks the container unhealthy.
+# Checks run every 5 seconds while the bot starts, so the run script sees it ready quickly.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --start-interval=5s --retries=3 \
+    CMD ["python", "-c", "import os, sys, time; sys.exit(time.time() - os.path.getmtime('/tmp/bot-healthy') > 90)"]
 CMD ["python", "bot.py"]

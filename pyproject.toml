@@ -14,6 +14,9 @@ dependencies = [
     "aiosqlite>=0.20.0",
 ]
 
+[project.urls]
+Repository = "https://github.com/Lempki/discord-bot-template"
+
 [dependency-groups]
 dev = [
     "pytest>=8.3",

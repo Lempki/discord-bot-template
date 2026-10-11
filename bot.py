@@ -13,6 +13,7 @@ from discord.ext import commands
 from config import Config, ConfigError
 from localization import COMMAND_TEXT, LOCALES, Strings
 from utils import database
+from utils.about import read_project_info
 from utils.heartbeat import Heartbeat
 from utils.i18n import SILENT, LocaleTranslator, pick_locale
 from utils.replies import finish, respond
@@ -36,6 +37,8 @@ class BotApp(commands.Bot):
     Attributes:
         config: The settings read from the environment at startup.
         voice_presence: Joins, plays in, and leaves voice channels for every cog.
+        project: The bot's name, version, and repository link, for /about.
+        started_at: When the bot started, for /about.
     """
 
     def __init__(self, config: Config) -> None:
@@ -47,12 +50,19 @@ class BotApp(commands.Bot):
             command_prefix=commands.when_mentioned,
             intents=intents,
             help_command=None,
+            # Shown under the bot's name in every server.
+            activity=discord.Activity(
+                type=discord.ActivityType.listening, name="/help"
+            ),
+            # Messages repeat text from users and from sites, such as song titles.
+            # So no message may ping everyone or a role, while member mentions still work.
+            allowed_mentions=discord.AllowedMentions(everyone=False, roles=False),
         )
         self.config = config
+        self.project = read_project_info()
+        self.started_at = discord.utils.utcnow()
         self.voice_presence = VoicePresence(self)
-        self.heartbeat = (
-            Heartbeat(self, config.heartbeat_url) if config.heartbeat_url else None
-        )
+        self.heartbeat = Heartbeat(self, config.heartbeat_url)
         self.tree.on_error = self._on_command_error
         self._guild_commands_checked = False
         if config.locale not in LOCALES:
@@ -110,14 +120,13 @@ class BotApp(commands.Bot):
     async def setup_hook(self) -> None:
         """Opens the database, loads the cogs, and syncs commands once per process.
 
-        It also starts the heartbeat when HEARTBEAT_URL is set.
+        It also starts the heartbeat, which feeds the health check and HEARTBEAT_URL.
 
         on_ready runs again after every reconnect, so one-time work belongs here instead.
         """
         await database.init(self.config.database_path)
         self.voice_presence.start()
-        if self.heartbeat is not None:
-            self.heartbeat.start()
+        self.heartbeat.start()
         await self.tree.set_translator(LocaleTranslator(COMMAND_TEXT))
         for name in self.config.cogs_to_load:
             await self.load_extension(f"cogs.{name}")
@@ -135,7 +144,10 @@ class BotApp(commands.Bot):
     async def on_ready(self) -> None:
         """Logs the connected identity. This runs after every reconnect as well."""
         if self.user is not None:
-            log.info(f"Logged in as {self.user} (ID: {self.user.id}).")
+            log.info(
+                f"Logged in as {self.user} (ID: {self.user.id}), "
+                f"running {self.project.name} {self.project.version}."
+            )
         # The servers are only known once the bot is connected, so this cannot run in setup_hook.
         if self.config.dev_guild_id is None and not self._guild_commands_checked:
             self._guild_commands_checked = True
@@ -164,8 +176,7 @@ class BotApp(commands.Bot):
 
     async def close(self) -> None:
         """Leaves voice, disconnects from Discord, and closes the database."""
-        if self.heartbeat is not None:
-            await self.heartbeat.stop()
+        await self.heartbeat.stop()
         await self.voice_presence.stop()
         await super().close()
         await database.close()

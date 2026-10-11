@@ -30,8 +30,11 @@ class CoreStrings:
     skipped: str = ""
     nothing_playing: str = ""
 
-    # Media. Placeholders are {user}, {count}, {title}, {channel}, and {position}.
+    # Media. Placeholders are {user}, {count}, {title}, {channel}, {position}, {source}, {minutes}.
+    # {source} names the site, such as YouTube, and {minutes} is the wait.
+    queued_now: str = ""
     queued_one: str = ""
+    queued_one_wait: str = ""
     queued_many: str = ""
     now_playing: str = ""
     load_error: str = ""
@@ -47,6 +50,10 @@ class CoreStrings:
     # Help. A section_<cog> field names the section of that cog.
     # A cog without a section field falls back to its own name.
     help_title: str = ""
+    # The placeholders of about_text are {name}, {version}, {since}, {latency}, and {servers}.
+    # {since} is a Discord timestamp, which each reader's app shows in their own language.
+    about_text: str = ""
+    about_link: str = ""
     help_footer: str = ""
     help_empty: str = ""
     section_admin: str = ""
@@ -137,8 +144,10 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "left_voice": "Left `{channel}`.",
         "skipped": "Skipped.",
         "nothing_playing": "Nothing is playing.",
-        "queued_one": "Added to the queue, `{user}`.",
-        "queued_many": "Added {count} tracks to the queue, `{user}`.",
+        "queued_now": "Playing **{title}** from {source}, `{user}`.",
+        "queued_one": "Added **{title}** from {source} to the queue at #{position}, `{user}`.",
+        "queued_one_wait": "Added **{title}** from {source} to the queue at #{position}. It plays in about {minutes} min, `{user}`.",
+        "queued_many": "Added {count} tracks from {source} to the queue, starting at #{position}, `{user}`.",
         "now_playing": "Now playing `{title}` in `{channel}`.",
         "load_error": "Could not load the audio. Try again, `{user}`.",
         "stopped": "Stopped and cleared the queue.",
@@ -150,6 +159,8 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queue_line": "{position}. {title}, queued by `{user}`",
         "queue_more": "...and {count} more.",
         "help_title": "Commands",
+        "about_text": "**{name}** {version}\nOnline since {since}\nResponse time: {latency} ms\nServers: {servers}",
+        "about_link": "Source code: <{url}>",
         "help_empty": "No commands are available to you here.",
         "section_admin": "Admin",
         "section_help": "Help",
@@ -240,8 +251,10 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "left_voice": "Poistuin kanavalta `{channel}`.",
         "skipped": "Ohitettu.",
         "nothing_playing": "Mitään ei soi.",
-        "queued_one": "Lisätty jonoon, `{user}`.",
-        "queued_many": "Lisätty jonoon {count} kappaletta, `{user}`.",
+        "queued_now": "Soitetaan **{title}** ({source}), `{user}`.",
+        "queued_one": "Lisätty **{title}** ({source}) jonoon sijalle {position}, `{user}`.",
+        "queued_one_wait": "Lisätty **{title}** ({source}) jonoon sijalle {position}. Se soi noin {minutes} min päästä, `{user}`.",
+        "queued_many": "Lisätty jonoon {count} kappaletta ({source}) sijalta {position} alkaen, `{user}`.",
         "now_playing": "Nyt soi `{title}` kanavalla `{channel}`.",
         "load_error": "Äänen lataaminen epäonnistui. Yritä uudelleen, `{user}`.",
         "stopped": "Toisto pysäytetty ja jono tyhjennetty.",
@@ -253,6 +266,8 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queue_line": "{position}. {title}, jonoon lisännyt `{user}`",
         "queue_more": "...ja {count} muuta.",
         "help_title": "Komennot",
+        "about_text": "**{name}** {version}\nPäällä {since} alkaen\nVasteaika: {latency} ms\nPalvelimia: {servers}",
+        "about_link": "Lähdekoodi: <{url}>",
         "help_empty": "Sinulla ei ole täällä käytettävissä komentoja.",
         "section_admin": "Ylläpito",
         "section_help": "Ohje",
@@ -376,6 +391,8 @@ CORE_COMMAND_TEXT: dict[str, dict[str, str]] = {
         "Add a warning": "Lisää varoitus",
         "Show this server's bot settings.": "Näytä tämän palvelimen botin asetukset.",
         "Show the commands you can use here.": "Näytä komennot, joita voit käyttää täällä.",
+        "Show the bot's version, how long it has been online, and its response time.": "Näytä botin versio, käynnissäoloaika ja vasteaika.",
+        "Put the track first in the queue, so it plays after the current one.": "Laita kappale jonon kärkeen, jolloin se soi nykyisen jälkeen.",
         "Play a link or search result, or add it to the queue.": "Soita linkki tai hakutulos, tai lisää se jonoon.",
         "A YouTube, SoundCloud, or Spotify link, or text to search for.": "YouTube-, SoundCloud- tai Spotify-linkki tai hakuteksti.",
         "Stop playing and clear the queue.": "Pysäytä toisto ja tyhjennä jono.",

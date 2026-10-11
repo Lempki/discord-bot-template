@@ -18,7 +18,8 @@ Read it before changing code. When the repositories are cloned side by side, the
 * `utils/` holds shared helpers such as the database module and command checks.
 * `utils/strings.py` holds the core cogs' messages in every language, and `localization.py` adds this bot's own.
 * `utils/moderation.py` holds `issue_warning()`, which `/warn` and the AutoMod escalation share.
-* `utils/heartbeat.py` reports to the heartbeat service in `HEARTBEAT_URL` every 5 minutes while the gateway is connected. The URL works like a password, so it never goes into a log.
+* `utils/heartbeat.py` refreshes `/tmp/bot-healthy` every 30 seconds while the gateway is connected, which the Dockerfile's health check reads. With `HEARTBEAT_URL` set, it also reports to that service every 5 minutes. The URL works like a password, so it never goes into a log.
+* `utils/about.py` reads the name, version, and repository link that `/about` shows from `pyproject.toml`.
 * `utils/automod.py` manages the AutoMod rules the bot owns, which it finds by `creator_id`. Discord does the filtering, so the bot needs no Message Content intent.
 
 ## Template rules

@@ -37,6 +37,9 @@ path = "cogs/voice.py"
 path = "utils/__init__.py"
 
 [[file]]
+path = "utils/about.py"
+
+[[file]]
 path = "utils/audio.py"
 
 [[file]]

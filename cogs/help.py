@@ -1,6 +1,7 @@
-"""The /help command, which lists the commands the user can run, grouped by cog."""
+"""The /help command, which lists the commands the user can run, and /about."""
 
 import logging
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -40,6 +41,11 @@ def _required_permissions(command: AnyCommand) -> discord.Permissions | None:
             return node.default_permissions
         node = node.parent
     return None
+
+
+def _milliseconds(seconds: float) -> str:
+    """Shows a latency in milliseconds, or a question mark before the first heartbeat answers."""
+    return str(round(seconds * 1000)) if math.isfinite(seconds) else "?"
 
 
 def _is_guild_only(command: AnyCommand) -> bool:
@@ -146,6 +152,30 @@ class HelpCog(commands.Cog, name="Help"):
             return
         embeds = build_embeds(sections, s.help_title, s.help_footer)
         await interaction.response.send_message(embeds=embeds, ephemeral=True)
+
+    @app_commands.command(name="about")
+    async def about(self, interaction: discord.Interaction) -> None:
+        """Show the bot's version, how long it has been online, and its response time."""
+        s = self.bot.strings_for(interaction, private=True)
+        project = self.bot.project
+        lines = [
+            s.about_text.format(
+                name=project.name,
+                version=project.version,
+                since=discord.utils.format_dt(self.bot.started_at, "R"),
+                latency=_milliseconds(self.bot.latency),
+                servers=len(self.bot.guilds),
+            )
+        ]
+        if project.repository:
+            lines.append(s.about_link.format(url=project.repository))
+        # Placeholders are filled already, so braces in the values must stay as they are.
+        message = "\n".join(line for line in lines if line)
+        await respond(
+            interaction,
+            message.replace("{", "{{").replace("}", "}}"),
+            ephemeral=True,
+        )
 
     async def cog_load(self) -> None:
         """Logs that the cog is ready."""

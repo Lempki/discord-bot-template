@@ -1,8 +1,10 @@
 """Tests for utils/heartbeat.py, using a fake HTTP session instead of a real service."""
 
 import asyncio
+import os
+from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import aiohttp
 import pytest
@@ -46,17 +48,17 @@ def heartbeat(*, connected: bool) -> Heartbeat:
     return beat
 
 
-async def test_beat_reaches_the_service_while_connected() -> None:
+async def test_report_reaches_the_service_while_connected() -> None:
     session = FakeSession()
 
-    assert await heartbeat(connected=True).beat(session)  # type: ignore[arg-type]
+    assert await heartbeat(connected=True).report(session)  # type: ignore[arg-type]
     assert session.urls == [URL]
 
 
-async def test_no_beat_while_disconnected() -> None:
+async def test_no_report_while_disconnected() -> None:
     session = FakeSession()
 
-    assert not await heartbeat(connected=False).beat(session)  # type: ignore[arg-type]
+    assert not await heartbeat(connected=False).report(session)  # type: ignore[arg-type]
     assert session.urls == []
 
 
@@ -69,10 +71,10 @@ async def test_no_beat_while_disconnected() -> None:
     ],
     ids=["error-status", "connection-error", "timeout"],
 )
-async def test_failed_beat_is_logged_and_survived(
+async def test_failed_report_is_logged_and_survived(
     session: FakeSession, caplog: pytest.LogCaptureFixture
 ) -> None:
-    assert not await heartbeat(connected=True).beat(session)  # type: ignore[arg-type]
+    assert not await heartbeat(connected=True).report(session)  # type: ignore[arg-type]
     assert "heartbeat service" in caplog.text
     # The URL works like a password, so it must never reach the log.
     assert URL not in caplog.text
@@ -109,6 +111,43 @@ async def test_stop_ends_the_background_task() -> None:
     assert beat._task is None
 
 
-def test_bot_has_no_heartbeat_without_a_url() -> None:
-    assert BotApp(Config(discord_token="t")).heartbeat is None
-    assert BotApp(Config(discord_token="t", heartbeat_url=URL)).heartbeat is not None
+async def test_no_report_without_a_url() -> None:
+    session = FakeSession()
+    beat = Heartbeat(MagicMock(), None)
+    beat.connected = True
+
+    assert not await beat.report(session)  # type: ignore[arg-type]
+    assert session.urls == []
+
+
+async def test_loop_refreshes_the_health_file_only_while_connected(
+    tmp_path: Path,
+) -> None:
+    bot = MagicMock()
+    bot.wait_until_ready = AsyncMock()
+    health_file = tmp_path / "bot-healthy"
+    beat = Heartbeat(bot, None, health_file=health_file, health_interval=0.01)
+
+    beat.start()
+    await asyncio.sleep(0.05)
+    assert not health_file.exists()
+
+    beat.connected = True
+    await asyncio.sleep(0.05)
+    await beat.stop()
+    assert health_file.exists()
+
+
+def test_refresh_moves_the_health_file_time_forward(tmp_path: Path) -> None:
+    health_file = tmp_path / "bot-healthy"
+    health_file.touch()
+    os.utime(health_file, (0, 0))
+    beat = Heartbeat(MagicMock(), None, health_file=health_file)
+
+    beat.refresh_health_file()
+
+    assert health_file.stat().st_mtime > 0
+
+
+def test_every_bot_has_a_heartbeat() -> None:
+    assert isinstance(BotApp(Config(discord_token="t")).heartbeat, Heartbeat)
