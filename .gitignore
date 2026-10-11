@@ -25,3 +25,6 @@ assets/audio/*
 # What run update leaves in a downloaded release: the previous version and the update log.
 .update/
 update.log
+
+# Copies of the bot's database that run backup and every update make.
+backups/
