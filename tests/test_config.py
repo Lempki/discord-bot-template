@@ -37,6 +37,19 @@ def test_non_numeric_dev_guild_id_raises() -> None:
         Config.from_env({"DISCORD_TOKEN": "t", "DEV_GUILD_ID": "my-server"})
 
 
+def test_heartbeat_url_is_optional() -> None:
+    assert Config.from_env({"DISCORD_TOKEN": "t"}).heartbeat_url is None
+    config = Config.from_env(
+        {"DISCORD_TOKEN": "t", "HEARTBEAT_URL": " https://hc-ping.com/abc "}
+    )
+    assert config.heartbeat_url == "https://hc-ping.com/abc"
+
+
+def test_heartbeat_url_without_a_scheme_raises() -> None:
+    with pytest.raises(ConfigError, match="HEARTBEAT_URL"):
+        Config.from_env({"DISCORD_TOKEN": "t", "HEARTBEAT_URL": "hc-ping.com/abc"})
+
+
 def test_services_are_discovered_by_name() -> None:
     config = Config.from_env(
         {

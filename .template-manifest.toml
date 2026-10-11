@@ -49,6 +49,9 @@ path = "utils/checks.py"
 path = "utils/database.py"
 
 [[file]]
+path = "utils/heartbeat.py"
+
+[[file]]
 path = "utils/i18n.py"
 
 [[file]]
@@ -89,6 +92,9 @@ path = "tests/test_admin.py"
 
 [[file]]
 path = "tests/test_automod.py"
+
+[[file]]
+path = "tests/test_heartbeat.py"
 
 [[file]]
 path = "tests/test_help.py"

@@ -13,6 +13,7 @@ from discord.ext import commands
 from config import Config, ConfigError
 from localization import COMMAND_TEXT, LOCALES, Strings
 from utils import database
+from utils.heartbeat import Heartbeat
 from utils.i18n import SILENT, LocaleTranslator, pick_locale
 from utils.replies import finish, respond
 from utils.voice import VoicePresence
@@ -49,6 +50,9 @@ class BotApp(commands.Bot):
         )
         self.config = config
         self.voice_presence = VoicePresence(self)
+        self.heartbeat = (
+            Heartbeat(self, config.heartbeat_url) if config.heartbeat_url else None
+        )
         self.tree.on_error = self._on_command_error
         self._guild_commands_checked = False
         if config.locale not in LOCALES:
@@ -106,10 +110,14 @@ class BotApp(commands.Bot):
     async def setup_hook(self) -> None:
         """Opens the database, loads the cogs, and syncs commands once per process.
 
+        It also starts the heartbeat when HEARTBEAT_URL is set.
+
         on_ready runs again after every reconnect, so one-time work belongs here instead.
         """
         await database.init(self.config.database_path)
         self.voice_presence.start()
+        if self.heartbeat is not None:
+            self.heartbeat.start()
         await self.tree.set_translator(LocaleTranslator(COMMAND_TEXT))
         for name in self.config.cogs_to_load:
             await self.load_extension(f"cogs.{name}")
@@ -156,6 +164,8 @@ class BotApp(commands.Bot):
 
     async def close(self) -> None:
         """Leaves voice, disconnects from Discord, and closes the database."""
+        if self.heartbeat is not None:
+            await self.heartbeat.stop()
         await self.voice_presence.stop()
         await super().close()
         await database.close()

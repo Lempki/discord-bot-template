@@ -42,6 +42,7 @@ class Config:
         ffmpeg_path: The FFmpeg executable, either a name on PATH or an absolute path.
         dev_guild_id: A guild that receives commands instantly, or None for global sync.
         services: The api-* services found in the environment, keyed by name.
+        heartbeat_url: The URL of a heartbeat service that hears from the bot while it is online.
     """
 
     discord_token: str
@@ -51,6 +52,7 @@ class Config:
     ffmpeg_path: str = "ffmpeg"
     dev_guild_id: int | None = None
     services: Mapping[str, ServiceConfig] = field(default_factory=dict)
+    heartbeat_url: str | None = None
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> "Config":
@@ -85,6 +87,10 @@ class Config:
         if dev_guild and not dev_guild.isdigit():
             raise ConfigError("DEV_GUILD_ID must be a numeric server ID.")
 
+        heartbeat = environ.get("HEARTBEAT_URL", "").strip()
+        if heartbeat and not heartbeat.startswith(("https://", "http://")):
+            raise ConfigError("HEARTBEAT_URL must start with https:// or http://.")
+
         return cls(
             discord_token=token,
             cogs_to_load=cogs,
@@ -93,6 +99,7 @@ class Config:
             ffmpeg_path=environ.get("FFMPEG_PATH", "").strip() or "ffmpeg",
             dev_guild_id=int(dev_guild) if dev_guild else None,
             services=_read_services(environ),
+            heartbeat_url=heartbeat or None,
         )
 
     def service(self, name: str) -> ServiceConfig:
