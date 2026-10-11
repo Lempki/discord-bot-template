@@ -21,6 +21,7 @@ class CoreStrings:
     ping_reply: str = ""
 
     # Voice. Placeholders are {user} and {channel}.
+    # A reply leaves out {user}, because Discord shows who ran the command above it.
     not_in_voice: str = ""
     bot_not_in_voice: str = ""
     already_same_channel: str = ""
@@ -32,12 +33,15 @@ class CoreStrings:
 
     # Media. Placeholders are {user}, {count}, {title}, {channel}, {position}, {source}, {minutes}.
     # {source} names the site, such as YouTube, and {minutes} is the wait.
+    # Replies to /play leave out {user}, as above.
+    # The player's own lines name who added the track, without a ping.
     queued_now: str = ""
     queued_one: str = ""
     queued_one_wait: str = ""
     queued_many: str = ""
     now_playing: str = ""
     load_error: str = ""
+    play_failed: str = ""
     stopped: str = ""
     paused: str = ""
     resumed: str = ""
@@ -136,20 +140,21 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "command_failed": "Something went wrong. Try again later.",
         "command_unavailable": "This command is no longer available. Discord removes it from the menu shortly.",
         "ping_reply": "Pong! {latency} ms.",
-        "not_in_voice": "You are not in a voice channel, `{user}`.",
+        "not_in_voice": "You are not in a voice channel.",
         "bot_not_in_voice": "I am not in a voice channel.",
-        "already_same_channel": "I am already in your voice channel, `{user}`.",
+        "already_same_channel": "I am already in your voice channel.",
         "joined_voice": "Joined `{channel}`.",
         "moved_voice": "Moved to `{channel}`.",
         "left_voice": "Left `{channel}`.",
         "skipped": "Skipped.",
         "nothing_playing": "Nothing is playing.",
-        "queued_now": "Playing **{title}** from {source}, `{user}`.",
-        "queued_one": "Added **{title}** from {source} to the queue at #{position}, `{user}`.",
-        "queued_one_wait": "Added **{title}** from {source} to the queue at #{position}. It plays in about {minutes} min, `{user}`.",
-        "queued_many": "Added {count} tracks from {source} to the queue, starting at #{position}, `{user}`.",
-        "now_playing": "Now playing `{title}` in `{channel}`.",
-        "load_error": "Could not load the audio. Try again, `{user}`.",
+        "queued_now": "Playing **{title}** from {source}.",
+        "queued_one": "Added **{title}** from {source} to the queue at #{position}.",
+        "queued_one_wait": "Added **{title}** from {source} to the queue at #{position}. It plays in about {minutes} min.",
+        "queued_many": "Added {count} tracks from {source} to the queue, starting at #{position}.",
+        "now_playing": "Now playing **{title}** from {source} in `{channel}`, added by {user}.",
+        "load_error": "Could not load the audio. Try again.",
+        "play_failed": "Could not play **{title}**, added by {user}. Moving on to the next track.",
         "stopped": "Stopped and cleared the queue.",
         "paused": "Paused.",
         "resumed": "Resumed.",
@@ -243,20 +248,21 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "command_failed": "Jokin meni pieleen. Yritä myöhemmin uudelleen.",
         "command_unavailable": "Tätä komentoa ei ole enää käytössä. Discord poistaa sen valikosta pian.",
         "ping_reply": "Pong! {latency} ms.",
-        "not_in_voice": "Et ole äänikanavalla, `{user}`.",
+        "not_in_voice": "Et ole äänikanavalla.",
         "bot_not_in_voice": "En ole äänikanavalla.",
-        "already_same_channel": "Olen jo samalla äänikanavalla, `{user}`.",
+        "already_same_channel": "Olen jo samalla äänikanavalla.",
         "joined_voice": "Liityin kanavalle `{channel}`.",
         "moved_voice": "Siirryin kanavalle `{channel}`.",
         "left_voice": "Poistuin kanavalta `{channel}`.",
         "skipped": "Ohitettu.",
         "nothing_playing": "Mitään ei soi.",
-        "queued_now": "Soitetaan **{title}** ({source}), `{user}`.",
-        "queued_one": "Lisätty **{title}** ({source}) jonoon sijalle {position}, `{user}`.",
-        "queued_one_wait": "Lisätty **{title}** ({source}) jonoon sijalle {position}. Se soi noin {minutes} min päästä, `{user}`.",
-        "queued_many": "Lisätty jonoon {count} kappaletta ({source}) sijalta {position} alkaen, `{user}`.",
-        "now_playing": "Nyt soi `{title}` kanavalla `{channel}`.",
-        "load_error": "Äänen lataaminen epäonnistui. Yritä uudelleen, `{user}`.",
+        "queued_now": "Soitetaan **{title}** ({source}).",
+        "queued_one": "Lisätty **{title}** ({source}) jonoon sijalle {position}.",
+        "queued_one_wait": "Lisätty **{title}** ({source}) jonoon sijalle {position}. Se soi noin {minutes} min päästä.",
+        "queued_many": "Lisätty jonoon {count} kappaletta ({source}) sijalta {position} alkaen.",
+        "now_playing": "Nyt soi **{title}** ({source}) kanavalla `{channel}`, lisännyt {user}.",
+        "load_error": "Äänen lataaminen epäonnistui. Yritä uudelleen.",
+        "play_failed": "Kappaletta **{title}** ei voitu soittaa, lisännyt {user}. Siirrytään seuraavaan.",
         "stopped": "Toisto pysäytetty ja jono tyhjennetty.",
         "paused": "Tauotettu.",
         "resumed": "Jatkettu.",

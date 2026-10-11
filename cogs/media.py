@@ -31,6 +31,11 @@ log = logging.getLogger(__name__)
 QUEUE_SHOWN = 10
 
 
+def escape(text: str) -> str:
+    """Shows a title or a member's name as typed, so markdown in it cannot change a message."""
+    return discord.utils.escape_markdown(text)
+
+
 @dataclass(frozen=True)
 class Track:
     """One queued request.
@@ -43,6 +48,7 @@ class Track:
             The player therefore posts to the channel instead of replying to the command.
         title: The title when it is known before the track starts.
         duration: The length in seconds when it is known, which the wait estimate needs.
+        source: The site that the request named, such as Spotify, for the now-playing line.
     """
 
     query: str
@@ -50,6 +56,7 @@ class Track:
     channel: discord.abc.Messageable
     title: str | None = None
     duration: int | None = None
+    source: str | None = None
 
     @property
     def label(self) -> str:
@@ -152,12 +159,17 @@ class GuildPlayer:
         except Exception as error:
             # The service or the source site failed. The queue moves on to the next track.
             log.warning(f"Could not load '{track.query}': {error}")
-            if message := s.load_error.format(user=track.requested_by):
+            if message := s.play_failed.format(
+                title=escape(track.label), user=escape(track.requested_by)
+            ):
                 await track.channel.send(message)
             return
         title = info.get("title") or track.query
         if message := s.now_playing.format(
-            title=title, channel=voice_client.channel.name
+            title=escape(title),
+            source=track.source or source_name(page_url),
+            channel=voice_client.channel.name,
+            user=escape(track.requested_by),
         ):
             await track.channel.send(message)
         log.info(f"Playing '{title}' in {self._guild}.")
@@ -258,6 +270,7 @@ class MediaCog(commands.Cog, name="Media"):
                 interaction.channel,
                 info.get("title") or None,
                 info.get("duration_seconds"),
+                source_name(url),
             )
             for info in found
         ]
@@ -270,11 +283,10 @@ class MediaCog(commands.Cog, name="Media"):
 
         values = {
             "user": member.display_name,
-            "source": source_name(url),
+            "source": tracks[0].source,
             "position": position,
             "count": len(tracks),
-            # A title comes from the site, so markdown in it must not change the message.
-            "title": discord.utils.escape_markdown(tracks[0].label),
+            "title": escape(tracks[0].label),
         }
         if len(tracks) > 1:
             template = s.queued_many

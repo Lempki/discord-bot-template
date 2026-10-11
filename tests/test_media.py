@@ -60,13 +60,17 @@ async def test_player_plays_queue_in_order_and_announces_each_track() -> None:
     channel.send = AsyncMock()
     player = GuildPlayer(cog, connected_guild())
 
-    player.enqueue([Track(f"https://a/{n}", "Ada", channel) for n in range(3)])
+    player.enqueue(
+        [Track(f"https://a/{n}", "Ada", channel, source="SoundCloud") for n in range(3)]
+    )
     await asyncio.wait_for(player._task, timeout=1)  # type: ignore[arg-type]
 
     assert len(played) == 3
     titles = [call.args[0] for call in channel.send.call_args_list]
     assert titles == [
-        EN.now_playing.format(title=f"https://a/{n}", channel="General")
+        EN.now_playing.format(
+            title=f"https://a/{n}", source="SoundCloud", channel="General", user="Ada"
+        )
         for n in range(3)
     ]
 
@@ -101,12 +105,18 @@ async def test_player_skips_a_track_that_fails_to_load() -> None:
     player = GuildPlayer(cog, connected_guild())
 
     player.enqueue(
-        [Track("https://a/1", "Ada", channel), Track("https://a/2", "Ada", channel)]
+        [
+            Track("https://a/1", "**Ada**", channel, "One"),
+            Track("https://a/2", "Ada", channel),
+        ]
     )
     await asyncio.wait_for(player._task, timeout=1)  # type: ignore[arg-type]
 
     assert bot.voice_presence.play.await_count == 1
-    assert channel.send.call_args_list[0].args[0] == EN.load_error.format(user="Ada")
+    # The failure names the track and who added it, with markdown in the name shown as typed.
+    assert channel.send.call_args_list[0].args[0] == EN.play_failed.format(
+        title="One", user=r"\*\*Ada\*\*"
+    )
 
 
 async def test_player_drops_the_queue_when_the_bot_left_voice() -> None:
@@ -355,3 +365,19 @@ async def test_play_reports_a_track_that_cannot_be_found() -> None:
 
     assert messages == [EN.load_error.format(user="Ada")]
     assert not cog.player(MagicMock(id=GUILD_ID)).queue
+
+
+def test_replies_to_a_command_never_name_its_caller() -> None:
+    # Discord shows who ran a command above its reply, so the reply need not say it again.
+    for language in ("en", "fi"):
+        strings = LOCALES[language]
+        for field in (
+            "not_in_voice",
+            "already_same_channel",
+            "queued_now",
+            "queued_one",
+            "queued_one_wait",
+            "queued_many",
+            "load_error",
+        ):
+            assert "{user}" not in getattr(strings, field), (language, field)
