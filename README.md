@@ -7,12 +7,13 @@ This is a clean and modular Python Discord bot template built with [discord.py](
 * The template uses a cog-based architecture. Each feature group is implemented as an isolated and reloadable module.
 * All configuration is handled through environment variables. No tokens or IDs are hardcoded in the source code.
 * FFmpeg is resolved automatically from the system PATH or from a configurable environment variable.
-* Per-guild audio queue support is included. This ensures safe operation across multiple servers. `/queue` shows the song playing now and the next songs. The audio streams through api-media, which downloads it with yt-dlp, so YouTube cannot cut a song off partway.
+* Per-guild audio queue support is included. This ensures safe operation across multiple servers. `/play` names the track it found, its source, and its place in the queue, with an estimate of when it plays, and its `next` option puts the track first. `/queue` shows the song playing now and the next songs. The audio streams through api-media, which downloads it with yt-dlp, so YouTube cannot cut a song off partway.
 * Local development is supported through a `.env` file using `python-dotenv`.
 * Audio, image, and video assets are stored as regular files that Git marks as binary.
 * A `Strings` dataclass defines all user-facing messages as named format strings, in English and Finnish. Replies follow each user's Discord language, and `LOCALE` picks the fallback language. The default, `LOCALE=silent`, mutes public replies but still sends private ones such as `/help` and admin replies.
 * Moderation builds on Discord's own AutoMod. `/admin automod` manages keyword and preset rules, and blocked messages can count as warnings.
 * The `/help` command lists the loaded commands that the user may run, grouped by cog, in an ephemeral embed. The output reflects whichever cogs are active at runtime with no additional configuration.
+* The `/about` command shows the bot's version, how long it has been online, its response time, and a link to its source code. The bot's status reads "Listening to /help".
 * Dependencies are managed with [uv](https://docs.astral.sh/uv/) and pinned in `uv.lock`, so every machine and container installs the same versions.
 * Setup scripts for Windows and Unix are included. Running `setup.bat` or `setup.sh` installs the dependencies and creates the initial `.env` file in a single step.
 * Tests, linting, and formatting run in CI on every push through the shared [dev-standards](https://github.com/Lempki/dev-standards) workflow.
@@ -115,7 +116,7 @@ The script asks before it installs or starts anything, and it does the following
 1. It installs [uv](https://docs.astral.sh/uv/) when uv is missing. uv also provides Python 3.12 when the machine lacks it.
 2. It offers to install Docker, and in a Git clone also the tools that the Docker image includes for running outside Docker, such as FFmpeg. It uses winget on Windows, Homebrew on macOS, and the system package manager on Linux. On Windows it also turns on WSL, which Docker Desktop needs, and says when Windows needs a restart or virtualization is turned off in the firmware. It shows the computer's RAM and offers to cap the memory of Docker Desktop's virtual machine, at a suggested or your own size.
 3. In a Git clone, it runs `uv sync`, which installs the locked dependencies into `.venv`.
-4. It copies `.env.template` to `.env` on the first run and asks for the bot token, which it reads without showing it.
+4. It copies `.env.template` to `.env` on the first run and asks for the bot token, which it reads without showing it. When `LOCALE` is not set, it explains that the default mutes public replies and asks for the bot's language.
 5. It prepares `compose.stack.yml`. It fills each API secret that the stack needs and reuses the service's own `API_SECRET` when that service is already set up. A downloaded release runs the images that GitHub publishes, so it needs no other repository. In a Git clone, when an api-* repository that the stack builds is missing, it looks for a downloaded release of it, also inside the extra folder that Windows' Extract All creates, and moves it into place. Otherwise it clones the repository. It then starts Docker Desktop when it is not running, and offers to start the bot and its services in Docker.
 6. In a downloaded release, it offers to install new releases automatically every night.
 
@@ -208,6 +209,12 @@ These steps use [healthchecks.io](https://healthchecks.io), which is free for a 
 The check turns green within 5 minutes.
 The service also alerts while the computer sleeps, because the bot is offline then too.
 
+### Health check
+
+While the bot is connected to Discord, it refreshes a small file every 30 seconds, and the Docker image's health check reads its age.
+A bot that is stuck or lost its connection therefore shows as unhealthy in `run.bat status` and in Docker Desktop, not only one that crashed.
+A new release that starts but never connects fails the update's check, so the update puts the previous version back.
+
 ### Development
 
 Run the tests with `uv run pytest`.
@@ -270,7 +277,7 @@ discord-bot-template/
 ├── config.py               # Reads settings and api-* service URLs from the environment.
 ├── localization.py         # This bot's own messages and translations, layered on the core ones.
 ├── cogs/
-│   ├── help.py             # /help command. Lists the loaded commands the user may run, grouped by cog.
+│   ├── help.py             # /help and /about. /help lists the loaded commands the user may run, grouped by cog.
 │   ├── template.py         # Template cog. Use this as a starting point for new features.
 │   ├── voice.py            # /join, /leave, and /skip. The bot leaves on its own when alone or idle.
 │   ├── media.py            # Per-server audio queue with YouTube, SoundCloud, and Spotify support.
@@ -279,6 +286,7 @@ discord-bot-template/
 │   └── events.py           # on_member_join: auto-role assignment and welcome message.
 ├── utils/
 │   ├── audio.py            # MediaAPIClient, URL helpers, and audio sources for files, bytes, and streams.
+│   ├── about.py            # Reads the bot's name, version, and repository link from pyproject.toml.
 │   ├── automod.py          # Creates and edits the AutoMod rules that the bot owns.
 │   ├── checks.py           # Command checks such as in_bot_channel(), and guild_of().
 │   ├── database.py         # Versioned SQLite schema, per-guild settings, and warnings.
