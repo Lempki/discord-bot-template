@@ -81,16 +81,45 @@ class MediaAPIClient:
         return discord.PCMVolumeTransformer(source, volume=volume)
 
     async def get_info(
-        self, url: str | None = None, query: str | None = None
+        self,
+        url: str | None = None,
+        query: str | None = None,
+        source: str = "youtube",
     ) -> dict[str, Any]:
-        """Resolves a URL or search query to track metadata, including a fresh stream_url."""
+        """Resolves a URL or search query to track metadata, including a fresh stream_url.
+
+        Args:
+            url: A track's link.
+            query: Words to search for, used when url is None.
+            source: The site that a search looks on, youtube or soundcloud.
+        """
         params = {
             key: value for key, value in (("url", url), ("query", query)) if value
         }
+        if query and not url:
+            params["source"] = source
         response = await self._http.get("/media/info", params=params)
         response.raise_for_status()
         data: dict[str, Any] = response.json()
         return data
+
+    async def search(
+        self, query: str, source: str, max_results: int
+    ) -> list[dict[str, Any]]:
+        """Returns the first search results on a site, without stream URLs.
+
+        Args:
+            query: The words to search for.
+            source: The site, youtube or soundcloud.
+            max_results: How many results to return at most.
+        """
+        response = await self._http.post(
+            "/media/search",
+            json={"query": query, "source": source, "max_results": max_results},
+        )
+        response.raise_for_status()
+        results: list[dict[str, Any]] = response.json().get("results", [])
+        return results
 
     async def get_playlist(self, url: str) -> list[dict[str, Any]]:
         """Expands a YouTube playlist or a Spotify album or playlist into its tracks."""

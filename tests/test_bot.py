@@ -64,6 +64,19 @@ def fake_guild(guild_id: int) -> MagicMock:
     return guild
 
 
+async def test_cooldown_says_when_to_try_again(bot: BotApp) -> None:
+    interaction = make_interaction()
+    cooldown = app_commands.Cooldown(rate=1, per=10)
+
+    await bot._on_command_error(
+        interaction, app_commands.CommandOnCooldown(cooldown, retry_after=3.2)
+    )
+
+    # A cooldown is also a failed check, which must not read as the bot-channel message.
+    assert sent_messages(interaction) == [LOCALES["en"].cooldown.format(seconds=4)]
+    assert interaction.response.send_message.call_args.kwargs["ephemeral"] is True
+
+
 async def test_leftover_guild_commands_are_removed(
     bot: BotApp, monkeypatch: pytest.MonkeyPatch
 ) -> None:

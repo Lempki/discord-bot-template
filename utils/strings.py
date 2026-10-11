@@ -17,6 +17,8 @@ class CoreStrings:
     # General. The placeholder of ping_reply is {latency}.
     bot_channel_only: str = ""
     command_failed: str = ""
+    # The placeholder of cooldown is {seconds}, the wait before the command works again.
+    cooldown: str = ""
     command_unavailable: str = ""
     ping_reply: str = ""
 
@@ -50,6 +52,17 @@ class CoreStrings:
     queue_next: str = ""
     queue_line: str = ""
     queue_more: str = ""
+    # Queue control. Placeholders are {title}, {position}, and {count}.
+    queue_removed: str = ""
+    queue_moved: str = ""
+    queue_shuffled: str = ""
+    queue_cleared: str = ""
+    queue_skipping_to: str = ""
+    queue_no_position: str = ""
+    queue_nothing_waiting: str = ""
+    # Volume. The placeholder is {volume}, in percent.
+    volume_now: str = ""
+    volume_set: str = ""
 
     # Help. A section_<cog> field names the section of that cog.
     # A cog without a section field falls back to its own name.
@@ -138,6 +151,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
     "en": {
         "bot_channel_only": "This command can only be used in the bot channel.",
         "command_failed": "Something went wrong. Try again later.",
+        "cooldown": "Slow down a little. Try again in {seconds} s.",
         "command_unavailable": "This command is no longer available. Discord removes it from the menu shortly.",
         "ping_reply": "Pong! {latency} ms.",
         "not_in_voice": "You are not in a voice channel.",
@@ -163,6 +177,15 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queue_next": "Up next:",
         "queue_line": "{position}. {title}, queued by `{user}`",
         "queue_more": "...and {count} more.",
+        "queue_removed": "Removed **{title}** from the queue.",
+        "queue_moved": "Moved **{title}** to #{position}.",
+        "queue_shuffled": "Shuffled {count} tracks.",
+        "queue_cleared": "Removed {count} tracks from the queue. The current track keeps playing.",
+        "queue_skipping_to": "Skipping to **{title}**.",
+        "queue_no_position": "There is no track at #{position}. /queue shows the numbers.",
+        "queue_nothing_waiting": "No tracks are waiting in the queue.",
+        "volume_now": "The volume is {volume}%.",
+        "volume_set": "Volume set to {volume}%.",
         "help_title": "Commands",
         "about_text": "**{name}** {version}\nOnline since {since}\nResponse time: {latency} ms\nServers: {servers}",
         "about_link": "Source code: <{url}>",
@@ -246,6 +269,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
     "fi": {
         "bot_channel_only": "Tätä komentoa voi käyttää vain bottikanavalla.",
         "command_failed": "Jokin meni pieleen. Yritä myöhemmin uudelleen.",
+        "cooldown": "Hiljennä hieman tahtia. Yritä uudelleen {seconds} s päästä.",
         "command_unavailable": "Tätä komentoa ei ole enää käytössä. Discord poistaa sen valikosta pian.",
         "ping_reply": "Pong! {latency} ms.",
         "not_in_voice": "Et ole äänikanavalla.",
@@ -271,6 +295,15 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queue_next": "Seuraavaksi:",
         "queue_line": "{position}. {title}, jonoon lisännyt `{user}`",
         "queue_more": "...ja {count} muuta.",
+        "queue_removed": "Poistettu **{title}** jonosta.",
+        "queue_moved": "Siirretty **{title}** sijalle {position}.",
+        "queue_shuffled": "Sekoitettu {count} kappaletta.",
+        "queue_cleared": "Jonosta poistettu {count} kappaletta. Nykyinen kappale soi loppuun.",
+        "queue_skipping_to": "Hypätään kappaleeseen **{title}**.",
+        "queue_no_position": "Sijalla {position} ei ole kappaletta. /queue näyttää numerot.",
+        "queue_nothing_waiting": "Jonossa ei odota kappaleita.",
+        "volume_now": "Äänenvoimakkuus on {volume} %.",
+        "volume_set": "Äänenvoimakkuudeksi asetettu {volume} %.",
         "help_title": "Komennot",
         "about_text": "**{name}** {version}\nPäällä {since} alkaen\nVasteaika: {latency} ms\nPalvelimia: {servers}",
         "about_link": "Lähdekoodi: <{url}>",
@@ -400,7 +433,20 @@ CORE_COMMAND_TEXT: dict[str, dict[str, str]] = {
         "Show the bot's version, how long it has been online, and its response time.": "Näytä botin versio, käynnissäoloaika ja vasteaika.",
         "Put the track first in the queue, so it plays after the current one.": "Laita kappale jonon kärkeen, jolloin se soi nykyisen jälkeen.",
         "Play a link or search result, or add it to the queue.": "Soita linkki tai hakutulos, tai lisää se jonoon.",
-        "A YouTube, SoundCloud, or Spotify link, or text to search for.": "YouTube-, SoundCloud- tai Spotify-linkki tai hakuteksti.",
+        "A YouTube, SoundCloud, or Spotify link, or words to search for.": "YouTube-, SoundCloud- tai Spotify-linkki tai hakusanat.",
+        "Where a search looks. A link plays from its own site.": "Mistä haku etsii. Linkki soi omalta sivustoltaan.",
+        # Brand names stay as they are in every language.
+        "YouTube": "YouTube",
+        "SoundCloud": "SoundCloud",
+        "Remove a track from the queue.": "Poista kappale jonosta.",
+        "The track's number in /queue.": "Kappaleen numero /queue-listassa.",
+        "Move a track to another place in the queue.": "Siirrä kappale toiseen kohtaan jonossa.",
+        "The track's new number.": "Kappaleen uusi numero.",
+        "Shuffle the tracks waiting in the queue.": "Sekoita jonossa odottavat kappaleet.",
+        "Remove every waiting track. The current track keeps playing.": "Poista kaikki odottavat kappaleet. Nykyinen kappale soi loppuun.",
+        "Skip to a track in the queue, dropping the tracks before it.": "Hyppää jonon kappaleeseen ja ohita sitä edeltävät.",
+        "Show or change the music volume, from 0 to 100 percent.": "Näytä tai muuta musiikin äänenvoimakkuutta 0–100 prosenttiin.",
+        "The new volume. Leave it out to see the current one.": "Uusi äänenvoimakkuus. Jätä pois nähdäksesi nykyisen.",
         "Stop playing and clear the queue.": "Pysäytä toisto ja tyhjennä jono.",
         "Pause or resume the audio that is playing now.": "Tauota tai jatka nyt soivaa ääntä.",
         "Show the song playing now and the songs in the queue.": "Näytä nyt soiva kappale ja jonossa olevat kappaleet.",

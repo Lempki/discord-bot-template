@@ -42,6 +42,7 @@ _SETTINGS_COLUMNS = frozenset(
         "warn_timeout_minutes",
         "automod_escalation",
         "automod_alert_channel_id",
+        "music_volume",
     }
 )
 
@@ -62,6 +63,7 @@ class GuildSettings:
         automod_escalation: "warn" turns every message AutoMod blocks into a warning.
             "none" leaves blocked messages to AutoMod alone.
         automod_alert_channel_id: The channel for AutoMod alerts and escalation reports, or None.
+        music_volume: The media cog's playback volume in percent, from 0 to 100.
     """
 
     guild_id: int
@@ -73,6 +75,7 @@ class GuildSettings:
     warn_timeout_minutes: int = 60
     automod_escalation: str = "none"
     automod_alert_channel_id: int | None = None
+    music_volume: int = 50
 
 
 @dataclass(frozen=True)
@@ -184,10 +187,18 @@ async def _migrate_to_2(db: aiosqlite.Connection) -> None:
     )
 
 
+async def _migrate_to_3(db: aiosqlite.Connection) -> None:
+    """Adds the music volume, which keeps the level that the bot played at before /volume."""
+    await db.execute(
+        "ALTER TABLE guild_settings ADD COLUMN music_volume INTEGER NOT NULL DEFAULT 50"
+    )
+
+
 # Each entry upgrades the schema by one version. Append new migrations and never edit old ones.
 _MIGRATIONS: list[Callable[[aiosqlite.Connection], Awaitable[None]]] = [
     _migrate_to_1,
     _migrate_to_2,
+    _migrate_to_3,
 ]
 
 

@@ -2,13 +2,23 @@
 
 import asyncio
 import time
+from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import discord
 import pytest
+from discord import app_commands
 
 from bot import BotApp
-from cogs.media import QUEUE_SHOWN, GuildPlayer, MediaCog, Track
+from cogs.media import (
+    QUEUE_SHOWN,
+    GuildPlayer,
+    MediaCog,
+    Track,
+    link,
+    suggestion_name,
+)
 from config import Config, ServiceConfig
 from localization import LOCALES
 from tests.conftest import GUILD_ID, make_interaction, sent_messages
@@ -69,7 +79,10 @@ async def test_player_plays_queue_in_order_and_announces_each_track() -> None:
     titles = [call.args[0] for call in channel.send.call_args_list]
     assert titles == [
         EN.now_playing.format(
-            title=f"https://a/{n}", source="SoundCloud", channel="General", user="Ada"
+            title=f"[https://a/{n}](<https://a/{n}>)",
+            source="SoundCloud",
+            channel="General",
+            user="Ada",
         )
         for n in range(3)
     ]
@@ -260,7 +273,7 @@ async def run_play(
     interaction = make_interaction(user=member_in_voice())
     interaction.channel = MagicMock(spec=discord.TextChannel)
     cog.bot.voice_presence.connect = AsyncMock()  # type: ignore[method-assign]
-    await cog.play.callback(cog, interaction, url, play_next)  # type: ignore[arg-type]
+    await cog.play.callback(cog, interaction, url, None, play_next)  # type: ignore[arg-type]
     return interaction, sent_messages(interaction)
 
 
@@ -273,9 +286,13 @@ async def test_play_names_the_track_that_starts_now() -> None:
     _, messages = await run_play(cog, "bold song")
 
     assert messages == [
-        EN.queued_now.format(title=r"\*\*Bold\*\* song", source="YouTube", user="Ada")
+        EN.queued_now.format(
+            title=r"[\*\*Bold\*\* song](<https://youtu.be/a>)",
+            source="YouTube",
+            user="Ada",
+        )
     ]
-    cog.client.get_info.assert_awaited_once_with(query="bold song")
+    cog.client.get_info.assert_awaited_once_with(query="bold song", source="youtube")
 
 
 async def test_play_says_where_the_track_waits_and_for_how_long() -> None:
@@ -293,7 +310,11 @@ async def test_play_says_where_the_track_waits_and_for_how_long() -> None:
 
     assert messages == [
         EN.queued_one_wait.format(
-            title="B", source="Spotify", position=3, minutes=8, user="Ada"
+            title="[B](<https://youtu.be/b>)",
+            source="Spotify",
+            position=3,
+            minutes=8,
+            user="Ada",
         )
     ]
     # The queue holds the page that the search found, so the bot plays what it named.
@@ -313,7 +334,11 @@ async def test_play_next_puts_the_track_first() -> None:
     assert player.queue[0].query == "https://youtu.be/n"
     assert messages == [
         EN.queued_one_wait.format(
-            title="Next", source="YouTube", position=1, minutes=3, user="Ada"
+            title="[Next](<https://youtu.be/n>)",
+            source="YouTube",
+            position=1,
+            minutes=3,
+            user="Ada",
         )
     ]
 
@@ -328,7 +353,9 @@ async def test_play_without_a_known_wait_names_only_the_position() -> None:
     _, messages = await run_play(cog, "https://youtu.be/c")
 
     assert messages == [
-        EN.queued_one.format(title="C", source="YouTube", position=1, user="Ada")
+        EN.queued_one.format(
+            title="[C](<https://youtu.be/c>)", source="YouTube", position=1, user="Ada"
+        )
     ]
 
 
@@ -352,7 +379,12 @@ async def test_play_counts_the_tracks_of_a_playlist() -> None:
     )
 
     assert messages == [
-        EN.queued_many.format(count=2, source="Spotify", position=1, user="Ada")
+        EN.queued_many.format(
+            count=2,
+            source="[Spotify](<https://open.spotify.com/album/x>)",
+            position=1,
+            user="Ada",
+        )
     ]
     assert [t.title for t in list(player.queue)[:2]] == ["One", "Two"]
 
@@ -381,3 +413,229 @@ def test_replies_to_a_command_never_name_its_caller() -> None:
             "load_error",
         ):
             assert "{user}" not in getattr(strings, field), (language, field)
+
+
+def queued_player(cog: MediaCog, count: int) -> GuildPlayer:
+    """A player with numbered tracks waiting and a task that never starts playback."""
+    player = cog.player(MagicMock(id=GUILD_ID))
+    player.queue.extend(
+        Track(f"https://youtu.be/{n}", "Ada", MagicMock(), f"Song {n}")
+        for n in range(1, count + 1)
+    )
+    player._task = asyncio.get_running_loop().create_future()  # type: ignore[assignment]
+    return player
+
+
+def titles(player: GuildPlayer) -> list[str]:
+    return [track.title or "" for track in player.queue]
+
+
+async def test_remove_takes_the_track_at_a_position() -> None:
+    _, cog = await media_cog()
+    player = queued_player(cog, 3)
+    interaction = make_interaction()
+
+    await cog.remove.callback(cog, interaction, 2)  # type: ignore[arg-type]
+
+    assert titles(player) == ["Song 1", "Song 3"]
+    assert sent_messages(interaction) == [
+        EN.queue_removed.format(title="[Song 2](<https://youtu.be/2>)")
+    ]
+
+
+async def test_queue_commands_explain_a_missing_position() -> None:
+    _, cog = await media_cog()
+    player = queued_player(cog, 2)
+    interaction = make_interaction()
+
+    await cog.remove.callback(cog, interaction, 5)  # type: ignore[arg-type]
+
+    assert titles(player) == ["Song 1", "Song 2"]
+    assert sent_messages(interaction) == [EN.queue_no_position.format(position=5)]
+
+
+@pytest.mark.parametrize(
+    ("position", "to", "order", "new_position"),
+    [
+        (3, 1, ["Song 3", "Song 1", "Song 2"], 1),
+        (1, 2, ["Song 2", "Song 1", "Song 3"], 2),
+        (1, 99, ["Song 2", "Song 3", "Song 1"], 3),
+    ],
+)
+async def test_move_puts_the_track_at_its_new_position(
+    position: int, to: int, order: list[str], new_position: int
+) -> None:
+    _, cog = await media_cog()
+    player = queued_player(cog, 3)
+    interaction = make_interaction()
+
+    await cog.move.callback(cog, interaction, position, to)  # type: ignore[arg-type]
+
+    assert titles(player) == order
+    assert sent_messages(interaction)[0].endswith(f"to #{new_position}.")
+
+
+async def test_shuffle_keeps_every_track() -> None:
+    _, cog = await media_cog()
+    player = queued_player(cog, 20)
+    interaction = make_interaction()
+
+    await cog.shuffle.callback(cog, interaction)  # type: ignore[arg-type]
+
+    assert sorted(titles(player)) == sorted(f"Song {n}" for n in range(1, 21))
+    assert sent_messages(interaction) == [EN.queue_shuffled.format(count=20)]
+
+
+async def test_clear_empties_the_queue_and_says_how_many_went() -> None:
+    _, cog = await media_cog()
+    player = queued_player(cog, 4)
+    interaction = make_interaction()
+
+    await cog.clear.callback(cog, interaction)  # type: ignore[arg-type]
+
+    assert not player.queue
+    assert sent_messages(interaction) == [EN.queue_cleared.format(count=4)]
+
+
+async def test_shuffle_and_clear_say_when_nothing_waits() -> None:
+    _, cog = await media_cog()
+    interaction = make_interaction()
+
+    await cog.clear.callback(cog, interaction)  # type: ignore[arg-type]
+
+    assert sent_messages(interaction) == [EN.queue_nothing_waiting]
+
+
+async def test_skip_to_drops_the_tracks_before_and_stops_the_current_one() -> None:
+    _, cog = await media_cog()
+    player = queued_player(cog, 4)
+    interaction = make_interaction()
+    voice_client = MagicMock(spec=discord.VoiceClient)
+    voice_client.is_playing.return_value = True
+    interaction.guild.voice_client = voice_client
+
+    await cog.skip_to.callback(cog, interaction, 3)  # type: ignore[arg-type]
+
+    assert titles(player) == ["Song 3", "Song 4"]
+    voice_client.stop.assert_called_once()
+    assert sent_messages(interaction) == [
+        EN.queue_skipping_to.format(title="[Song 3](<https://youtu.be/3>)")
+    ]
+
+
+@pytest.mark.usefixtures("db")
+async def test_volume_is_stored_and_applied_to_the_playing_track() -> None:
+    _, cog = await media_cog()
+    interaction = make_interaction()
+    voice_client = MagicMock(spec=discord.VoiceClient)
+    audio = MagicMock(spec=discord.AudioSource)
+    audio.is_opus.return_value = False
+    voice_client.source = discord.PCMVolumeTransformer(audio)
+    interaction.guild.voice_client = voice_client
+
+    await cog.set_volume.callback(cog, interaction, 80)  # type: ignore[arg-type]
+
+    assert voice_client.source.volume == 0.8
+    assert await cog.volume(GUILD_ID) == 80
+    assert sent_messages(interaction) == [EN.volume_set.format(volume=80)]
+
+
+@pytest.mark.usefixtures("db")
+async def test_volume_without_a_value_shows_the_current_one() -> None:
+    _, cog = await media_cog()
+    interaction = make_interaction()
+
+    await cog.set_volume.callback(cog, interaction, None)  # type: ignore[arg-type]
+
+    assert sent_messages(interaction) == [EN.volume_now.format(volume=50)]
+
+
+async def test_volume_falls_back_to_the_default_without_a_database() -> None:
+    _, cog = await media_cog()
+
+    assert await cog.volume(GUILD_ID) == 50
+
+
+def search_results(count: int) -> list[dict[str, str]]:
+    return [
+        {
+            "title": f"Result {n}",
+            "webpage_url": f"https://youtu.be/{n}",
+            "duration_formatted": "3:30",
+        }
+        for n in range(count)
+    ]
+
+
+async def suggest(cog: MediaCog, text: str, source: object = None) -> list[Any]:
+    interaction = make_interaction()
+    interaction.namespace = SimpleNamespace(source=source)
+    return await cog.suggest(interaction, text)
+
+
+async def test_suggestions_come_from_the_chosen_source_and_are_cached() -> None:
+    _, cog = await media_cog()
+    cog.client.search = AsyncMock(return_value=search_results(2))
+
+    first = await suggest(cog, "hotel california", "soundcloud")
+    again = await suggest(cog, "Hotel California", "soundcloud")
+
+    assert [(c.name, c.value) for c in first] == [
+        ("Result 0 (3:30)", "https://youtu.be/0"),
+        ("Result 1 (3:30)", "https://youtu.be/1"),
+    ]
+    assert again == first
+    cog.client.search.assert_awaited_once_with("hotel california", "soundcloud", 5)
+
+
+@pytest.mark.parametrize("text", ["", "ho", "https://youtu.be/x"])
+async def test_no_suggestions_for_short_text_or_a_link(text: str) -> None:
+    _, cog = await media_cog()
+    cog.client.search = AsyncMock()
+
+    assert await suggest(cog, text) == []
+    cog.client.search.assert_not_awaited()
+
+
+async def test_slow_or_failed_search_gives_no_suggestions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, cog = await media_cog()
+    monkeypatch.setattr("cogs.media.SUGGESTION_TIMEOUT_SECONDS", 0.01)
+
+    async def slow(*_args: object) -> list[dict[str, str]]:
+        await asyncio.sleep(1)
+        return search_results(1)
+
+    cog.client.search = slow
+
+    assert await suggest(cog, "hotel california") == []
+
+
+def test_long_titles_fit_discords_limit() -> None:
+    name = suggestion_name({"title": "x" * 150, "duration_formatted": "1:02:03"})
+
+    assert len(name) == 100
+    assert name.endswith("… (1:02:03)")
+
+
+def test_link_text_cannot_break_out_of_its_link() -> None:
+    assert link("x](https://evil.example)", "https://youtu.be/a") == (
+        r"[x\](https://evil.example)](<https://youtu.be/a>)"
+    )
+
+
+async def test_play_names_the_chosen_search_site() -> None:
+    _, cog = await media_cog()
+    cog.client.get_info = AsyncMock(
+        return_value={"webpage_url": "https://soundcloud.com/a/b", "title": "B"}
+    )
+    interaction = make_interaction(user=member_in_voice())
+    interaction.channel = MagicMock(spec=discord.TextChannel)
+    cog.bot.voice_presence.connect = AsyncMock()  # type: ignore[method-assign]
+    source = app_commands.Choice(name="SoundCloud", value="soundcloud")
+
+    await cog.play.callback(cog, interaction, "b", source, False)  # type: ignore[arg-type]
+
+    cog.client.get_info.assert_awaited_once_with(query="b", source="soundcloud")
+    assert "from SoundCloud" in sent_messages(interaction)[0]

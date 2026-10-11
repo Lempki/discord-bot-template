@@ -212,6 +212,31 @@ async def test_version_1_database_gains_automod_settings(tmp_path: Path) -> None
     assert _user_version(path) == len(database._MIGRATIONS)
 
 
+async def test_version_2_database_gains_the_music_volume(tmp_path: Path) -> None:
+    path = tmp_path / "bot.db"
+    await database.init(path)
+    await database.upsert_settings(GUILD, warn_threshold=5)
+    await database.close()
+    with sqlite3.connect(path) as conn:
+        conn.executescript(
+            """
+            ALTER TABLE guild_settings DROP COLUMN music_volume;
+            PRAGMA user_version = 2;
+            """
+        )
+
+    await database.init(path)
+    try:
+        settings = await database.get_settings(GUILD)
+    finally:
+        await database.close()
+
+    # A server keeps the volume that the bot played at before /volume existed.
+    assert settings.music_volume == 50
+    assert settings.warn_threshold == 5
+    assert _user_version(path) == len(database._MIGRATIONS)
+
+
 async def test_reopening_an_upgraded_database_changes_nothing(tmp_path: Path) -> None:
     path = tmp_path / "bot.db"
     _create_phase1_database(path)

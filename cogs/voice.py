@@ -74,6 +74,8 @@ class VoiceCog(commands.Cog, name="Voice"):
     @app_commands.command(name="skip")
     @app_commands.guild_only()
     @in_bot_channel()
+    # One member may skip five times within ten seconds, so nobody can skip a playlist away.
+    @app_commands.checks.cooldown(5, 10.0)
     async def skip(self, interaction: discord.Interaction) -> None:
         """Skip the audio that is playing now."""
         s = self.bot.strings_for(interaction)

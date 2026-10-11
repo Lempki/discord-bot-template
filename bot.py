@@ -3,6 +3,7 @@
 import asyncio
 import contextlib
 import logging
+import math
 import signal
 import sys
 
@@ -99,7 +100,10 @@ class BotApp(commands.Bot):
     ) -> None:
         """Answers every failed command, so none is left showing "is thinking..."."""
         s = self.strings_for(interaction, private=True)
-        if isinstance(error, app_commands.CheckFailure):
+        # A cooldown counts as a failed check too, so it comes first.
+        if isinstance(error, app_commands.CommandOnCooldown):
+            text = s.cooldown.format(seconds=max(1, math.ceil(error.retry_after)))
+        elif isinstance(error, app_commands.CheckFailure):
             text = s.bot_channel_only
         elif isinstance(error, app_commands.CommandNotFound):
             # Discord can still offer a command from a cog that this run did not load.
