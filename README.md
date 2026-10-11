@@ -152,6 +152,8 @@ The script also takes an action, such as `run.bat stop` on Windows or `./run.sh 
 | `update` | Installs the newest release. In a Git clone, it pulls the latest code, rebuilds on fresh base images, and restarts. |
 | `schedule` | Installs new releases automatically every night at 04:00. |
 | `unschedule` | Stops installing new releases automatically. |
+| `backup` | Copies the bot's database into the `backups` folder. Every update does it too. |
+| `restore` | Puts a backup of the bot's database back. It asks which one and backs up the current database first. |
 | `local` | Runs the project in the terminal without Docker. Press Ctrl+C to stop it. |
 
 When a service crashes right after it starts, the script shows the end of its log and stops it, so it does not restart over and over.
@@ -165,10 +167,11 @@ A Git clone builds the images from its own files instead.
 
 In a downloaded release, the `update` action takes these steps:
 
-1. It downloads the newest image of the bot and of each service in `compose.stack.yml`.
-2. When the bot's image is new, it replaces the run, setup, and compose files with the ones from the new release. `.env` and the other settings stay as they are.
-3. It restarts everything and waits until every service is ready.
-4. When the new release fails to start, it puts the previous images and files back and starts them again. Later updates skip that release until a newer one appears.
+1. It backs up the bot's database, as the `backup` action does.
+2. It downloads the newest image of the bot and of each service in `compose.stack.yml`.
+3. When the bot's image is new, it replaces the run, setup, and compose files with the ones from the new release. `.env` and the other settings stay as they are.
+4. It restarts everything and waits until every service is ready.
+5. When the new release fails to start, it puts the previous images and files back and starts them again. Later updates skip that release until a newer one appears.
 
 The `schedule` action runs this update every night at 04:00.
 On Windows it adds a task to the Task Scheduler, which runs as soon as the computer is on again when it was off or asleep at that time.
@@ -177,6 +180,33 @@ Each scheduled update writes what it did into `update.log` in the project folder
 
 A private image needs a GitHub sign-in.
 The first download asks for a [token with the `read:packages` scope](https://github.com/settings/tokens/new?scopes=read:packages&description=Docker+updates), which Docker then remembers.
+
+### Backups
+
+The bot keeps its settings and moderation warnings in a SQLite database on a Docker volume.
+Every update copies it into the `backups` folder first, and the `backup` action does the same at any time.
+The folder keeps the last 7 copies, named after the time they were taken, such as `bot-2026-10-11-040000.db`.
+
+The `restore` action lists the copies and asks which one to put back.
+It backs up the current database before it replaces it, so a restore can be undone with another restore.
+To move the bot to another computer, copy the `backups` folder along with `.env` and run `restore` there.
+
+### Offline alerts
+
+A heartbeat service can tell you when the bot goes offline, whether it crashed, lost its connection, or the computer shut down.
+The bot reports to the service every 5 minutes while it is connected to Discord.
+When the reports stop, the service sends you an email or a Discord message.
+These steps use [healthchecks.io](https://healthchecks.io), which is free for a few bots.
+
+1. Sign up at healthchecks.io and open your project.
+2. Click **Add Check**. Name it after the bot, set **Period** to 5 minutes and **Grace Time** to 10 minutes, and save.
+3. Copy the check's ping URL, such as `https://hc-ping.com/1f2e3d4c-...`. It works like a password, so keep it private.
+4. Add it to `.env` as `HEARTBEAT_URL=` followed by the URL.
+5. Run `run.bat` on Windows or `./run.sh` elsewhere, so the bot restarts with the setting.
+6. On healthchecks.io, open **Integrations** to add a Discord channel or other ways to be told, next to the email that is on by default.
+
+The check turns green within 5 minutes.
+The service also alerts while the computer sleeps, because the bot is offline then too.
 
 ### Development
 
@@ -221,6 +251,7 @@ All configuration is read from environment variables or from a `.env` file locat
 | `DATABASE_PATH` | No | `data/bot.db` | The SQLite file for per-guild settings and moderation data. The directory is created if needed. The Docker image uses `/app/data/bot.db`. |
 | `FFMPEG_PATH` | No | `ffmpeg` | The FFmpeg executable. Leave it unset to use FFmpeg from the system PATH. |
 | `DEV_GUILD_ID` | No | None | A server ID for development. Commands sync to that server instantly instead of globally. |
+| `HEARTBEAT_URL` | No | None | The ping URL of a heartbeat service, such as healthchecks.io, which alerts you when the bot stops reporting that it is online. See [Offline alerts](#offline-alerts). |
 | `API_<NAME>_URL` | No | None | The base URL of a api-* service, for example `API_MEDIA_URL`. |
 | `API_<NAME>_SECRET` | No | None | The bearer token of that service. It must match `API_SECRET` in the service's own configuration. |
 
@@ -251,6 +282,7 @@ discord-bot-template/
 │   ├── automod.py          # Creates and edits the AutoMod rules that the bot owns.
 │   ├── checks.py           # Command checks such as in_bot_channel(), and guild_of().
 │   ├── database.py         # Versioned SQLite schema, per-guild settings, and warnings.
+│   ├── heartbeat.py        # Reports to a heartbeat service while the bot is online.
 │   ├── i18n.py             # Picks each user's language and translates command descriptions.
 │   ├── moderation.py       # issue_warning(), shared by /warn and AutoMod escalation.
 │   ├── replies.py          # respond() and finish(), which never leave a command "thinking".
