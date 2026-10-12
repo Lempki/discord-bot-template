@@ -196,6 +196,7 @@ async def test_version_1_database_gains_automod_settings(tmp_path: Path) -> None
                 auto_role_name, warn_threshold, warn_action FROM guild_settings;
             DROP TABLE guild_settings;
             ALTER TABLE old RENAME TO guild_settings;
+            DROP TABLE music_sessions;
             DROP TABLE music_panels;
             PRAGMA user_version = 1;
             """
@@ -223,6 +224,7 @@ async def test_version_2_database_gains_the_music_volume(tmp_path: Path) -> None
             """
             ALTER TABLE guild_settings DROP COLUMN dj_role_id;
             ALTER TABLE guild_settings DROP COLUMN music_volume;
+            DROP TABLE music_sessions;
             DROP TABLE music_panels;
             PRAGMA user_version = 2;
             """
@@ -262,6 +264,7 @@ async def test_version_3_database_gains_an_empty_dj_role(tmp_path: Path) -> None
         conn.executescript(
             """
             ALTER TABLE guild_settings DROP COLUMN dj_role_id;
+            DROP TABLE music_sessions;
             DROP TABLE music_panels;
             PRAGMA user_version = 3;
             """

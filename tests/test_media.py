@@ -27,8 +27,10 @@ from cogs.media import (
     clock,
     cut_lyrics,
     ended_card,
+    join_names,
     link,
     progress_line,
+    session_length,
     suggestion_name,
 )
 from config import Config, ServiceConfig
@@ -111,10 +113,14 @@ async def test_player_plays_the_queue_in_order_on_one_panel() -> None:
         }
     )
     shown: list[str | None] = []
+    details: list[str] = []
     channel = panel_channel()
-    bot.voice_presence.play = AsyncMock(
-        side_effect=lambda vc, source: shown.append(channel.sent[-1].embeds[0].title)
-    )  # type: ignore[method-assign]
+
+    def play(vc: Any, source: Any) -> None:
+        shown.append(channel.sent[-1].embeds[0].title)
+        details.append(channel.sent[-1].embeds[0].description.splitlines()[0])
+
+    bot.voice_presence.play = AsyncMock(side_effect=play)  # type: ignore[method-assign]
     player = GuildPlayer(cog, connected_guild())
     cog._players[1] = player
 
@@ -127,12 +133,16 @@ async def test_player_plays_the_queue_in_order_on_one_panel() -> None:
     # Nobody wrote in between, so the one panel was edited for each song.
     assert channel.send.await_count == 1
     panel = channel.sent[0]
-    assert panel.embeds[0].description.startswith(
-        EN.panel_details.format(source="SoundCloud", user="Ada")
-    )
+    assert details[0] == EN.panel_details.format(source="SoundCloud", user="Ada")
     assert panel.embeds[0].thumbnail.url == "https://img.test/1.jpg"
-    # The music ended, so the panel keeps the last song without buttons.
-    assert panel.embeds[0].author.name == EN.panel_ended
+    # The music ended after three songs, so the panel sums the session up.
+    ended = panel.embeds[0]
+    assert ended.author.name == EN.panel_ended
+    assert ended.title == EN.session_title.format(
+        count=3, length=EN.session_minutes.format(minutes=1)
+    )
+    assert ended.description.splitlines()[0] == EN.session_added_by.format(users="Ada")
+    # Without a database the songs are not stored, so no Played songs button appears.
     assert panel.view is None
 
 
@@ -1942,3 +1952,124 @@ def test_ended_card_keeps_a_card_without_progress() -> None:
 
     assert card.description is None
     assert card.author.name == EN.panel_ended
+
+
+def session_song(name: str, user: str, **extra: Any) -> Track:
+    return replace(song(name), requested_by=user, **extra)
+
+
+async def test_a_session_card_sums_up_the_songs_and_who_added_them() -> None:
+    _, cog = await media_cog()
+    player = cog.player(MagicMock(id=GUILD_ID))
+    album = {
+        "collection": "One Wayne G",
+        "collection_url": "https://open.spotify.com/album/x",
+        "source": "Spotify",
+    }
+    songs = [
+        session_song("20180512", "Kempli", **album),
+        session_song("20180529", "Kempli", **album),
+        session_song("Other", "Bo"),
+        session_song(
+            "20180701",
+            "Ada",
+            artist="Mac DeMarco",
+            song="20180701",
+            thumbnail="https://i.scdn.co/cover.jpg",
+            **album,
+        ),
+    ]
+    player.session_seconds = 72 * 60
+    player.note("stopped", "Kempli")
+
+    card = cog.session_card(player, songs, EN)
+
+    assert card.title == EN.session_title.format(
+        count=4, length=EN.session_hours.format(hours=1, minutes=12)
+    )
+    added, mostly, last, stopped = card.description.splitlines()
+    # The member who added the most songs comes first.
+    assert added == EN.session_added_by.format(users="Kempli, Bo, and Ada")
+    assert mostly == EN.session_mostly.format(
+        source=EN.collection_on.format(
+            collection="[One Wayne G](https://open.spotify.com/album/x)",
+            source="Spotify",
+        )
+    )
+    assert last == EN.session_last.format(
+        title="[20180701](https://youtu.be/20180701) `3:30` – Mac DeMarco"
+    )
+    assert stopped == EN.action_stopped.format(user="Kempli")
+    assert card.thumbnail.url == "https://i.scdn.co/cover.jpg"
+
+
+def test_join_names_and_others() -> None:
+    assert join_names(["Ada"], EN) == "Ada"
+    assert join_names(["Ada", "Bo"], EN) == "Ada and Bo"
+    others = EN.names_others.format(count=2)
+    assert join_names(["Ada", "Bo", "Cy", others], EN) == f"Ada, Bo, Cy, and {others}"
+    assert join_names(["Ada", "Bo", "Cy"], LOCALES["fi"]) == "Ada, Bo ja Cy"
+
+
+@pytest.mark.parametrize(
+    ("seconds", "minutes", "hours"),
+    [(20, 1, 0), (12 * 60 + 20, 12, 0), (60 * 60, 0, 1), (125 * 60, 5, 2)],
+)
+def test_session_length(seconds: float, minutes: int, hours: int) -> None:
+    expected = (
+        EN.session_hours.format(hours=hours, minutes=minutes)
+        if hours
+        else EN.session_minutes.format(minutes=minutes)
+    )
+    assert session_length(seconds, EN) == expected
+
+
+async def test_a_finished_session_keeps_its_songs_for_the_played_button(
+    db: None,
+) -> None:
+    _, cog = await media_cog()
+    player = cog.player(MagicMock(id=GUILD_ID))
+    player.current = panel_track()
+    await cog.refresh_panel(MagicMock(id=GUILD_ID), new_track=True)
+    panel = player.panel
+    assert panel is not None
+    player.session = [session_song(f"Song {n}", "Ada") for n in range(12)]
+    player.session_seconds = 600
+    player.history.append(player.session[-1])
+
+    await cog.end_panel(player)
+
+    assert panel.view is not None
+    assert panel.view.played_button.label == EN.panel_played
+    press = make_interaction()
+    press.message = panel
+    await cog.send_played(press)
+
+    kwargs = press.response.send_message.call_args.kwargs
+    assert kwargs["ephemeral"] is True
+    first = kwargs["embed"]
+    assert first.title == EN.played_title
+    assert first.description.splitlines()[0] == EN.queue_line.format(
+        position=1, title="[Song 0](https://youtu.be/Song 0) `3:30`", user="Ada"
+    )
+    assert first.footer.text == "1/2"
+
+
+async def test_a_list_that_is_no_longer_kept_says_so(db: None) -> None:
+    _, cog = await media_cog()
+    press = make_interaction()
+    press.message = MagicMock(id=999)
+
+    await cog.send_played(press)
+
+    assert sent_messages(press) == [EN.played_gone]
+
+
+async def test_each_server_keeps_the_last_20_sessions(db: None) -> None:
+    for message_id in range(1, 23):
+        await database.save_session(GUILD_ID, message_id, [{"title": f"{message_id}"}])
+
+    assert await database.get_session(1) is None
+    assert await database.get_session(2) is None
+    assert await database.get_session(3) == [{"title": "3"}]
+    assert await database.get_session(22) == [{"title": "22"}]

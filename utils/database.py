@@ -6,6 +6,7 @@ Discord snowflakes are stored as INTEGER.
 SQLite integers are 64-bit, so every snowflake fits.
 """
 
+import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -215,6 +216,23 @@ async def _migrate_to_5(db: aiosqlite.Connection) -> None:
     )
 
 
+async def _migrate_to_6(db: aiosqlite.Connection) -> None:
+    """Adds the songs of finished listening sessions, which a finished panel lists."""
+    await db.execute(
+        """
+        CREATE TABLE music_sessions (
+            message_id      INTEGER PRIMARY KEY,
+            guild_id        INTEGER NOT NULL,
+            ended_at        TEXT    NOT NULL,
+            songs           TEXT    NOT NULL
+        )
+        """
+    )
+    await db.execute(
+        "CREATE INDEX idx_music_sessions_guild ON music_sessions (guild_id)"
+    )
+
+
 # Each entry upgrades the schema by one version. Append new migrations and never edit old ones.
 _MIGRATIONS: list[Callable[[aiosqlite.Connection], Awaitable[None]]] = [
     _migrate_to_1,
@@ -222,6 +240,7 @@ _MIGRATIONS: list[Callable[[aiosqlite.Connection], Awaitable[None]]] = [
     _migrate_to_3,
     _migrate_to_4,
     _migrate_to_5,
+    _migrate_to_6,
 ]
 
 
@@ -404,3 +423,46 @@ async def list_panels() -> list[tuple[int, int, int]]:
     ) as cur:
         rows = await cur.fetchall()
     return [(row[0], row[1], row[2]) for row in rows]
+
+
+# --- Music sessions ---
+
+# Each guild keeps the song lists of this many finished sessions, and older ones are deleted.
+SESSIONS_KEPT = 20
+
+
+async def save_session(
+    guild_id: int, message_id: int, songs: list[dict[str, Any]]
+) -> None:
+    """Stores the songs of a finished session under its panel, and drops the oldest sessions.
+
+    Args:
+        guild_id: The guild where the session played.
+        message_id: The finished panel, whose button lists the songs.
+        songs: Each song's title, url, duration in seconds, and the name of who added it.
+    """
+    db = _conn_or_raise()
+    await db.execute(
+        "INSERT OR REPLACE INTO music_sessions (message_id, guild_id, ended_at, songs) "
+        "VALUES (?, ?, ?, ?)",
+        (message_id, guild_id, datetime.now(UTC).isoformat(), json.dumps(songs)),
+    )
+    await db.execute(
+        "DELETE FROM music_sessions WHERE guild_id = ? AND message_id NOT IN ("
+        # Discord's message IDs grow with time, so the highest are the newest sessions.
+        "SELECT message_id FROM music_sessions WHERE guild_id = ? "
+        "ORDER BY message_id DESC LIMIT ?)",
+        (guild_id, guild_id, SESSIONS_KEPT),
+    )
+
+
+async def get_session(message_id: int) -> list[dict[str, Any]] | None:
+    """Returns the songs of the session that a finished panel shows, or None once deleted."""
+    async with _conn_or_raise().execute(
+        "SELECT songs FROM music_sessions WHERE message_id = ?", (message_id,)
+    ) as cur:
+        row = await cur.fetchone()
+    if row is None:
+        return None
+    songs: list[dict[str, Any]] = json.loads(row[0])
+    return songs

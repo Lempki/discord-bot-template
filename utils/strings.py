@@ -111,6 +111,21 @@ class CoreStrings:
     panel_queue: str = ""
     panel_lyrics: str = ""
     panel_not_listening: str = ""
+    # The summary of a finished session.
+    # Placeholders are {count}, {length}, {hours}, {minutes}, {users}, and {source}.
+    # The names_ texts join names with {first}, {second}, and {last}, and session_last uses {title}.
+    session_title: str = ""
+    session_hours: str = ""
+    session_minutes: str = ""
+    session_added_by: str = ""
+    session_mostly: str = ""
+    session_last: str = ""
+    names_two: str = ""
+    names_last: str = ""
+    names_others: str = ""
+    panel_played: str = ""
+    played_title: str = ""
+    played_gone: str = ""
     # The question that the stop button asks while songs wait. The placeholder is {count}.
     stop_confirm: str = ""
     stop_confirm_yes: str = ""
@@ -296,6 +311,18 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "panel_queue": "Queue",
         "panel_lyrics": "Lyrics",
         "panel_not_listening": "Join the bot's voice channel to control the music.",
+        "session_title": "{count} songs · {length}",
+        "session_hours": "{hours} h {minutes} min",
+        "session_minutes": "{minutes} min",
+        "session_added_by": "Added by {users}",
+        "session_mostly": "Mostly from {source}",
+        "session_last": "**Last song:** {title}",
+        "names_two": "{first} and {second}",
+        "names_last": ", and {last}",
+        "names_others": "{count} others",
+        "panel_played": "Played songs",
+        "played_title": "Played songs",
+        "played_gone": "This list is no longer kept. The bot keeps the songs of the last 20 sessions.",
         "stop_confirm": "This stops the music and removes the {count} waiting songs.",
         "stop_confirm_yes": "Stop and clear",
         "stop_confirm_no": "Cancel",
@@ -470,6 +497,18 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "panel_queue": "Jono",
         "panel_lyrics": "Sanat",
         "panel_not_listening": "Liity botin äänikanavalle ohjataksesi musiikkia.",
+        "session_title": "{count} kappaletta · {length}",
+        "session_hours": "{hours} h {minutes} min",
+        "session_minutes": "{minutes} min",
+        "session_added_by": "Lisänneet {users}",
+        "session_mostly": "Enimmäkseen: {source}",
+        "session_last": "**Viimeinen kappale:** {title}",
+        "names_two": "{first} ja {second}",
+        "names_last": " ja {last}",
+        "names_others": "{count} muuta",
+        "panel_played": "Soitetut kappaleet",
+        "played_title": "Soitetut kappaleet",
+        "played_gone": "Tätä listaa ei enää säilytetä. Botti säilyttää 20 viimeisen kerran kappaleet.",
         "stop_confirm": "Tämä pysäyttää musiikin ja poistaa {count} jonossa odottavaa kappaletta.",
         "stop_confirm_yes": "Pysäytä ja tyhjennä",
         "stop_confirm_no": "Peruuta",

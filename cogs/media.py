@@ -5,7 +5,7 @@ import contextlib
 import logging
 import random
 import time
-from collections import OrderedDict, deque
+from collections import Counter, OrderedDict, deque
 from dataclasses import dataclass, replace
 from math import ceil
 from typing import TYPE_CHECKING, Any
@@ -42,6 +42,9 @@ QUEUE_VIEW_TIMEOUT = 600
 
 # The panel lists this many waiting tracks and counts the rest.
 PANEL_NEXT_SHOWN = 3
+
+# A finished session's summary names this many members who added songs, and counts the rest.
+SESSION_NAMES_SHOWN = 3
 
 # A panel's progress line starts with its bar, or with the time for a song of unknown length.
 PROGRESS_MARKS = ("▰", "▱", "`")
@@ -187,6 +190,24 @@ def ended_card(embed: discord.Embed, s: CoreStrings) -> discord.Embed:
     return card
 
 
+def session_length(seconds: float, s: CoreStrings) -> str:
+    """Words how long a session played, in whole minutes, and in hours from an hour on."""
+    minutes = max(1, round(seconds / 60))
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return s.session_hours.format(hours=hours, minutes=minutes)
+    return s.session_minutes.format(minutes=minutes)
+
+
+def join_names(names: list[str], s: CoreStrings) -> str:
+    """Joins names into a sentence's list, such as "Ada, Bo, and Cy" in English."""
+    if len(names) < 2:
+        return "".join(names)
+    if len(names) == 2:
+        return s.names_two.format(first=names[0], second=names[1])
+    return ", ".join(names[:-1]) + s.names_last.format(last=names[-1])
+
+
 def cut_lyrics(lyrics: str, limit: int = LYRICS_LIMIT) -> str:
     """Shortens lyrics to fit an embed, ending at a whole line with an ellipsis."""
     if len(lyrics) <= limit:
@@ -310,6 +331,9 @@ class GuildPlayer:
         self.action_carries = False
         # The members who voted to skip the playing song.
         self.skip_votes: set[int] = set()
+        # The songs that played since the music started, and how long they played in all.
+        self.session: list[Track] = []
+        self.session_seconds = 0.0
         # When the playing track was paused, so its progress stands still until it resumes.
         self.paused_at: float | None = None
         # The message that shows the playing track with its buttons.
@@ -553,6 +577,9 @@ class GuildPlayer:
 
     async def _run(self) -> None:
         channel: discord.abc.Connectable | None = None
+        # A run lasts from the first song until the queue runs out, which makes one session.
+        self.session = []
+        self.session_seconds = 0.0
         try:
             while self.queue:
                 track = self.queue.popleft()
@@ -679,6 +706,8 @@ class GuildPlayer:
             preparer.cancel()
             listened = self.elapsed()
             finished = duration is None or listened >= duration - END_TOLERANCE_SECONDS
+            self.session.append(played)
+            self.session_seconds += listened
             self.current = None
             self.now_playing = None
             self.now_playing_duration = None
@@ -708,6 +737,7 @@ class MediaCog(commands.Cog, name="Media"):
         self._button_cooldowns: dict[int, app_commands.Cooldown] = {}
         # Handles the buttons of every panel, including those posted before a restart.
         self._panel_buttons = PanelView(self)
+        self._played_buttons = PlayedView(self)
         # Closes the panels that the previous run left behind, once the bot is connected.
         self._old_panels: asyncio.Task[None] | None = None
 
@@ -1452,6 +1482,7 @@ class MediaCog(commands.Cog, name="Media"):
     async def cog_load(self) -> None:
         """Starts listening to the panel buttons and logs that the cog is ready."""
         self.bot.add_view(self._panel_buttons)
+        self.bot.add_view(self._played_buttons)
         self._old_panels = asyncio.create_task(
             self._close_old_panels(), name="media-old-panels"
         )
@@ -1460,6 +1491,7 @@ class MediaCog(commands.Cog, name="Media"):
     async def cog_unload(self) -> None:
         """Stops every player, restores the bot's status, and closes the media API client."""
         self._panel_buttons.stop()
+        self._played_buttons.stop()
         if self._old_panels is not None:
             self._old_panels.cancel()
         for player in self._players.values():
@@ -1639,14 +1671,122 @@ class MediaCog(commands.Cog, name="Media"):
             await self._forget_panel(panel)
             s = self.bot.strings_for(panel.guild)
             last = player.history[-1] if player.history else None
+            songs = list(player.session)
+            view: PlayedView | None = None
             try:
                 if last is None or not s.panel_ended:
                     await panel.edit(view=None)
+                    return
+                if len(songs) > 1:
+                    embed = self.session_card(player, songs, s)
+                    if await self._store_session(panel, songs):
+                        view = PlayedView(self, s=s)
+                        # The cog's own PlayedView answers the presses on every finished panel.
+                        view.stop()
                 else:
                     embed = self.panel_embed(player, last, s, state="ended")
-                    await panel.edit(embed=embed, view=None)
+                await panel.edit(embed=embed, view=view)
             except discord.HTTPException as error:
                 log.info(f"Could not end the music panel: {error}")
+
+    async def _store_session(self, panel: discord.Message, songs: list[Track]) -> bool:
+        """Stores a finished session's songs under its panel, for the Played songs button."""
+        if panel.guild is None:
+            return False
+        entries = [
+            {
+                "title": track.label,
+                "url": track.query if is_url(track.query) else None,
+                "duration": track.duration,
+                "user": track.requested_by,
+            }
+            for track in songs
+        ]
+        try:
+            await database.save_session(panel.guild.id, panel.id, entries)
+        except Exception as error:
+            log.warning(f"Could not store the songs of a session: {error!r}")
+            return False
+        return True
+
+    def session_card(
+        self, player: GuildPlayer, songs: list[Track], s: CoreStrings
+    ) -> discord.Embed:
+        """Sums up a finished session of several songs: how many, how long, and who added them."""
+        last = songs[-1]
+        embed = discord.Embed(
+            title=s.session_title.format(
+                count=len(songs), length=session_length(player.session_seconds, s)
+            )
+        )
+        embed.set_author(name=s.panel_ended)
+        if last.thumbnail:
+            embed.set_thumbnail(url=last.thumbnail)
+        counts = Counter(track.requested_by for track in songs)
+        names = [escape(name) for name, _ in counts.most_common(SESSION_NAMES_SHOWN)]
+        if len(counts) > SESSION_NAMES_SHOWN:
+            names.append(s.names_others.format(count=len(counts) - SESSION_NAMES_SHOWN))
+        lines = [s.session_added_by.format(users=join_names(names, s))]
+        origins = Counter(
+            (track.collection, track.collection_url, track.source)
+            for track in songs
+            if track.collection
+        )
+        if origins:
+            (collection, url, source), count = origins.most_common(1)[0]
+            if count * 2 > len(songs) and collection:
+                name = escape(collection)
+                if url:
+                    name = f"[{name}]({url})"
+                origin = s.collection_on.format(collection=name, source=source or "")
+                lines.append(s.session_mostly.format(source=origin))
+        title = last.list_line
+        if last.song and last.artist:
+            title = f"{title} – {escape(last.artist)}"
+        lines.append(s.session_last.format(title=title))
+        if action := self._action_line(player, s, "ended"):
+            lines.append(action)
+        embed.description = "\n".join(lines)
+        return embed
+
+    async def send_played(self, interaction: discord.Interaction) -> None:
+        """Shows the songs of a finished session privately, a page at a time."""
+        s = self.bot.strings_for(interaction, private=True)
+        message = interaction.message
+        try:
+            songs = await database.get_session(message.id) if message else None
+        except Exception as error:
+            log.warning(f"Could not read the songs of a session: {error!r}")
+            songs = None
+        if not songs:
+            await respond(interaction, s.played_gone, ephemeral=True)
+            return
+        lines = []
+        for position, song in enumerate(songs, start=1):
+            title = escape(shorten(str(song.get("title") or ""), LIST_TITLE_LIMIT))
+            url = song.get("url")
+            if url and len(url) <= LIST_URL_LIMIT:
+                title = f"[{title}]({url})"
+            if song.get("duration"):
+                title = f"{title} `{clock(song['duration'])}`"
+            user = escape(str(song.get("user") or ""))
+            lines.append(s.queue_line.format(position=position, title=title, user=user))
+        pages = [
+            discord.Embed(
+                title=s.played_title,
+                description="\n".join(lines[start : start + QUEUE_PAGE_SIZE]),
+            )
+            for start in range(0, len(lines), QUEUE_PAGE_SIZE)
+        ]
+        view = PagesView(pages, interaction)
+        if len(pages) > 1:
+            await interaction.response.send_message(
+                embed=view.page(), view=view, ephemeral=True
+            )
+        else:
+            view.stop()
+            await interaction.response.send_message(embed=pages[0], ephemeral=True)
+        mark_replied(interaction)
 
     def stop_music(self, guild: discord.Guild, user: str) -> None:
         """Stops the playing song and drops the queue, for the panel's stop button."""
@@ -2017,6 +2157,79 @@ class StopConfirmView(discord.ui.View):
         if self.message is not None:
             with contextlib.suppress(discord.HTTPException):
                 await self.message.edit(content=self.s.stop_kept, view=None)
+
+
+class PlayedView(discord.ui.View):
+    """The Played songs button of a finished session's panel.
+
+    Like PanelView, the cog keeps one instance that answers the presses on every finished panel.
+    The songs come from the database, so the button works after a restart too.
+    """
+
+    def __init__(self, cog: MediaCog, *, s: CoreStrings | None = None) -> None:
+        super().__init__(timeout=None)
+        self.cog = cog
+        if s is not None:
+            self.played_button.label = s.panel_played or None
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """Lets a member press within the cooldown that the other buttons have."""
+        retry_after = self.cog.button_retry_after(interaction.user.id)
+        if retry_after is None:
+            return True
+        s = self.cog.bot.strings_for(interaction, private=True)
+        await interaction.response.send_message(
+            s.cooldown.format(seconds=ceil(retry_after)), ephemeral=True
+        )
+        return False
+
+    @discord.ui.button(emoji="📜", custom_id="media:played")
+    async def played_button(
+        self, interaction: discord.Interaction, _: discord.ui.Button["PlayedView"]
+    ) -> None:
+        """Lists the session's songs to the presser."""
+        await self.cog.send_played(interaction)
+
+
+class PagesView(discord.ui.View):
+    """The page buttons of a private reply whose pages are fixed, such as a session's songs."""
+
+    def __init__(
+        self, pages: list[discord.Embed], interaction: discord.Interaction
+    ) -> None:
+        super().__init__(timeout=QUEUE_VIEW_TIMEOUT)
+        self.pages = pages
+        self.interaction = interaction
+        self.index = 0
+
+    def page(self) -> discord.Embed:
+        """Returns the current page, and enables only the buttons that lead to another page."""
+        self.back.disabled = self.index == 0
+        self.forward.disabled = self.index >= len(self.pages) - 1
+        embed = self.pages[self.index].copy()
+        embed.set_footer(text=f"{self.index + 1}/{len(self.pages)}")
+        return embed
+
+    @discord.ui.button(emoji="◀️")
+    async def back(
+        self, interaction: discord.Interaction, _: discord.ui.Button["PagesView"]
+    ) -> None:
+        """Shows the page before."""
+        self.index = max(0, self.index - 1)
+        await interaction.response.edit_message(embed=self.page(), view=self)
+
+    @discord.ui.button(emoji="▶️")
+    async def forward(
+        self, interaction: discord.Interaction, _: discord.ui.Button["PagesView"]
+    ) -> None:
+        """Shows the next page."""
+        self.index = min(len(self.pages) - 1, self.index + 1)
+        await interaction.response.edit_message(embed=self.page(), view=self)
+
+    async def on_timeout(self) -> None:
+        """Removes the buttons, which stop working now."""
+        with contextlib.suppress(discord.HTTPException):
+            await self.interaction.edit_original_response(view=None)
 
 
 class QueueView(discord.ui.View):
