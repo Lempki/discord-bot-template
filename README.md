@@ -350,13 +350,15 @@ The tests list every message or command text a language is missing, and they fai
 ## Related services
 
 The following services work alongside bots built from this template and handle functionality that is managed centrally rather than bundled in each bot repository.
+They are private.
+A service of your own can implement the same HTTP endpoints, starting from [api-template](https://github.com/Lempki/api-template), and the media cog's client in `utils/audio.py` shows the endpoints it calls.
 
 | Service | Description |
 |---|---|
-| [api-media](https://github.com/Lempki/api-media) | Resolves YouTube, SoundCloud, and Spotify track metadata, and streams their audio for playback. Supports Spotify tracks, albums, and playlists. |
-| [api-scraper](https://github.com/Lempki/api-scraper) | Scrapes structured data from external websites using configurable CSS or XPath selectors. |
-| [api-scheduler](https://github.com/Lempki/api-scheduler) | Schedules persistent reminders that survive bot restarts and are delivered via Discord webhooks. |
-| [api-morshu](https://github.com/Lempki/api-morshu) | Generates Morshu TTS audio and video from text. |
+| api-media | Resolves YouTube, SoundCloud, and Spotify track metadata, and streams their audio for playback. Supports Spotify tracks, albums, and playlists. |
+| api-scraper | Scrapes structured data from external websites using configurable CSS or XPath selectors. |
+| api-scheduler | Schedules persistent reminders that survive bot restarts and are delivered via Discord webhooks. |
+| api-morshu | Generates Morshu TTS audio and video from text. |
 
 ## Forking this template
 
