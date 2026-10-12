@@ -32,6 +32,10 @@ class LogFormatter(logging.Formatter):
         )
 
 
+# The cogs that need the privileged Server Members intent, for member join events.
+MEMBERS_INTENT_COGS = frozenset({"events"})
+
+
 class BotApp(commands.Bot):
     """The bot, carrying its configuration, languages, and voice presence for every cog to use.
 
@@ -44,7 +48,9 @@ class BotApp(commands.Bot):
 
     def __init__(self, config: Config) -> None:
         intents = discord.Intents.default()
-        intents.members = True
+        # Privileged, so a bot asks for it only when it loads a cog that needs it.
+        # A verified bot needs Discord's approval for every privileged intent it asks for.
+        intents.members = any(cog in MEMBERS_INTENT_COGS for cog in config.cogs_to_load)
         # Not privileged. It delivers AutoMod executions for the warning escalation.
         intents.auto_moderation_execution = True
         super().__init__(

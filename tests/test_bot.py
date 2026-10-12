@@ -35,7 +35,23 @@ def test_silent_bot_mutes_public_but_not_private_replies() -> None:
 def test_unknown_locale_setting_falls_back_to_english() -> None:
     bot = BotApp(Config(discord_token="t", locale="xx"))
     assert bot.strings_for() is LOCALES["en"]
-    assert bot.intents.members
+
+
+@pytest.mark.parametrize(
+    ("cogs", "members"),
+    [
+        (("help",), False),
+        (("help", "voice", "media", "admin", "moderation"), False),
+        (("help", "admin", "events"), True),
+    ],
+    ids=["default", "without-events", "with-events"],
+)
+def test_the_members_intent_is_asked_for_only_with_the_events_cog(
+    cogs: tuple[str, ...], members: bool
+) -> None:
+    bot = BotApp(Config(discord_token="t", cogs_to_load=cogs))
+
+    assert bot.intents.members is members
 
 
 def test_log_format_uses_single_spaces() -> None:

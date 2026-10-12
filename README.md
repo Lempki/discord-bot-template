@@ -45,11 +45,15 @@ This is a clean and modular Python Discord bot template built with [discord.py](
 
 ## Privileged intents
 
-The bot requires one privileged intent. Enable it in your application's **Bot** page in the [Discord Developer Portal](https://discord.com/developers/applications) under **Privileged Gateway Intents** before starting the bot.
+The bot asks Discord for one privileged intent, and only when `COGS_TO_LOAD` includes `events`.
+Then enable it in your application's **Bot** page in the [Discord Developer Portal](https://discord.com/developers/applications) under **Privileged Gateway Intents** before starting the bot.
+Without `events`, leave it disabled. A verified bot needs Discord's approval for every privileged intent it asks for, so asking only for what it uses keeps verification simple.
 
 | Intent | Portal label | Required for |
 |---|---|---|
-| `members` | Server Members Intent | `on_member_join` events, auto-role assignment, and reliable member object caching. |
+| `members` | Server Members Intent | The `events` cog's `on_member_join` events, which give new members the auto-role and post the welcome message. |
+
+Turn the intent off in the portal only after the bot runs a version that no longer asks for it, or the bot cannot connect until you turn it back on.
 
 The **Presence Intent** and the **Message Content Intent** are not used and should stay disabled.
 AutoMod reads messages on Discord's side, so the bot never needs message content.
