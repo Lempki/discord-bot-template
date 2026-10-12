@@ -1070,8 +1070,22 @@ class MediaCog(commands.Cog, name="Media"):
             self._suggestions.popitem(last=False)
         return choices
 
-    @app_commands.command(name="stop")
-    @app_commands.guild_only()
+    # /play stays a top-level command, the one that members reach for first.
+    # The other music commands sit in two groups, so their names say what they act on.
+    music = app_commands.Group(
+        name="music",
+        description="Control the music that plays now.",
+        guild_only=True,
+        allowed_contexts=app_commands.AppCommandContext(guild=True),
+    )
+    queue_group = app_commands.Group(
+        name="queue",
+        description="See and change the songs waiting in the queue.",
+        guild_only=True,
+        allowed_contexts=app_commands.AppCommandContext(guild=True),
+    )
+
+    @music.command(name="stop")
     @in_bot_channel()
     async def stop(self, interaction: discord.Interaction) -> None:
         """Stop playing and clear the queue."""
@@ -1092,8 +1106,7 @@ class MediaCog(commands.Cog, name="Media"):
             await respond(interaction, s.stopped)
         await finish(interaction)
 
-    @app_commands.command(name="pause")
-    @app_commands.guild_only()
+    @music.command(name="pause")
     @in_bot_channel()
     async def pause(self, interaction: discord.Interaction) -> None:
         """Pause or resume the audio that is playing now."""
@@ -1113,8 +1126,7 @@ class MediaCog(commands.Cog, name="Media"):
         await finish(interaction)
         await self.refresh_panel(guild)
 
-    @app_commands.command(name="queue")
-    @app_commands.guild_only()
+    @queue_group.command(name="show")
     async def show_queue(self, interaction: discord.Interaction) -> None:
         """Show the playing song and the queue, only to you."""
         await self.send_queue(interaction)
@@ -1193,11 +1205,10 @@ class MediaCog(commands.Cog, name="Media"):
         if interaction.guild is not None:
             await self.refresh_panel(interaction.guild)
 
-    @app_commands.command(name="remove")
-    @app_commands.guild_only()
+    @queue_group.command(name="remove")
     @in_bot_channel()
     @app_commands.checks.cooldown(CONTROL_RATE, CONTROL_PER_SECONDS)
-    @app_commands.describe(position="The track's number in /queue.")
+    @app_commands.describe(position="The track's number in /queue show.")
     async def remove(
         self, interaction: discord.Interaction, position: app_commands.Range[int, 1]
     ) -> None:
@@ -1214,12 +1225,11 @@ class MediaCog(commands.Cog, name="Media"):
                 interaction, s.queue_removed, title=track.linked_title
             )
 
-    @app_commands.command(name="move")
-    @app_commands.guild_only()
+    @queue_group.command(name="move")
     @in_bot_channel()
     @app_commands.checks.cooldown(CONTROL_RATE, CONTROL_PER_SECONDS)
     @app_commands.describe(
-        position="The track's number in /queue.", to="The track's new number."
+        position="The track's number in /queue show.", to="The track's new number."
     )
     async def move(
         self,
@@ -1243,8 +1253,7 @@ class MediaCog(commands.Cog, name="Media"):
                 position=player.queue.index(track) + 1,
             )
 
-    @app_commands.command(name="shuffle")
-    @app_commands.guild_only()
+    @queue_group.command(name="shuffle")
     @in_bot_channel()
     @app_commands.checks.cooldown(CONTROL_RATE, CONTROL_PER_SECONDS)
     async def shuffle(self, interaction: discord.Interaction) -> None:
@@ -1261,8 +1270,7 @@ class MediaCog(commands.Cog, name="Media"):
         template = s.queue_shuffled if count else s.queue_nothing_waiting
         await self._queue_reply(interaction, template, count=count)
 
-    @app_commands.command(name="clear")
-    @app_commands.guild_only()
+    @queue_group.command(name="clear")
     @in_bot_channel()
     @app_commands.checks.cooldown(CONTROL_RATE, CONTROL_PER_SECONDS)
     async def clear(self, interaction: discord.Interaction) -> None:
@@ -1279,11 +1287,10 @@ class MediaCog(commands.Cog, name="Media"):
         template = s.queue_cleared if count else s.queue_nothing_waiting
         await self._queue_reply(interaction, template, count=count)
 
-    @app_commands.command(name="skipto")
-    @app_commands.guild_only()
+    @queue_group.command(name="skipto")
     @in_bot_channel()
     @app_commands.checks.cooldown(CONTROL_RATE, CONTROL_PER_SECONDS)
-    @app_commands.describe(position="The track's number in /queue.")
+    @app_commands.describe(position="The track's number in /queue show.")
     async def skip_to(
         self, interaction: discord.Interaction, position: app_commands.Range[int, 1]
     ) -> None:
@@ -1309,8 +1316,7 @@ class MediaCog(commands.Cog, name="Media"):
             interaction, s.queue_skipping_to, title=track.linked_title
         )
 
-    @app_commands.command(name="volume")
-    @app_commands.guild_only()
+    @music.command(name="volume")
     @in_bot_channel()
     @app_commands.checks.cooldown(CONTROL_RATE, CONTROL_PER_SECONDS)
     @app_commands.describe(
@@ -1342,8 +1348,38 @@ class MediaCog(commands.Cog, name="Media"):
             voice_client.source.volume = percent / 100
         await self._queue_reply(interaction, s.volume_set, volume=percent)
 
-    @app_commands.command(name="previous")
-    @app_commands.guild_only()
+    @music.command(name="skip")
+    @in_bot_channel()
+    @app_commands.checks.cooldown(CONTROL_RATE, CONTROL_PER_SECONDS)
+    async def skip(self, interaction: discord.Interaction) -> None:
+        """Skip the song that plays now, or vote to skip it while others listen."""
+        s = self.bot.strings_for(interaction)
+        guild = guild_of(interaction)
+        voice_client = guild.voice_client
+        if not isinstance(voice_client, discord.VoiceClient) or not (
+            voice_client.is_playing() or voice_client.is_paused()
+        ):
+            await respond(interaction, s.nothing_playing)
+            await finish(interaction)
+            return
+        skip, votes, needed = await self.request_skip(guild, interaction.user)
+        if not skip:
+            private = self.bot.strings_for(interaction, private=True)
+            await respond(
+                interaction,
+                private.skip_voted,
+                ephemeral=True,
+                votes=votes,
+                needed=needed,
+            )
+            await finish(interaction)
+            return
+        # Stopping the current song makes the player start the next one.
+        voice_client.stop()
+        await respond(interaction, s.skipped)
+        await finish(interaction)
+
+    @music.command(name="previous")
     @in_bot_channel()
     @app_commands.checks.cooldown(CONTROL_RATE, CONTROL_PER_SECONDS)
     async def previous(self, interaction: discord.Interaction) -> None:
@@ -1385,8 +1421,7 @@ class MediaCog(commands.Cog, name="Media"):
         player.play_now(earlier, voice_client)
         return earlier
 
-    @app_commands.command(name="loop")
-    @app_commands.guild_only()
+    @music.command(name="loop")
     @in_bot_channel()
     @app_commands.checks.cooldown(CONTROL_RATE, CONTROL_PER_SECONDS)
     @app_commands.describe(mode="What to repeat.")
@@ -1406,33 +1441,7 @@ class MediaCog(commands.Cog, name="Media"):
         template = {"off": s.loop_off, "track": s.loop_track, "queue": s.loop_queue}
         await self._queue_reply(interaction, template[mode.value])
 
-    @app_commands.command(name="nowplaying")
-    @app_commands.guild_only()
-    async def now_playing(self, interaction: discord.Interaction) -> None:
-        """Show the playing song and its link, only to you."""
-        s = self.bot.strings_for(interaction, private=True)
-        player = self._players.get(guild_of(interaction).id)
-        track = player.current if player is not None else None
-        if player is None or track is None or player.started_at is None:
-            await respond(interaction, s.nothing_playing, ephemeral=True)
-            return
-        elapsed = player.elapsed()
-        values: dict[str, Any] = {
-            "title": track.linked_title,
-            "source": track.source or source_name(track.query),
-            "user": escape(track.requested_by),
-            "elapsed": clock(elapsed),
-        }
-        if track.duration:
-            template = s.nowplaying_text
-            values["elapsed"] = clock(min(elapsed, track.duration))
-            values["duration"] = clock(track.duration)
-        else:
-            template = s.nowplaying_open
-        await respond(interaction, template, ephemeral=True, **values)
-
-    @app_commands.command(name="lyrics")
-    @app_commands.guild_only()
+    @music.command(name="lyrics")
     @in_bot_channel()
     @app_commands.checks.cooldown(CONTROL_RATE, CONTROL_PER_SECONDS)
     @app_commands.describe(song="A song to look up. Leave it out for the playing song.")

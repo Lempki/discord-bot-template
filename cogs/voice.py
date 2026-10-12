@@ -22,8 +22,14 @@ class VoiceCog(commands.Cog, name="Voice"):
     def __init__(self, bot: "BotApp") -> None:
         self.bot = bot
 
-    @app_commands.command(name="join")
-    @app_commands.guild_only()
+    voice = app_commands.Group(
+        name="voice",
+        description="Bring the bot into a voice channel, send it out, or stop what it plays.",
+        guild_only=True,
+        allowed_contexts=app_commands.AppCommandContext(guild=True),
+    )
+
+    @voice.command(name="join")
     @in_bot_channel()
     async def join(self, interaction: discord.Interaction) -> None:
         """Join your voice channel."""
@@ -54,8 +60,7 @@ class VoiceCog(commands.Cog, name="Voice"):
             )
         await finish(interaction)
 
-    @app_commands.command(name="leave")
-    @app_commands.guild_only()
+    @voice.command(name="leave")
     @in_bot_channel()
     async def leave(self, interaction: discord.Interaction) -> None:
         """Leave the voice channel and stop playing."""
@@ -71,13 +76,12 @@ class VoiceCog(commands.Cog, name="Voice"):
             await respond(interaction, s.left_voice, channel=channel.name)
         await finish(interaction)
 
-    @app_commands.command(name="skip")
-    @app_commands.guild_only()
+    @voice.command(name="stop")
     @in_bot_channel()
     # One member may skip five times within ten seconds, so nobody can skip a playlist away.
     @app_commands.checks.cooldown(5, 10.0)
     async def skip(self, interaction: discord.Interaction) -> None:
-        """Skip the audio that is playing now."""
+        """Stop the sound that plays now, such as a clip, speech, or the current song."""
         s = self.bot.strings_for(interaction)
         guild = guild_of(interaction)
         voice_client = guild.voice_client

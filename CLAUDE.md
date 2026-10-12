@@ -44,3 +44,6 @@ Read it before changing code. When the repositories are cloned side by side, the
 * A command's docstring is its Discord description. Keep it under 100 characters, describe every option, and add the Finnish translation of each text to `CORE_COMMAND_TEXT` for a core cog or `BOT_COMMAND_TEXT` for the bot's own cog.
 * Voice goes through `self.bot.voice_presence`, which joins, plays, and leaves idle or empty channels.
 * `uv run pytest` fails when a language misses a message or a command translation.
+* Group a feature's commands under one `app_commands.Group` named after the feature, such as `/music pause` or `/warnings list`, so each name says what it acts on.
+  Only a feature's main entry point, such as `/play`, stays a top-level command, and no action gets a second name.
+* Give every feature a `guide_<cog>` text in every language, which `/help` shows with the feature's commands.

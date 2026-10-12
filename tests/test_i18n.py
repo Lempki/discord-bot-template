@@ -42,17 +42,17 @@ def test_pick_locale_fallback_chain(
 ) -> None:
     locales = {
         SILENT: CoreStrings(),
-        "en": CoreStrings(ping_reply="en"),
-        "fi": CoreStrings(ping_reply="fi"),
+        "en": CoreStrings(example_hello="en"),
+        "fi": CoreStrings(example_hello="fi"),
     }
     assert pick_locale(locales, code, default) is locales[expected]
 
 
 def test_build_locales_lets_bot_text_override_core_text() -> None:
     locales = build_locales(
-        CoreStrings, {"en": {"ping_reply": "Custom."}, "de": {"paused": "Pausiert."}}
+        CoreStrings, {"en": {"example_hello": "Custom."}, "de": {"paused": "Pausiert."}}
     )
-    assert locales["en"].ping_reply == "Custom."
+    assert locales["en"].example_hello == "Custom."
     assert locales["en"].paused == CORE_TEXT["en"]["paused"]
     assert locales["de"].paused == "Pausiert."
     assert locales[SILENT] == CoreStrings()

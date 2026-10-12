@@ -25,19 +25,20 @@ class TemplateCog(commands.Cog, name="Template"):
     def __init__(self, bot: "BotApp") -> None:
         self.bot = bot
 
+    # A feature's commands share a group, so their names say what they belong to: /example hello.
+    # The description shows in Discord's command list. Translate it like a command's docstring.
+    example = app_commands.Group(
+        name="example", description="Try the example commands of the template cog."
+    )
+
     # The docstring becomes the command description shown in Discord. Keep it under 100 characters.
     # Translate it by adding the exact English text to COMMAND_TEXT in localization.py.
-    @app_commands.command(name="ping")
-    async def ping(self, interaction: discord.Interaction) -> None:
-        """Show how long the bot takes to reach Discord."""
+    @example.command(name="hello")
+    async def hello(self, interaction: discord.Interaction) -> None:
+        """Say hello, to show how a command of a new feature works."""
         # strings_for picks the user's language. Every message lives in the locale tables.
         s = self.bot.strings_for(interaction)
-        await respond(
-            interaction,
-            s.ping_reply,
-            ephemeral=True,
-            latency=round(self.bot.latency * 1000),
-        )
+        await respond(interaction, s.example_hello, ephemeral=True)
 
     async def cog_load(self) -> None:
         """Logs that the cog is ready."""

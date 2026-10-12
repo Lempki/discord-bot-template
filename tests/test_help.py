@@ -3,6 +3,8 @@
 from pathlib import Path
 
 import discord
+from discord import app_commands
+from discord.ext import commands
 
 from bot import BotApp
 from cogs.admin import AdminCog
@@ -16,8 +18,11 @@ from cogs.help import (
 )
 from cogs.moderation import ModerationCog
 from localization import LOCALES
-from tests.conftest import make_interaction, sent_messages
+from tests.conftest import GUILD_ID, make_interaction, sent_messages
+from utils import database
 from utils.about import ProjectInfo, read_project_info
+
+EN = LOCALES["en"]
 
 
 def test_embeds_respect_every_discord_limit() -> None:
@@ -41,27 +46,75 @@ def test_embeds_respect_every_discord_limit() -> None:
     )
 
 
-async def _visible_lines(bot: BotApp, permissions: discord.Permissions) -> list[str]:
+async def _sections(
+    bot: BotApp, permissions: discord.Permissions, *cogs: commands.Cog
+) -> list[Section]:
     await bot.add_cog(AdminCog(bot))
     await bot.add_cog(ModerationCog(bot))
     await bot.add_cog(HelpCog(bot))
+    for cog in cogs:
+        await bot.add_cog(cog)
     interaction = make_interaction()
     interaction.permissions = permissions
     interaction.translate.return_value = None
-    sections = await bot.cogs["Help"]._sections(interaction)  # type: ignore[attr-defined]
-    return [line for section in sections for line in section.lines]
+    return await bot.cogs["Help"]._sections(interaction)  # type: ignore[attr-defined, no-any-return]
 
 
-async def test_admin_sees_group_subcommands(bot: BotApp) -> None:
-    lines = await _visible_lines(bot, discord.Permissions.all())
-    assert any(line.startswith("`/admin channel`") for line in lines)
-    assert any(line.startswith("`/admin automod add`") for line in lines)
-    assert any(line.startswith("`/ban`") for line in lines)
+async def test_an_admin_reads_the_setup_and_moderation_guides(bot: BotApp) -> None:
+    sections = await _sections(bot, discord.Permissions.all())
+    by_title = {section.title: section.lines for section in sections}
+
+    assert by_title[EN.section_admin] == [
+        EN.guide_admin,
+        EN.help_commands.format(commands="`/admin`"),
+    ]
+    # A group such as /warnings counts once in the commands line.
+    assert by_title[EN.section_moderation][1] == EN.help_commands.format(
+        commands="`/ban`, `/kick`, `/warn`, `/warnings`"
+    )
+    assert [section.title for section in sections] == [
+        EN.section_moderation,
+        EN.section_admin,
+        EN.section_help,
+    ]
 
 
-async def test_regular_member_does_not_see_moderation_commands(bot: BotApp) -> None:
-    lines = await _visible_lines(bot, discord.Permissions.none())
-    assert [line.split("`")[1] for line in lines] == ["/about", "/help"]
+async def test_a_member_reads_only_the_guides_they_can_use(bot: BotApp) -> None:
+    sections = await _sections(bot, discord.Permissions.none())
+
+    assert [(s.title, s.lines) for s in sections] == [
+        (
+            EN.section_help,
+            [EN.guide_help, EN.help_commands.format(commands="`/about`, `/help`")],
+        )
+    ]
+
+
+class GuideLessCog(commands.Cog, name="Gadgets"):
+    """A bot's own feature that has no guide text yet."""
+
+    @app_commands.command(name="gizmo")
+    async def gizmo(self, interaction: discord.Interaction) -> None:
+        """Do a gizmo thing."""
+
+
+async def test_a_feature_without_a_guide_lists_its_commands_first(bot: BotApp) -> None:
+    sections = await _sections(bot, discord.Permissions.none(), GuideLessCog())
+
+    # The bot's own features come before the core ones.
+    assert sections[0] == Section("Gadgets", ["`/gizmo` Do a gizmo thing."])
+
+
+async def test_the_introduction_names_the_bot_channel(db: None, bot: BotApp) -> None:
+    await database.upsert_settings(GUILD_ID, bot_channel_id=42)
+    cog = HelpCog(bot)
+    interaction = make_interaction()
+
+    introduction = await cog._introduction(interaction)
+
+    assert introduction == "\n\n".join(
+        [EN.help_intro, EN.help_bot_channel.format(channel="<#42>")]
+    )
 
 
 async def test_about_shows_the_version_and_the_link(bot: BotApp) -> None:

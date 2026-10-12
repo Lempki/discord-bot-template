@@ -873,37 +873,6 @@ def test_clock(seconds: float, text: str) -> None:
     assert clock(seconds) == text
 
 
-async def test_nowplaying_shows_the_song_and_its_progress_privately() -> None:
-    _, cog = await media_cog()
-    player = cog.player(MagicMock(id=GUILD_ID))
-    player.current = replace(song("Current"), source="Spotify")
-    player.now_playing = "Current"
-    player.started_at = time.monotonic() - 75
-    interaction = make_interaction()
-
-    await cog.now_playing.callback(cog, interaction)  # type: ignore[arg-type]
-
-    assert sent_messages(interaction) == [
-        EN.nowplaying_text.format(
-            title="[Current](<https://youtu.be/Current>)",
-            source="Spotify",
-            user="Ada",
-            elapsed="1:15",
-            duration="3:30",
-        )
-    ]
-    assert interaction.response.send_message.call_args.kwargs["ephemeral"] is True
-
-
-async def test_nowplaying_without_music() -> None:
-    _, cog = await media_cog()
-    interaction = make_interaction()
-
-    await cog.now_playing.callback(cog, interaction)  # type: ignore[arg-type]
-
-    assert sent_messages(interaction) == [EN.nothing_playing]
-
-
 def test_long_lyrics_end_at_a_whole_line() -> None:
     lyrics = "\n".join(f"Line {n} of the song" for n in range(500))
 
@@ -2075,3 +2044,25 @@ async def test_each_server_keeps_the_last_20_sessions(db: None) -> None:
     assert await database.get_session(2) is None
     assert await database.get_session(3) == [{"title": "3"}]
     assert await database.get_session(22) == [{"title": "22"}]
+
+
+async def test_music_skip_stops_the_song_or_counts_a_vote() -> None:
+    _, cog = await media_cog()
+    members = [listener_named(n) for n in range(2, 7)]
+    guild = dj_guild(cog, members, 77)
+    voice_client = guild.voice_client
+    voice_client.is_playing.return_value = True
+    voter = make_interaction(user=members[0])
+    voter.guild = guild
+
+    await cog.skip.callback(cog, voter)  # type: ignore[arg-type]
+
+    voice_client.stop.assert_not_called()
+    assert sent_messages(voter) == [EN.skip_voted.format(votes=1, needed=3)]
+
+    adder = make_interaction(user=listener_named(1))
+    adder.guild = guild
+    await cog.skip.callback(cog, adder)  # type: ignore[arg-type]
+
+    voice_client.stop.assert_called_once()
+    assert sent_messages(adder) == [EN.skipped]

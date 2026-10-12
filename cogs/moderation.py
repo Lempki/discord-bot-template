@@ -101,6 +101,14 @@ class ModerationCog(commands.Cog, name="Moderation"):
         await respond(interaction, reason, ephemeral=True)
         return True
 
+    warnings_group = app_commands.Group(
+        name="warnings",
+        description="See and remove the warnings of members in this server.",
+        default_permissions=discord.Permissions(kick_members=True),
+        guild_only=True,
+        allowed_contexts=app_commands.AppCommandContext(guild=True),
+    )
+
     @app_commands.command(name="warn")
     @app_commands.guild_only()
     @app_commands.default_permissions(kick_members=True)
@@ -130,9 +138,7 @@ class ModerationCog(commands.Cog, name="Moderation"):
         for message in outcome_messages(s, outcome, member.display_name):
             await respond(interaction, message, ephemeral=True)
 
-    @app_commands.command(name="warnings")
-    @app_commands.guild_only()
-    @app_commands.default_permissions(kick_members=True)
+    @warnings_group.command(name="list")
     @app_commands.describe(member="The member whose warnings to list.")
     async def warnings(
         self, interaction: discord.Interaction, member: discord.Member
@@ -160,10 +166,8 @@ class ModerationCog(commands.Cog, name="Moderation"):
         for message in chunk_lines(lines):
             await respond(interaction, message, ephemeral=True)
 
-    @app_commands.command(name="clearwarning")
-    @app_commands.guild_only()
-    @app_commands.default_permissions(kick_members=True)
-    @app_commands.describe(warning_id="The warning number shown by /warnings.")
+    @warnings_group.command(name="remove")
+    @app_commands.describe(warning_id="The warning number shown by /warnings list.")
     async def clearwarning(
         self, interaction: discord.Interaction, warning_id: int
     ) -> None:
@@ -178,9 +182,7 @@ class ModerationCog(commands.Cog, name="Moderation"):
                 interaction, s.warning_not_found, ephemeral=True, id=warning_id
             )
 
-    @app_commands.command(name="clearwarnings")
-    @app_commands.guild_only()
-    @app_commands.default_permissions(kick_members=True)
+    @warnings_group.command(name="clear")
     @app_commands.describe(member="The member whose warnings to remove.")
     async def clearwarnings(
         self, interaction: discord.Interaction, member: discord.Member

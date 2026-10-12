@@ -1,4 +1,4 @@
-"""The /help command, which lists the commands the user can run, and /about."""
+"""The /help command, a short guide to the bot's features, and /about."""
 
 import logging
 import math
@@ -9,6 +9,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from utils import database
 from utils.replies import respond
 
 if TYPE_CHECKING:
@@ -23,6 +24,9 @@ EMBED_LIMIT = 6000
 EMBEDS_PER_MESSAGE = 10
 
 AnyCommand = app_commands.Command[commands.Cog, ..., object]
+
+# The guide shows the core features in this order, after the bot's own features.
+CORE_ORDER = ("media", "voice", "moderation", "admin", "template", "help")
 
 
 @dataclass(frozen=True)
@@ -111,8 +115,15 @@ def build_embeds(
     return embeds[:EMBEDS_PER_MESSAGE]
 
 
+def _feature_order(cog: commands.Cog) -> tuple[int, str]:
+    """Sorts the bot's own features first, then the core features in CORE_ORDER."""
+    name = cog.qualified_name.lower()
+    rank = CORE_ORDER.index(name) + 1 if name in CORE_ORDER else 0
+    return rank, name
+
+
 class HelpCog(commands.Cog, name="Help"):
-    """Lists the loaded commands the user may run, grouped by cog."""
+    """Explains the loaded features that the user may use, with their commands."""
 
     def __init__(self, bot: "BotApp") -> None:
         self.bot = bot
@@ -121,8 +132,8 @@ class HelpCog(commands.Cog, name="Help"):
         s = self.bot.strings_for(interaction, private=True)
         in_guild = interaction.guild is not None
         sections: list[Section] = []
-        for cog in sorted(self.bot.cogs.values(), key=lambda c: c.qualified_name):
-            lines: list[str] = []
+        for cog in sorted(self.bot.cogs.values(), key=_feature_order):
+            visible: list[AnyCommand] = []
             for command in _leaf_commands(cog):
                 required = _required_permissions(command)
                 if (
@@ -133,24 +144,59 @@ class HelpCog(commands.Cog, name="Help"):
                     continue
                 if not in_guild and _is_guild_only(command):
                     continue
-                description = await interaction.translate(command.description)
-                lines.append(
-                    f"`/{command.qualified_name}` {description or command.description}"
+                visible.append(command)
+            if not visible:
+                # A feature that the member cannot use, such as moderation, stays out.
+                continue
+            name = cog.qualified_name.lower()
+            guide: str = getattr(s, f"guide_{name}", "")
+            if guide:
+                # A group such as /music counts once, so the line stays short.
+                roots = list(
+                    dict.fromkeys(c.qualified_name.split()[0] for c in visible)
                 )
-            if lines:
-                title = getattr(s, f"section_{cog.qualified_name.lower()}", "")
-                sections.append(Section(title or cog.qualified_name, lines))
+                commands_line = s.help_commands.format(
+                    commands=", ".join(f"`/{root}`" for root in roots)
+                )
+                lines = [guide, commands_line] if commands_line else [guide]
+            else:
+                # A feature without a guide text lists its commands, so it never goes missing.
+                lines = []
+                for command in visible:
+                    description = await interaction.translate(command.description)
+                    lines.append(
+                        f"`/{command.qualified_name}` {description or command.description}"
+                    )
+            title = getattr(s, f"section_{name}", "")
+            sections.append(Section(title or cog.qualified_name, lines))
         return sections
+
+    async def _introduction(self, interaction: discord.Interaction) -> str:
+        """Says what the bot is for, and where its commands work when a server limits them."""
+        s = self.bot.strings_for(interaction, private=True)
+        lines = [s.help_intro]
+        if interaction.guild is not None:
+            try:
+                settings = await database.get_settings(interaction.guild.id)
+            except Exception as error:
+                log.info(f"Could not read the bot channel for the guide: {error!r}")
+            else:
+                if settings.bot_channel_id:
+                    channel = f"<#{settings.bot_channel_id}>"
+                    lines.append(s.help_bot_channel.format(channel=channel))
+        return "\n\n".join(line for line in lines if line)
 
     @app_commands.command(name="help")
     async def help_command(self, interaction: discord.Interaction) -> None:
-        """Show the commands you can use here."""
+        """Show a short guide to the bot and the commands you can use here."""
         s = self.bot.strings_for(interaction, private=True)
         sections = await self._sections(interaction)
         if not sections:
             await respond(interaction, s.help_empty, ephemeral=True)
             return
         embeds = build_embeds(sections, s.help_title, s.help_footer)
+        if introduction := await self._introduction(interaction):
+            embeds[0].description = introduction
         await interaction.response.send_message(embeds=embeds, ephemeral=True)
 
     @app_commands.command(name="about")

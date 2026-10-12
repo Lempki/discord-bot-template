@@ -14,13 +14,14 @@ __all__ = ["CORE_COMMAND_TEXT", "CORE_TEXT", "CoreStrings"]
 class CoreStrings:
     """Every user-facing message the core cogs send. All fields default to silence."""
 
-    # General. The placeholder of ping_reply is {latency}.
+    # General.
     bot_channel_only: str = ""
     command_failed: str = ""
     # The placeholder of cooldown is {seconds}, the wait before the command works again.
     cooldown: str = ""
     command_unavailable: str = ""
-    ping_reply: str = ""
+    # The template cog's example command.
+    example_hello: str = ""
 
     # Voice. Placeholders are {user} and {channel}.
     # A reply leaves out {user}, because Discord shows who ran the command above it.
@@ -86,9 +87,6 @@ class CoreStrings:
     loop_off: str = ""
     loop_track: str = ""
     loop_queue: str = ""
-    # /nowplaying. Placeholders are {title}, {source}, {user}, {elapsed}, and {duration}.
-    nowplaying_text: str = ""
-    nowplaying_open: str = ""
     # /lyrics. The placeholder is {title}.
     lyrics_nothing: str = ""
     lyrics_none: str = ""
@@ -149,7 +147,18 @@ class CoreStrings:
 
     # Help. A section_<cog> field names the section of that cog.
     # A cog without a section field falls back to its own name.
+    # A guide_<cog> field explains that feature, and a cog without one lists its commands.
+    # help_commands uses {commands}, and help_bot_channel uses {channel}.
     help_title: str = ""
+    help_intro: str = ""
+    help_commands: str = ""
+    help_bot_channel: str = ""
+    guide_media: str = ""
+    guide_voice: str = ""
+    guide_moderation: str = ""
+    guide_admin: str = ""
+    guide_template: str = ""
+    guide_help: str = ""
     # The placeholders of about_text are {name}, {version}, {since}, {latency}, and {servers}.
     # {since} is a Discord timestamp, which each reader's app shows in their own language.
     about_text: str = ""
@@ -241,7 +250,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "command_failed": "Something went wrong. Try again later.",
         "cooldown": "Slow down a little. Try again in {seconds} s.",
         "command_unavailable": "This command is no longer available. Discord removes it from the menu shortly.",
-        "ping_reply": "Pong! {latency} ms.",
+        "example_hello": "Hello! This command comes from the template cog, the starting point for new features.",
         "not_in_voice": "You are not in a voice channel.",
         "bot_not_in_voice": "I am not in a voice channel.",
         "already_same_channel": "I am already in your voice channel.",
@@ -256,7 +265,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queued_many": "Added {count} tracks from {source} to the queue, starting at #{position}.",
         "queued_many_now": "Playing **{title}** from {source}, and added {more} more tracks to the queue.",
         "queued_many_next": "Added {count} tracks from {source}. **{title}** plays next, and the rest start at #{position}.",
-        "queue_full": "The queue is full, because it holds at most {limit} songs. /clear or /remove makes room.",
+        "queue_full": "The queue is full, because it holds at most {limit} songs. /queue clear or /queue remove makes room.",
         "queue_cut": "{left} tracks were left out, because the queue holds at most {limit} songs.",
         "playlist_unavailable": "Spotify does not let the bot read this playlist. Albums, single songs, and YouTube playlists still work.",
         "dj_only": "Only members with the DJ role can do that while others listen.",
@@ -279,7 +288,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queue_shuffled": "Shuffled {count} tracks.",
         "queue_cleared": "Removed {count} tracks from the queue. The current track keeps playing.",
         "queue_skipping_to": "Skipping to **{title}**.",
-        "queue_no_position": "There is no track at #{position}. /queue shows the numbers.",
+        "queue_no_position": "There is no track at #{position}. /queue show shows the numbers.",
         "queue_nothing_waiting": "No tracks are waiting in the queue.",
         "volume_now": "The volume is {volume}%.",
         "volume_set": "Volume set to {volume}%.",
@@ -288,8 +297,6 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "loop_off": "Repeat is off.",
         "loop_track": "Repeating the current song.",
         "loop_queue": "Repeating the whole queue.",
-        "nowplaying_text": "**{title}** from {source}, added by {user}\n{elapsed} / {duration}",
-        "nowplaying_open": "**{title}** from {source}, added by {user}\n{elapsed} played",
         "lyrics_nothing": "Nothing is playing. Name a song to look up.",
         "lyrics_none": "No lyrics were found for **{title}**.",
         "lyrics_unavailable": "The lyrics service could not be reached. Try again later.",
@@ -340,7 +347,16 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "action_stopped": "⏹️ {user} stopped the music",
         "action_skipvote": "🗳️ {user} voted to skip: {votes} of {needed} votes",
         "action_skipped_vote": "⏭️ The listeners voted to skip **{title}**",
-        "help_title": "Commands",
+        "help_title": "How to use the bot",
+        "help_intro": "Each part below explains one of the bot's features and the commands that belong to it. Discord's / menu shows every command with its options.",
+        "help_commands": "Commands: {commands}",
+        "help_bot_channel": "In this server, the bot takes commands only in {channel}.",
+        "guide_media": "Join a voice channel, then use `/play` with a YouTube, SoundCloud, or Spotify link, or with words to search for. Each song shows on a panel whose buttons pause, skip, go back, and repeat, and `/queue show` lists what waits. `/music` and `/queue` hold the other controls. Spotify albums and songs work, but Spotify keeps most playlists from bots. When the server has a DJ role, some controls belong to DJs while others listen, and skips go by vote.",
+        "guide_voice": "The bot joins your voice channel when a feature needs it, and leaves on its own when everyone else has left or nothing has played for a while. `/voice join` brings it to your channel, `/voice leave` sends it out, and `/voice stop` stops the sound that plays now.",
+        "guide_moderation": "`/warn` gives a member a warning, and at the server's limit the bot kicks, bans, or times them out. `/warnings` lists and removes warnings, and `/kick` and `/ban` act at once. Messages that Discord's AutoMod blocks can count as warnings too.",
+        "guide_admin": "`/admin` sets the bot up for this server. `/admin channel` limits commands to one channel, `/admin autorole` gives new members a role and welcomes them, `/admin djrole` picks who controls the music, and `/admin automod` manages Discord's AutoMod filters. `/admin status` shows every setting.",
+        "guide_template": "`/example hello` shows how a command of a new feature works. A new feature starts as a copy of cogs/template.py.",
+        "guide_help": "`/help` shows this guide, and `/about` shows the bot's version, how long it has been online, and its response time.",
         "about_text": "**{name}** {version}\nOnline since {since}\nResponse time: {latency} ms\nServers: {servers}",
         "about_link": "Source code: <{url}>",
         "help_empty": "No commands are available to you here.",
@@ -427,7 +443,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "command_failed": "Jokin meni pieleen. Yritä myöhemmin uudelleen.",
         "cooldown": "Hiljennä hieman tahtia. Yritä uudelleen {seconds} s päästä.",
         "command_unavailable": "Tätä komentoa ei ole enää käytössä. Discord poistaa sen valikosta pian.",
-        "ping_reply": "Pong! {latency} ms.",
+        "example_hello": "Hei! Tämä komento tulee mallipohjan esimerkkiosasta, josta uudet ominaisuudet alkavat.",
         "not_in_voice": "Et ole äänikanavalla.",
         "bot_not_in_voice": "En ole äänikanavalla.",
         "already_same_channel": "Olen jo samalla äänikanavalla.",
@@ -442,7 +458,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queued_many": "Lisätty jonoon {count} kappaletta ({source}) sijalta {position} alkaen.",
         "queued_many_now": "Soitetaan **{title}** ({source}), ja jonoon lisätty {more} muuta kappaletta.",
         "queued_many_next": "Lisätty {count} kappaletta ({source}). **{title}** soi seuraavaksi, ja loput alkavat sijalta {position}.",
-        "queue_full": "Jono on täynnä, koska siihen mahtuu enintään {limit} kappaletta. /clear tai /remove tekee tilaa.",
+        "queue_full": "Jono on täynnä, koska siihen mahtuu enintään {limit} kappaletta. /queue clear tai /queue remove tekee tilaa.",
         "queue_cut": "{left} kappaletta jäi pois, koska jonoon mahtuu enintään {limit} kappaletta.",
         "playlist_unavailable": "Spotify ei anna botin lukea tätä soittolistaa. Albumit, yksittäiset kappaleet ja YouTube-soittolistat toimivat yhä.",
         "dj_only": "Vain DJ-roolin jäsenet voivat tehdä tämän, kun muut kuuntelevat.",
@@ -465,7 +481,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queue_shuffled": "Sekoitettu {count} kappaletta.",
         "queue_cleared": "Jonosta poistettu {count} kappaletta. Nykyinen kappale soi loppuun.",
         "queue_skipping_to": "Hypätään kappaleeseen **{title}**.",
-        "queue_no_position": "Sijalla {position} ei ole kappaletta. /queue näyttää numerot.",
+        "queue_no_position": "Sijalla {position} ei ole kappaletta. /queue show näyttää numerot.",
         "queue_nothing_waiting": "Jonossa ei odota kappaleita.",
         "volume_now": "Äänenvoimakkuus on {volume} %.",
         "volume_set": "Äänenvoimakkuudeksi asetettu {volume} %.",
@@ -474,8 +490,6 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "loop_off": "Toisto on pois päältä.",
         "loop_track": "Toistetaan nykyistä kappaletta.",
         "loop_queue": "Toistetaan koko jonoa.",
-        "nowplaying_text": "**{title}** ({source}), lisännyt {user}\n{elapsed} / {duration}",
-        "nowplaying_open": "**{title}** ({source}), lisännyt {user}\nSoinut {elapsed}",
         "lyrics_nothing": "Mitään ei soi. Kerro haettava kappale.",
         "lyrics_none": "Kappaleelle **{title}** ei löytynyt sanoja.",
         "lyrics_unavailable": "Sanapalveluun ei saatu yhteyttä. Yritä myöhemmin uudelleen.",
@@ -526,7 +540,16 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "action_stopped": "⏹️ {user} pysäytti musiikin",
         "action_skipvote": "🗳️ {user} äänesti ohittamisen puolesta: {votes}/{needed} ääntä",
         "action_skipped_vote": "⏭️ Kuuntelijat äänestivät kappaleen **{title}** ohitetuksi",
-        "help_title": "Komennot",
+        "help_title": "Botin käyttöohje",
+        "help_intro": "Jokainen alla oleva osa kertoo yhdestä botin ominaisuudesta ja sen komennoista. Discordin /-valikko näyttää kaikki komennot vaihtoehtoineen.",
+        "help_commands": "Komennot: {commands}",
+        "help_bot_channel": "Tällä palvelimella botti ottaa komentoja vastaan vain kanavalla {channel}.",
+        "guide_media": "Liity äänikanavalle ja käytä `/play`-komentoa YouTube-, SoundCloud- tai Spotify-linkin tai hakusanojen kanssa. Jokainen kappale näkyy paneelissa, jonka painikkeilla voi tauottaa, ohittaa, palata ja toistaa, ja `/queue show` näyttää jonon. `/music` ja `/queue` sisältävät muut säätimet. Spotifyn albumit ja kappaleet toimivat, mutta useimpia soittolistoja Spotify ei jaa boteille. Jos palvelimella on DJ-rooli, osa säätimistä kuuluu DJ:lle muiden kuunnellessa, ja ohitukset äänestetään.",
+        "guide_voice": "Botti liittyy äänikanavallesi, kun jokin ominaisuus tarvitsee sitä, ja poistuu itse, kun muut ovat lähteneet tai mitään ei ole soinut hetkeen. `/voice join` tuo sen kanavallesi, `/voice leave` lähettää sen pois, ja `/voice stop` pysäyttää nyt soivan äänen.",
+        "guide_moderation": "`/warn` antaa jäsenelle varoituksen, ja palvelimen rajalla botti potkaisee jäsenen, antaa porttikiellon tai aikalisän. `/warnings` näyttää ja poistaa varoituksia, ja `/kick` ja `/ban` toimivat heti. Myös Discordin AutoModin estämät viestit voivat laskea varoituksiksi.",
+        "guide_admin": "`/admin` määrittää botin tälle palvelimelle. `/admin channel` rajaa komennot yhdelle kanavalle, `/admin autorole` antaa uusille jäsenille roolin ja toivottaa heidät tervetulleiksi, `/admin djrole` valitsee, kuka ohjaa musiikkia, ja `/admin automod` hallitsee Discordin AutoMod-suodattimia. `/admin status` näyttää kaikki asetukset.",
+        "guide_template": "`/example hello` näyttää, miten uuden ominaisuuden komento toimii. Uusi ominaisuus alkaa kopiona tiedostosta cogs/template.py.",
+        "guide_help": "`/help` näyttää tämän ohjeen, ja `/about` näyttää botin version, kuinka kauan se on ollut päällä ja sen vasteajan.",
         "about_text": "**{name}** {version}\nPäällä {since} alkaen\nVasteaika: {latency} ms\nPalvelimia: {servers}",
         "about_link": "Lähdekoodi: <{url}>",
         "help_empty": "Sinulla ei ole täällä käytettävissä komentoja.",
@@ -655,7 +678,7 @@ CORE_COMMAND_TEXT: dict[str, dict[str, str]] = {
         "Nothing more": "Ei muuta",
         "Add a warning": "Lisää varoitus",
         "Show this server's bot settings.": "Näytä tämän palvelimen botin asetukset.",
-        "Show the commands you can use here.": "Näytä komennot, joita voit käyttää täällä.",
+        "Show a short guide to the bot and the commands you can use here.": "Näytä lyhyt ohje bottiin ja komennot, joita voit käyttää täällä.",
         "Show the bot's version, how long it has been online, and its response time.": "Näytä botin versio, käynnissäoloaika ja vasteaika.",
         "When it plays. Leave it out to add it to the end of the queue.": "Milloin se soi. Jätä pois, niin se lisätään jonon loppuun.",
         "Next": "Seuraavaksi",
@@ -667,7 +690,7 @@ CORE_COMMAND_TEXT: dict[str, dict[str, str]] = {
         "YouTube": "YouTube",
         "SoundCloud": "SoundCloud",
         "Remove a track from the queue.": "Poista kappale jonosta.",
-        "The track's number in /queue.": "Kappaleen numero /queue-listassa.",
+        "The track's number in /queue show.": "Kappaleen numero /queue show -listassa.",
         "Move a track to another place in the queue.": "Siirrä kappale toiseen kohtaan jonossa.",
         "The track's new number.": "Kappaleen uusi numero.",
         "Shuffle the tracks waiting in the queue.": "Sekoita jonossa odottavat kappaleet.",
@@ -681,7 +704,6 @@ CORE_COMMAND_TEXT: dict[str, dict[str, str]] = {
         "Off": "Pois",
         "This song": "Tämä kappale",
         "The whole queue": "Koko jono",
-        "Show the playing song and its link, only to you.": "Näytä soiva kappale ja sen linkki vain sinulle.",
         "Show the lyrics of the playing song, or of a song you name.": "Näytä soivan tai nimeämäsi kappaleen sanat.",
         "A song to look up. Leave it out for the playing song.": "Haettava kappale. Jätä pois, niin haetaan soiva kappale.",
         "Stop playing and clear the queue.": "Pysäytä toisto ja tyhjennä jono.",
@@ -693,7 +715,7 @@ CORE_COMMAND_TEXT: dict[str, dict[str, str]] = {
         "List a member's warnings in this server.": "Näytä jäsenen varoitukset tällä palvelimella.",
         "The member whose warnings to list.": "Jäsen, jonka varoitukset näytetään.",
         "Remove one warning by its number.": "Poista yksi varoitus sen numeron perusteella.",
-        "The warning number shown by /warnings.": "Komennon /warnings näyttämä varoituksen numero.",
+        "The warning number shown by /warnings list.": "Komennon /warnings list näyttämä varoituksen numero.",
         "Remove every warning of a member in this server.": "Poista jäsenen kaikki varoitukset tällä palvelimella.",
         "The member whose warnings to remove.": "Jäsen, jonka varoitukset poistetaan.",
         "Kick a member from this server.": "Potkaise jäsen tältä palvelimelta.",
@@ -702,9 +724,15 @@ CORE_COMMAND_TEXT: dict[str, dict[str, str]] = {
         "Ban a member from this server.": "Anna jäsenelle porttikielto tälle palvelimelle.",
         "The member to ban.": "Jäsen, joka saa porttikiellon.",
         "Why the member is banned. It appears in the audit log.": "Porttikiellon syy. Se näkyy tarkastuslokissa.",
-        "Show how long the bot takes to reach Discord.": "Näytä, kuinka nopeasti botti tavoittaa Discordin.",
+        "Try the example commands of the template cog.": "Kokeile mallipohjan esimerkkiosan komentoja.",
+        "Say hello, to show how a command of a new feature works.": "Sano hei ja näytä, miten uuden ominaisuuden komento toimii.",
         "Join your voice channel.": "Liity äänikanavallesi.",
         "Leave the voice channel and stop playing.": "Poistu äänikanavalta ja lopeta toisto.",
-        "Skip the audio that is playing now.": "Ohita nyt soiva ääni.",
+        "Stop the sound that plays now, such as a clip, speech, or the current song.": "Pysäytä nyt soiva ääni, kuten klippi, puhe tai nykyinen kappale.",
+        "Bring the bot into a voice channel, send it out, or stop what it plays.": "Tuo botti äänikanavalle, lähetä se pois tai pysäytä sen soittama ääni.",
+        "Control the music that plays now.": "Ohjaa nyt soivaa musiikkia.",
+        "See and change the songs waiting in the queue.": "Katso ja muuta jonossa odottavia kappaleita.",
+        "Skip the song that plays now, or vote to skip it while others listen.": "Ohita nyt soiva kappale tai äänestä sen ohittamisesta muiden kuunnellessa.",
+        "See and remove the warnings of members in this server.": "Katso ja poista jäsenten varoituksia tällä palvelimella.",
     },
 }
