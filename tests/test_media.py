@@ -1604,3 +1604,61 @@ async def test_prime_waits_for_the_buffer_behind_a_volume_control() -> None:
     await asyncio.wait_for(prime(source), timeout=2)
 
     assert source.read() != SILENCE
+
+
+def limited(cog: MediaCog, limit: int) -> None:
+    cog.bot.config = replace(cog.bot.config, max_queue_length=limit)
+
+
+async def test_a_full_queue_takes_no_more_songs() -> None:
+    _, cog = await media_cog()
+    limited(cog, 3)
+    queued_player(cog, 3)
+    cog.client.get_info = AsyncMock()
+
+    interaction, messages = await run_play(cog, "one more song")
+
+    assert messages == [EN.queue_full.format(limit=3)]
+    # The bot neither looks the song up nor joins voice.
+    cog.client.get_info.assert_not_awaited()
+    cog.bot.voice_presence.connect.assert_not_awaited()
+
+
+async def test_a_playlist_fills_the_queue_and_says_how_many_were_left_out() -> None:
+    _, cog = await media_cog()
+    limited(cog, 4)
+    player = queued_player(cog, 1)
+    cog.client.get_playlist = AsyncMock(
+        return_value=(
+            None,
+            [
+                {"webpage_url": f"https://youtu.be/new{n}", "title": f"New {n}"}
+                for n in range(5)
+            ],
+        )
+    )
+
+    _, messages = await run_play(cog, "https://www.youtube.com/playlist?list=x")
+
+    assert titles(player) == ["Song 1", "New 0", "New 1", "New 2"]
+    assert messages == [
+        EN.queued_many.format(
+            count=3,
+            source="[YouTube](<https://www.youtube.com/playlist?list=x>)",
+            position=2,
+        )
+        + "\n"
+        + EN.queue_cut.format(left=2, limit=4)
+    ]
+
+
+async def test_a_withheld_spotify_playlist_is_explained() -> None:
+    _, cog = await media_cog()
+    response = MagicMock(status_code=403)
+    cog.client.get_playlist = AsyncMock(
+        side_effect=httpx.HTTPStatusError("403", request=MagicMock(), response=response)
+    )
+
+    _, messages = await run_play(cog, "https://open.spotify.com/playlist/p2")
+
+    assert messages == [EN.playlist_unavailable]

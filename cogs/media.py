@@ -648,17 +648,34 @@ class MediaCog(commands.Cog, name="Media"):
             await finish(interaction)
             return
 
+        player = self.player(guild)
+        limit = self.bot.config.max_queue_length
+        room = limit - len(player.queue)
+        if room <= 0:
+            await respond(interaction, s.queue_full, limit=limit)
+            await finish(interaction)
+            return
+
         site = source.value if source is not None else "youtube"
         collection: str | None = None
+        failure = s.load_error
         try:
             collection, found = await self._resolve(query, site)
+        except httpx.HTTPStatusError as error:
+            log.warning(f"Could not load '{query}': {error}")
+            found = []
+            if error.response.status_code == 403 and is_spotify_collection(query):
+                failure = s.playlist_unavailable
         except Exception as error:
             log.warning(f"Could not load '{query}': {error}")
             found = []
         if not found:
-            await respond(interaction, s.load_error, user=member.display_name)
+            await respond(interaction, failure, user=member.display_name)
             await finish(interaction)
             return
+        # Tracks past the limit are left out, and the reply says how many.
+        left_out = max(0, len(found) - room)
+        found = found[:room]
 
         await self.bot.voice_presence.connect(member.voice.channel)
         named = source_name(query) if is_url(query) else SEARCH_SITE_NAMES[site]
@@ -679,7 +696,6 @@ class MediaCog(commands.Cog, name="Media"):
             )
             for info in found
         ]
-        player = self.player(guild)
         idle = player.idle
         # With nothing playing, the first track starts at once whatever when says.
         mode = "end" if idle or when is None else when.value
@@ -737,6 +753,9 @@ class MediaCog(commands.Cog, name="Media"):
             values["minutes"] = max(1, round(wait / 60))
         else:
             template = s.queued_one
+        if left_out and template and s.queue_cut:
+            template = f"{template}\n{s.queue_cut}"
+            values.update(left=left_out, limit=limit)
         await respond(interaction, template, **values)
         await finish(interaction)
         if not idle:

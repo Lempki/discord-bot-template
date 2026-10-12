@@ -45,6 +45,11 @@ class CoreStrings:
     queued_many_now: str = ""
     # A playlist with when=Next. {position} is where the rest of its tracks start.
     queued_many_next: str = ""
+    # The queue's limit. Placeholders are {limit} and {left}, the tracks that did not fit.
+    queue_full: str = ""
+    queue_cut: str = ""
+    # A Spotify playlist whose songs Spotify does not share with the bot.
+    playlist_unavailable: str = ""
     # A playlist's or album's name with its site, which fills {source}.
     # The placeholders are {collection} and {source}.
     collection_on: str = ""
@@ -228,6 +233,9 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queued_many": "Added {count} tracks from {source} to the queue, starting at #{position}.",
         "queued_many_now": "Playing **{title}** from {source}, and added {more} more tracks to the queue.",
         "queued_many_next": "Added {count} tracks from {source}. **{title}** plays next, and the rest start at #{position}.",
+        "queue_full": "The queue is full, because it holds at most {limit} songs. /clear or /remove makes room.",
+        "queue_cut": "{left} tracks were left out, because the queue holds at most {limit} songs.",
+        "playlist_unavailable": "Spotify does not let the bot read this playlist. Albums, single songs, and YouTube playlists still work.",
         "collection_on": "{collection} on {source}",
         "load_error": "Could not load the audio. Try again.",
         "play_failed": "Could not play **{title}**, added by {user}. Moving on to the next track.",
@@ -392,6 +400,9 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queued_many": "Lisätty jonoon {count} kappaletta ({source}) sijalta {position} alkaen.",
         "queued_many_now": "Soitetaan **{title}** ({source}), ja jonoon lisätty {more} muuta kappaletta.",
         "queued_many_next": "Lisätty {count} kappaletta ({source}). **{title}** soi seuraavaksi, ja loput alkavat sijalta {position}.",
+        "queue_full": "Jono on täynnä, koska siihen mahtuu enintään {limit} kappaletta. /clear tai /remove tekee tilaa.",
+        "queue_cut": "{left} kappaletta jäi pois, koska jonoon mahtuu enintään {limit} kappaletta.",
+        "playlist_unavailable": "Spotify ei anna botin lukea tätä soittolistaa. Albumit, yksittäiset kappaleet ja YouTube-soittolistat toimivat yhä.",
         "collection_on": "{collection} – {source}",
         "load_error": "Äänen lataaminen epäonnistui. Yritä uudelleen.",
         "play_failed": "Kappaletta **{title}** ei voitu soittaa, lisännyt {user}. Siirrytään seuraavaan.",

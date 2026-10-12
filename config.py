@@ -30,6 +30,11 @@ class ServiceConfig:
     secret: str
 
 
+# A server's music queue holds this many waiting songs unless MAX_QUEUE_LENGTH says otherwise.
+# A Spotify playlist is added almost at once, so without a limit one command could queue thousands.
+DEFAULT_MAX_QUEUE_LENGTH = 500
+
+
 @dataclass(frozen=True)
 class Config:
     """All bot settings, read once at startup.
@@ -43,6 +48,7 @@ class Config:
         dev_guild_id: A guild that receives commands instantly, or None for global sync.
         services: The api-* services found in the environment, keyed by name.
         heartbeat_url: The URL of a heartbeat service that hears from the bot while it is online.
+        max_queue_length: How many songs may wait in a server's music queue.
     """
 
     discord_token: str
@@ -53,6 +59,7 @@ class Config:
     dev_guild_id: int | None = None
     services: Mapping[str, ServiceConfig] = field(default_factory=dict)
     heartbeat_url: str | None = None
+    max_queue_length: int = DEFAULT_MAX_QUEUE_LENGTH
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> "Config":
@@ -91,6 +98,10 @@ class Config:
         if heartbeat and not heartbeat.startswith(("https://", "http://")):
             raise ConfigError("HEARTBEAT_URL must start with https:// or http://.")
 
+        queue_limit = environ.get("MAX_QUEUE_LENGTH", "").strip()
+        if queue_limit and (not queue_limit.isdigit() or int(queue_limit) < 1):
+            raise ConfigError("MAX_QUEUE_LENGTH must be a whole number of at least 1.")
+
         return cls(
             discord_token=token,
             cogs_to_load=cogs,
@@ -100,6 +111,9 @@ class Config:
             dev_guild_id=int(dev_guild) if dev_guild else None,
             services=_read_services(environ),
             heartbeat_url=heartbeat or None,
+            max_queue_length=int(queue_limit)
+            if queue_limit
+            else DEFAULT_MAX_QUEUE_LENGTH,
         )
 
     def service(self, name: str) -> ServiceConfig:

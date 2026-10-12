@@ -68,3 +68,15 @@ def test_service_without_secret_is_not_configured() -> None:
     config = Config.from_env({"DISCORD_TOKEN": "t", "API_MEDIA_URL": "http://x"})
     with pytest.raises(ConfigError, match="API_MEDIA_SECRET"):
         config.service("media")
+
+
+def test_the_queue_holds_500_songs_unless_set() -> None:
+    assert Config.from_env({"DISCORD_TOKEN": "t"}).max_queue_length == 500
+    config = Config.from_env({"DISCORD_TOKEN": "t", "MAX_QUEUE_LENGTH": " 50 "})
+    assert config.max_queue_length == 50
+
+
+@pytest.mark.parametrize("value", ["0", "-5", "lots", "2.5"])
+def test_a_queue_limit_that_is_not_a_positive_whole_number_raises(value: str) -> None:
+    with pytest.raises(ConfigError, match="MAX_QUEUE_LENGTH"):
+        Config.from_env({"DISCORD_TOKEN": "t", "MAX_QUEUE_LENGTH": value})
