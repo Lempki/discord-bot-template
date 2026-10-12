@@ -22,6 +22,7 @@ from utils.audio import (
     is_spotify_collection,
     is_url,
     is_youtube_playlist,
+    prime,
     source_name,
 )
 from utils.checks import guild_of, in_bot_channel
@@ -529,6 +530,8 @@ class GuildPlayer:
         source = self._cog.client.audio_source(
             page_url, bot.config.ffmpeg_path, volume=volume
         )
+        # The player's clock starts when audio waits, or the song's start plays too fast.
+        await prime(source)
         ticker = asyncio.create_task(self._tick(), name=f"media-panel-{self._guild.id}")
         try:
             await bot.voice_presence.play(voice_client, source)

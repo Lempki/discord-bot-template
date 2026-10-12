@@ -1,6 +1,7 @@
 """Tests for the media cog's per-guild player, with the service and voice faked out."""
 
 import asyncio
+import threading
 import time
 from dataclasses import replace
 from types import SimpleNamespace
@@ -30,7 +31,7 @@ from cogs.media import (
 from config import Config, ServiceConfig
 from localization import LOCALES
 from tests.conftest import GUILD_ID, make_interaction, sent_messages
-from utils.audio import MediaAPIClient, source_name
+from utils.audio import SILENCE, BufferedSource, MediaAPIClient, prime, source_name
 
 EN = LOCALES["en"]
 
@@ -194,6 +195,8 @@ async def test_audio_source_streams_from_the_service_with_the_secret(
     ffmpeg = MagicMock()
     monkeypatch.setattr("utils.audio.discord.FFmpegPCMAudio", ffmpeg)
     monkeypatch.setattr("utils.audio.discord.PCMVolumeTransformer", MagicMock())
+    # A real buffer would start a thread that reads the mocked FFmpeg forever.
+    monkeypatch.setattr("utils.audio.BufferedSource", MagicMock())
     client = MediaAPIClient("http://media:8000/", "s3cret")
 
     client.audio_source("https://youtu.be/x?si=a&t=1", "ffmpeg")
@@ -1529,3 +1532,75 @@ async def test_stop_without_waiting_songs_stops_at_once() -> None:
 
     voice_client.stop.assert_called_once()
     interaction.followup.send.assert_not_awaited()
+
+
+class FakeStream(discord.AudioSource):
+    """Hands out numbered frames, and blocks at a frame until released, like a stalled stream."""
+
+    def __init__(self, count: int, stall_at: int | None = None) -> None:
+        self.count = count
+        self.stall_at = stall_at
+        self.released = threading.Event()
+        self.n = 0
+        self.cleaned = False
+
+    def read(self) -> bytes:
+        if self.n == self.stall_at:
+            self.released.wait(5)
+        self.n += 1
+        return bytes([self.n]) * 3840 if self.n <= self.count else b""
+
+    def cleanup(self) -> None:
+        self.cleaned = True
+        self.released.set()
+
+
+def test_a_buffered_stream_plays_its_frames_in_order_and_then_ends() -> None:
+    stream = FakeStream(5)
+    source = BufferedSource(stream, prime_frames=3)
+
+    assert source.wait_until_ready(2)
+    frames = [source.read() for _ in range(5)]
+    deadline = time.monotonic() + 2
+    while (end := source.read()) == SILENCE and time.monotonic() < deadline:
+        time.sleep(0.01)
+
+    assert [frame[0] for frame in frames] == [1, 2, 3, 4, 5]
+    assert end == b""
+
+
+def test_a_stalled_stream_plays_silence_instead_of_blocking() -> None:
+    stream = FakeStream(10, stall_at=2)
+    source = BufferedSource(stream, prime_frames=2)
+    assert source.wait_until_ready(2)
+
+    assert [source.read()[0] for _ in range(2)] == [1, 2]
+    started = time.monotonic()
+    assert source.read() == SILENCE
+    # The player's 20 ms clock must never wait on the network.
+    assert time.monotonic() - started < 0.05
+
+    stream.released.set()
+    deadline = time.monotonic() + 2
+    while (frame := source.read()) == SILENCE and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert frame[0] == 3
+    source.cleanup()
+
+
+def test_cleanup_closes_the_stream_behind_the_buffer() -> None:
+    stream = FakeStream(10_000)
+    source = BufferedSource(stream, buffer_frames=4)
+
+    source.cleanup()
+
+    assert stream.cleaned
+
+
+async def test_prime_waits_for_the_buffer_behind_a_volume_control() -> None:
+    stream = FakeStream(3)
+    source = discord.PCMVolumeTransformer(BufferedSource(stream, prime_frames=3))
+
+    await asyncio.wait_for(prime(source), timeout=2)
+
+    assert source.read() != SILENCE
