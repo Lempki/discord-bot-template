@@ -42,6 +42,9 @@ QUEUE_VIEW_TIMEOUT = 600
 # The panel lists this many waiting tracks and counts the rest.
 PANEL_NEXT_SHOWN = 3
 
+# The stop button's question waits this long for an answer, in seconds.
+STOP_CONFIRM_TIMEOUT = 60
+
 # The panel's progress moves this often, in seconds.
 # Discord limits how often a bot may edit messages, so it cannot move every second.
 PANEL_TICK_SECONDS = 10
@@ -1352,6 +1355,16 @@ class MediaCog(commands.Cog, name="Media"):
             except discord.HTTPException as error:
                 log.info(f"Could not end the music panel: {error}")
 
+    def stop_music(self, guild: discord.Guild, user: str) -> None:
+        """Stops the playing song and drops the queue, for the panel's stop button."""
+        voice_client = guild.voice_client
+        if not isinstance(voice_client, discord.VoiceClient):
+            return
+        player = self.player(guild)
+        if voice_client.is_playing() or voice_client.is_paused():
+            player.note("stopped", user)
+        player.halt(voice_client)
+
     def note_skip(self, guild: discord.Guild, user: str) -> None:
         """Records a skip for the panel of the song that the skip starts.
 
@@ -1578,11 +1591,20 @@ class PanelView(discord.ui.View):
     async def stop_button(
         self, interaction: discord.Interaction, _: discord.ui.Button["PanelView"]
     ) -> None:
-        """Stops the music and clears the queue, which ends the panel."""
-        _, voice_client, player = await self._start(interaction)
-        if voice_client.is_playing() or voice_client.is_paused():
-            player.note("stopped", interaction.user.display_name)
-        player.halt(voice_client)
+        """Stops the music, asking first when it would remove waiting songs."""
+        guild, voice_client, player = await self._start(interaction)
+        if not player.queue:
+            # Nothing waits, so nothing can be lost.
+            self.cog.stop_music(guild, interaction.user.display_name)
+            return
+        s = self._strings(interaction)
+        view = StopConfirmView(self.cog, s)
+        view.message = await interaction.followup.send(
+            s.stop_confirm.format(count=len(player.queue)),
+            view=view,
+            ephemeral=True,
+            wait=True,
+        )
 
     @discord.ui.button(emoji="📜", custom_id="media:queue", row=1)
     async def queue_button(
@@ -1597,6 +1619,44 @@ class PanelView(discord.ui.View):
     ) -> None:
         """Shows the playing song's lyrics to the presser."""
         await self.cog.send_lyrics(interaction, None)
+
+
+class StopConfirmView(discord.ui.View):
+    """The private question that the stop button asks before it removes waiting songs.
+
+    Only the member who pressed stop sees it, and the queue stays unless they confirm.
+    """
+
+    def __init__(self, cog: MediaCog, s: CoreStrings) -> None:
+        super().__init__(timeout=STOP_CONFIRM_TIMEOUT)
+        self.cog = cog
+        self.s = s
+        self.message: discord.WebhookMessage | None = None
+        self.confirm.label = s.stop_confirm_yes or None
+        self.cancel.label = s.stop_confirm_no or None
+
+    @discord.ui.button(style=discord.ButtonStyle.danger)
+    async def confirm(
+        self, interaction: discord.Interaction, _: discord.ui.Button["StopConfirmView"]
+    ) -> None:
+        """Stops the music and removes the waiting songs."""
+        self.stop()
+        self.cog.stop_music(guild_of(interaction), interaction.user.display_name)
+        await interaction.response.edit_message(content=self.s.stopped, view=None)
+
+    @discord.ui.button(style=discord.ButtonStyle.secondary)
+    async def cancel(
+        self, interaction: discord.Interaction, _: discord.ui.Button["StopConfirmView"]
+    ) -> None:
+        """Leaves the music and the queue as they are."""
+        self.stop()
+        await interaction.response.edit_message(content=self.s.stop_kept, view=None)
+
+    async def on_timeout(self) -> None:
+        """Removes the buttons of an unanswered question, which then changes nothing."""
+        if self.message is not None:
+            with contextlib.suppress(discord.HTTPException):
+                await self.message.edit(content=self.s.stop_kept, view=None)
 
 
 class QueueView(discord.ui.View):

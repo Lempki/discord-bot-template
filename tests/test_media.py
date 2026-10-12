@@ -19,6 +19,7 @@ from cogs.media import (
     MediaCog,
     PanelView,
     QueueView,
+    StopConfirmView,
     Track,
     clock,
     cut_lyrics,
@@ -1232,8 +1233,6 @@ async def test_the_panel_buttons_control_the_player() -> None:
     await view.skip_button.callback(interaction)  # type: ignore[call-arg]
     voice_client.stop.assert_called_once()
 
-    await view.stop_button.callback(interaction)  # type: ignore[call-arg]
-    assert not player.queue
     # A press updates the panel and sends no message of its own.
     assert sent_messages(interaction) == []
 
@@ -1468,3 +1467,65 @@ async def test_an_ended_panel_names_only_a_stop() -> None:
 
     assert EN.action_paused.format(user="Ada") not in paused.description
     assert stopped.description.splitlines()[-1] == EN.action_stopped.format(user="Ada")
+
+
+async def test_stop_asks_before_it_removes_waiting_songs() -> None:
+    _, cog = await media_cog()
+    view = PanelView(cog)
+    player = queued_player(cog, 3)
+    player.current = panel_track()
+    interaction, voice_client = playing_guild()
+
+    await view.stop_button.callback(interaction)  # type: ignore[call-arg]
+
+    # Nothing stops until the presser answers.
+    voice_client.stop.assert_not_called()
+    assert len(player.queue) == 3
+    call = interaction.followup.send.call_args
+    assert call.args[0] == EN.stop_confirm.format(count=3)
+    assert call.kwargs["ephemeral"] is True
+    question = call.kwargs["view"]
+    assert isinstance(question, StopConfirmView)
+    assert question.confirm.label == EN.stop_confirm_yes
+
+    answer = make_interaction()
+    answer.guild = interaction.guild
+    answer.user.display_name = "Ada"
+    answer.response.edit_message = AsyncMock()
+    await question.confirm.callback(answer)  # type: ignore[call-arg]
+
+    assert not player.queue
+    voice_client.stop.assert_called_once()
+    assert player.last_action == ("stopped", "Ada", {})
+    answer.response.edit_message.assert_awaited_once_with(content=EN.stopped, view=None)
+
+
+async def test_cancelling_the_stop_keeps_the_music_and_the_queue() -> None:
+    _, cog = await media_cog()
+    player = queued_player(cog, 3)
+    _, voice_client = playing_guild()
+    question = StopConfirmView(cog, EN)
+    answer = make_interaction()
+    answer.response.edit_message = AsyncMock()
+
+    await question.cancel.callback(answer)  # type: ignore[call-arg]
+
+    assert len(player.queue) == 3
+    voice_client.stop.assert_not_called()
+    answer.response.edit_message.assert_awaited_once_with(
+        content=EN.stop_kept, view=None
+    )
+
+
+async def test_stop_without_waiting_songs_stops_at_once() -> None:
+    _, cog = await media_cog()
+    view = PanelView(cog)
+    player = cog.player(MagicMock(id=GUILD_ID))
+    player.current = panel_track()
+    interaction, voice_client = playing_guild()
+    cog._players[GUILD_ID] = player
+
+    await view.stop_button.callback(interaction)  # type: ignore[call-arg]
+
+    voice_client.stop.assert_called_once()
+    interaction.followup.send.assert_not_awaited()

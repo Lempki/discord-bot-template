@@ -102,6 +102,11 @@ class CoreStrings:
     panel_queue: str = ""
     panel_lyrics: str = ""
     panel_not_listening: str = ""
+    # The question that the stop button asks while songs wait. The placeholder is {count}.
+    stop_confirm: str = ""
+    stop_confirm_yes: str = ""
+    stop_confirm_no: str = ""
+    stop_kept: str = ""
     # The panel's line about who last changed the music, by a button or a command.
     # Placeholders are {user}, {title}, {loop}, and {volume}.
     action_skipped: str = ""
@@ -272,6 +277,10 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "panel_queue": "Queue",
         "panel_lyrics": "Lyrics",
         "panel_not_listening": "Join the bot's voice channel to control the music.",
+        "stop_confirm": "This stops the music and removes the {count} waiting songs.",
+        "stop_confirm_yes": "Stop and clear",
+        "stop_confirm_no": "Cancel",
+        "stop_kept": "The music goes on, and the queue stays as it was.",
         "action_skipped": "⏭️ {user} skipped **{title}**",
         "action_skipto": "⏭️ {user} skipped ahead in the queue",
         "action_previous": "⏮️ {user} went back a song",
@@ -432,6 +441,10 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "panel_queue": "Jono",
         "panel_lyrics": "Sanat",
         "panel_not_listening": "Liity botin äänikanavalle ohjataksesi musiikkia.",
+        "stop_confirm": "Tämä pysäyttää musiikin ja poistaa {count} jonossa odottavaa kappaletta.",
+        "stop_confirm_yes": "Pysäytä ja tyhjennä",
+        "stop_confirm_no": "Peruuta",
+        "stop_kept": "Musiikki jatkuu, ja jono pysyy ennallaan.",
         "action_skipped": "⏭️ {user} ohitti kappaleen **{title}**",
         "action_skipto": "⏭️ {user} hyppäsi jonossa eteenpäin",
         "action_previous": "⏮️ {user} palasi edelliseen kappaleeseen",
