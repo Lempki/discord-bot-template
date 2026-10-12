@@ -1,4 +1,12 @@
 # Runs the bot alone. Use compose.stack.yml to also run the api-* services it depends on.
+# Docker keeps at most two log files of 5 MB per container and overwrites the oldest.
+# Without a limit, a log grows until the container is recreated.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "5m"
+    max-file: "2"
+
 services:
   bot:
     build: .
@@ -7,6 +15,7 @@ services:
     volumes:
       - bot-data:/app/data
     restart: unless-stopped
+    logging: *logging
 
 volumes:
   bot-data:
