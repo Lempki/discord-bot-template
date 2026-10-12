@@ -202,12 +202,26 @@ async def _migrate_to_4(db: aiosqlite.Connection) -> None:
     await db.execute("ALTER TABLE guild_settings ADD COLUMN dj_role_id INTEGER")
 
 
+async def _migrate_to_5(db: aiosqlite.Connection) -> None:
+    """Adds the live music panels, so a restart can close the panels that it left behind."""
+    await db.execute(
+        """
+        CREATE TABLE music_panels (
+            guild_id        INTEGER PRIMARY KEY,
+            channel_id      INTEGER NOT NULL,
+            message_id      INTEGER NOT NULL
+        )
+        """
+    )
+
+
 # Each entry upgrades the schema by one version. Append new migrations and never edit old ones.
 _MIGRATIONS: list[Callable[[aiosqlite.Connection], Awaitable[None]]] = [
     _migrate_to_1,
     _migrate_to_2,
     _migrate_to_3,
     _migrate_to_4,
+    _migrate_to_5,
 ]
 
 
@@ -360,3 +374,33 @@ async def delete_all_warnings(guild_id: int, user_id: int) -> int:
         "DELETE FROM warnings WHERE guild_id = ? AND user_id = ?", (guild_id, user_id)
     )
     return cur.rowcount
+
+
+# --- Music panels ---
+
+
+async def save_panel(guild_id: int, channel_id: int, message_id: int) -> None:
+    """Records a guild's live music panel, replacing the one it had before."""
+    await _conn_or_raise().execute(
+        "INSERT INTO music_panels (guild_id, channel_id, message_id) VALUES (?, ?, ?) "
+        "ON CONFLICT (guild_id) DO UPDATE SET "
+        "channel_id = excluded.channel_id, message_id = excluded.message_id",
+        (guild_id, channel_id, message_id),
+    )
+
+
+async def forget_panel(guild_id: int, message_id: int) -> None:
+    """Forgets a guild's music panel, unless a newer panel replaced it already."""
+    await _conn_or_raise().execute(
+        "DELETE FROM music_panels WHERE guild_id = ? AND message_id = ?",
+        (guild_id, message_id),
+    )
+
+
+async def list_panels() -> list[tuple[int, int, int]]:
+    """Returns every recorded music panel as its guild, channel, and message IDs."""
+    async with _conn_or_raise().execute(
+        "SELECT guild_id, channel_id, message_id FROM music_panels"
+    ) as cur:
+        rows = await cur.fetchall()
+    return [(row[0], row[1], row[2]) for row in rows]

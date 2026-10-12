@@ -196,6 +196,7 @@ async def test_version_1_database_gains_automod_settings(tmp_path: Path) -> None
                 auto_role_name, warn_threshold, warn_action FROM guild_settings;
             DROP TABLE guild_settings;
             ALTER TABLE old RENAME TO guild_settings;
+            DROP TABLE music_panels;
             PRAGMA user_version = 1;
             """
         )
@@ -222,6 +223,7 @@ async def test_version_2_database_gains_the_music_volume(tmp_path: Path) -> None
             """
             ALTER TABLE guild_settings DROP COLUMN dj_role_id;
             ALTER TABLE guild_settings DROP COLUMN music_volume;
+            DROP TABLE music_panels;
             PRAGMA user_version = 2;
             """
         )
@@ -260,6 +262,7 @@ async def test_version_3_database_gains_an_empty_dj_role(tmp_path: Path) -> None
         conn.executescript(
             """
             ALTER TABLE guild_settings DROP COLUMN dj_role_id;
+            DROP TABLE music_panels;
             PRAGMA user_version = 3;
             """
         )
@@ -276,3 +279,20 @@ async def test_version_3_database_gains_an_empty_dj_role(tmp_path: Path) -> None
     assert settings.dj_role_id is None
     assert settings.music_volume == 80
     assert updated.dj_role_id == 42
+
+
+async def test_a_guild_keeps_one_recorded_music_panel(db: None) -> None:
+    await database.save_panel(GUILD, 10, 100)
+    await database.save_panel(GUILD, 11, 101)
+    await database.save_panel(GUILD + 1, 20, 200)
+
+    assert sorted(await database.list_panels()) == [
+        (GUILD, 11, 101),
+        (GUILD + 1, 20, 200),
+    ]
+
+    # Forgetting an older panel leaves the newer one that replaced it.
+    await database.forget_panel(GUILD, 100)
+    assert (GUILD, 11, 101) in await database.list_panels()
+    await database.forget_panel(GUILD, 101)
+    assert await database.list_panels() == [(GUILD + 1, 20, 200)]

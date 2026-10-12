@@ -43,6 +43,9 @@ QUEUE_VIEW_TIMEOUT = 600
 # The panel lists this many waiting tracks and counts the rest.
 PANEL_NEXT_SHOWN = 3
 
+# A panel's progress line starts with its bar, or with the time for a song of unknown length.
+PROGRESS_MARKS = ("▰", "▱", "`")
+
 # The stop button's question waits this long for an answer, in seconds.
 STOP_CONFIRM_TIMEOUT = 60
 
@@ -165,6 +168,23 @@ def loop_name(s: CoreStrings, mode: str) -> str:
         "track": s.panel_loop_track,
         "queue": s.panel_loop_queue,
     }[mode]
+
+
+def ended_card(embed: discord.Embed, s: CoreStrings) -> discord.Embed:
+    """Turns the card of a panel that a restart left behind into a record of its song.
+
+    The card keeps the song, its credits, and who added it, as an ended panel does.
+    It loses its progress, its list of next songs, and its footer, which no longer hold.
+    """
+    card = embed.copy()
+    if s.panel_ended:
+        card.set_author(name=s.panel_ended)
+    lines = (card.description or "").splitlines()
+    kept = [line for line in lines if not line.startswith(PROGRESS_MARKS)]
+    card.description = "\n".join(kept) or None
+    card.clear_fields()
+    card.remove_footer()
+    return card
 
 
 def cut_lyrics(lyrics: str, limit: int = LYRICS_LIMIT) -> str:
@@ -688,6 +708,8 @@ class MediaCog(commands.Cog, name="Media"):
         self._button_cooldowns: dict[int, app_commands.Cooldown] = {}
         # Handles the buttons of every panel, including those posted before a restart.
         self._panel_buttons = PanelView(self)
+        # Closes the panels that the previous run left behind, once the bot is connected.
+        self._old_panels: asyncio.Task[None] | None = None
 
     def player(self, guild: discord.Guild) -> GuildPlayer:
         """Returns the guild's player, creating it on first use."""
@@ -1430,11 +1452,16 @@ class MediaCog(commands.Cog, name="Media"):
     async def cog_load(self) -> None:
         """Starts listening to the panel buttons and logs that the cog is ready."""
         self.bot.add_view(self._panel_buttons)
+        self._old_panels = asyncio.create_task(
+            self._close_old_panels(), name="media-old-panels"
+        )
         log.info(f"{self.qualified_name} cog loaded.")
 
     async def cog_unload(self) -> None:
         """Stops every player, restores the bot's status, and closes the media API client."""
         self._panel_buttons.stop()
+        if self._old_panels is not None:
+            self._old_panels.cancel()
         for player in self._players.values():
             player.cancel()
         with contextlib.suppress(Exception):
@@ -1598,6 +1625,7 @@ class MediaCog(commands.Cog, name="Media"):
                 with contextlib.suppress(discord.HTTPException):
                     await old.delete()
             player.panel = await channel.send(embed=embed, view=view)
+            await self._record_panel(player.panel)
         except discord.HTTPException as error:
             log.warning(f"Could not update the music panel: {error}")
             player.panel = None
@@ -1608,6 +1636,7 @@ class MediaCog(commands.Cog, name="Media"):
             panel, player.panel = player.panel, None
             if panel is None:
                 return
+            await self._forget_panel(panel)
             s = self.bot.strings_for(panel.guild)
             last = player.history[-1] if player.history else None
             try:
@@ -1644,6 +1673,58 @@ class MediaCog(commands.Cog, name="Media"):
             carries=True,
             title=escape(shorten(title, LIST_TITLE_LIMIT)),
         )
+
+    async def _record_panel(self, panel: discord.Message) -> None:
+        """Records a live panel, so the next start can close it if the bot stops meanwhile."""
+        if panel.guild is None:
+            return
+        try:
+            await database.save_panel(panel.guild.id, panel.channel.id, panel.id)
+        except Exception as error:
+            log.warning(f"Could not record the music panel: {error!r}")
+
+    async def _forget_panel(self, panel: discord.Message) -> None:
+        if panel.guild is None:
+            return
+        try:
+            await database.forget_panel(panel.guild.id, panel.id)
+        except Exception as error:
+            log.warning(f"Could not forget the music panel: {error!r}")
+
+    async def _close_old_panels(self) -> None:
+        """Closes the panels that the previous run left playing, which lost their music."""
+        await self.bot.wait_until_ready()
+        try:
+            panels = await database.list_panels()
+        except Exception as error:
+            log.warning(f"Could not read the music panels: {error!r}")
+            return
+        for guild_id, channel_id, message_id in panels:
+            await self.close_old_panel(guild_id, channel_id, message_id)
+
+    async def close_old_panel(
+        self, guild_id: int, channel_id: int, message_id: int
+    ) -> None:
+        """Turns one panel from before the restart into a record of its song, without buttons."""
+        try:
+            channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(
+                channel_id
+            )
+            if not isinstance(channel, discord.abc.Messageable):
+                return
+            message = await channel.fetch_message(message_id)
+            s = self.bot.strings_for(message.guild)
+            embeds = [ended_card(embed, s) for embed in message.embeds[:1]]
+            await message.edit(embeds=embeds, view=None)
+            log.info(f"Closed a music panel that the last run left in {message.guild}.")
+        except discord.HTTPException as error:
+            # A deleted panel or a channel the bot lost access to needs nothing more.
+            log.info(f"Could not close an old music panel: {error}")
+        finally:
+            try:
+                await database.forget_panel(guild_id, message_id)
+            except Exception as error:
+                log.warning(f"Could not forget the music panel: {error!r}")
 
     def button_retry_after(self, user_id: int) -> float | None:
         """Counts a member's panel press, and returns the wait when they press too fast."""

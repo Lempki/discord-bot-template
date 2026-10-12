@@ -26,6 +26,7 @@ from cogs.media import (
     Track,
     clock,
     cut_lyrics,
+    ended_card,
     link,
     progress_line,
     suggestion_name,
@@ -33,6 +34,7 @@ from cogs.media import (
 from config import Config, ServiceConfig
 from localization import LOCALES
 from tests.conftest import GUILD_ID, make_interaction, sent_messages
+from utils import database
 from utils.audio import SILENCE, BufferedSource, MediaAPIClient, prime, source_name
 
 EN = LOCALES["en"]
@@ -79,6 +81,7 @@ def panel_channel() -> MagicMock:
         message = MagicMock(spec=discord.Message)
         message.id = 100 + len(channel.sent)
         message.channel = channel
+        message.guild = MagicMock(id=GUILD_ID)
         message.embeds = [kwargs["embed"]]
         message.view = kwargs.get("view")
 
@@ -1872,3 +1875,70 @@ async def test_a_listener_may_remove_their_own_song_but_not_others() -> None:
 
     assert sent_messages(others) == [EN.dj_only]
     assert titles(player) == ["Song 2"]
+
+
+async def test_a_panel_from_before_a_restart_becomes_a_record_of_its_song(
+    db: None,
+) -> None:
+    bot, cog = await media_cog()
+    player = cog.player(MagicMock(id=GUILD_ID))
+    player.current = panel_track()
+    player.started_at = time.monotonic() - 30
+    live = cog.panel_embed(player, player.current, EN, state="playing")
+    message = MagicMock(spec=discord.Message)
+    message.guild = MagicMock(id=GUILD_ID)
+    message.embeds = [live]
+    message.edit = AsyncMock()
+    channel = MagicMock(spec=discord.TextChannel)
+    channel.fetch_message = AsyncMock(return_value=message)
+    bot.get_channel = MagicMock(return_value=channel)  # type: ignore[method-assign]
+    await database.save_panel(GUILD_ID, 50, 500)
+
+    await cog.close_old_panel(GUILD_ID, 50, 500)
+
+    kwargs = message.edit.call_args.kwargs
+    assert kwargs["view"] is None
+    card = kwargs["embeds"][0]
+    assert card.author.name == EN.panel_ended
+    assert card.title == "Hotel California"
+    # The progress, the next songs, and the footer no longer hold.
+    assert card.description == EN.panel_details.format(source="Spotify", user="Ada")
+    assert not card.fields
+    assert card.footer.text is None
+    assert await database.list_panels() == []
+
+
+async def test_a_deleted_old_panel_is_forgotten(db: None) -> None:
+    bot, cog = await media_cog()
+    channel = MagicMock(spec=discord.TextChannel)
+    channel.fetch_message = AsyncMock(
+        side_effect=discord.NotFound(MagicMock(status=404), "Unknown Message")
+    )
+    bot.get_channel = MagicMock(return_value=channel)  # type: ignore[method-assign]
+    await database.save_panel(GUILD_ID, 50, 500)
+
+    await cog.close_old_panel(GUILD_ID, 50, 500)
+
+    assert await database.list_panels() == []
+
+
+async def test_a_posted_panel_is_recorded_and_an_ended_one_forgotten(db: None) -> None:
+    _, cog = await media_cog()
+    player = cog.player(MagicMock(id=GUILD_ID))
+    player.current = panel_track()
+    channel = player.current.channel
+
+    await cog.refresh_panel(MagicMock(id=GUILD_ID), new_track=True)
+    panel = channel.sent[0]
+    assert await database.list_panels() == [(GUILD_ID, channel.id, panel.id)]
+
+    player.history.append(player.current)
+    await cog.end_panel(player)
+    assert await database.list_panels() == []
+
+
+def test_ended_card_keeps_a_card_without_progress() -> None:
+    card = ended_card(discord.Embed(title="Song", description="`1:15`"), EN)
+
+    assert card.description is None
+    assert card.author.name == EN.panel_ended
