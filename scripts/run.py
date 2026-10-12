@@ -23,6 +23,7 @@ import subprocess
 import sys
 import tarfile
 import time
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -54,6 +55,18 @@ from bootstrap import (
     updates_scheduled,
     uses_published_images,
 )
+
+# A Discord webhook in .env that hears about installed and failed updates.
+NOTICE_KEY = "UPDATE_WEBHOOK_URL"
+NOTICE_PREFIXES = (
+    "https://discord.com/api/webhooks/",
+    "https://discordapp.com/api/webhooks/",
+)
+# Discord asks for a User-Agent of the form "DiscordBot (URL, version)".
+NOTICE_AGENT = "DiscordBot (https://github.com/Lempki, 1.0)"
+NOTICE_TIMEOUT_SECONDS = 10
+# Discord rejects messages longer than 2000 characters.
+NOTICE_LIMIT = 2000
 
 ACTIONS = {
     "start": "Start everything in Docker, then wait until it is ready.",
@@ -844,12 +857,19 @@ def roll_back(
     show_status(project)
 
 
-def update_release(project: Project, report: Report) -> bool:
+def update_release(
+    project: Project, report: Report, installed: list[str] | None = None
+) -> bool:
     """Installs the newest published release, and puts the previous one back if it fails to start.
 
     The update downloads the newest image of every service.
     A new image of the project itself brings new release files, such as compose and run files.
     A new release that fails to start is undone and skipped until a newer one appears.
+
+    Args:
+        project: The project to update.
+        report: The report that records the outcome.
+        installed: Receives each image that changed, such as "api-media 2.5.0 → 2.6.0".
 
     Returns:
         Whether the newest release runs.
@@ -939,6 +959,13 @@ def update_release(project: Project, report: Report) -> bool:
     state.broken.difference_update(changed.values())
     state.save(project.root)
     report.ok("Updated to the newest release.")
+    if installed is not None:
+        installed += [
+            f"{image_name(ref)} {version_of(kept[ref]) or '?'} → {version_of(new) or '?'}"
+            if ref in kept
+            else f"{image_name(ref)} {version_of(new) or '?'}"
+            for ref, new in changed.items()
+        ]
     show_result(project, True)
     return True
 
@@ -1134,10 +1161,72 @@ def restore(project: Project, report: Report) -> bool:
     return start(project, report) and result.returncode == 0
 
 
+def notice_url(root: Path) -> str | None:
+    """Returns the Discord webhook in .env that hears about updates, or None without one."""
+    env = root / ".env"
+    text = env.read_text(encoding="utf-8") if env.exists() else ""
+    url = env_value(text, NOTICE_KEY)
+    return url if url and url.startswith(NOTICE_PREFIXES) else None
+
+
+def post_notice(root: Path, text: str) -> None:
+    """Posts a message to the Discord webhook in UPDATE_WEBHOOK_URL, when one is set.
+
+    The URL works like a password, so neither it nor an error that could hold it is printed.
+    A failed post never fails the update.
+    """
+    url = notice_url(root)
+    if url is None:
+        return
+    body = json.dumps(
+        # A notice never pings anyone.
+        {"content": text[:NOTICE_LIMIT], "allowed_mentions": {"parse": []}}
+    ).encode()
+    request = urllib.request.Request(
+        url,
+        data=body,
+        # Discord refuses requests without a User-Agent of its own form.
+        headers={"Content-Type": "application/json", "User-Agent": NOTICE_AGENT},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=NOTICE_TIMEOUT_SECONDS):
+            pass
+    except (OSError, ValueError) as error:
+        print(f"  Could not post the outcome to Discord: {type(error).__name__}.")
+        return
+    print("  [ok] Posted the outcome to Discord.")
+
+
+def image_name(ref: str) -> str:
+    """Shortens an image reference such as ghcr.io/lempki/api-media:latest to api-media."""
+    return ref.rsplit("/", 1)[-1].split(":", 1)[0]
+
+
+def update_notice(
+    project: Project, report: Report, ok: bool, installed: list[str]
+) -> str | None:
+    """Words the Discord notice of an update, or returns None when there is nothing to tell.
+
+    A quiet night, when nothing new was released, needs no notice.
+    """
+    if ok and installed:
+        return f"✅ **{project.name}** installed {', '.join(installed)}."
+    if ok or not report.problems:
+        return None
+    lines = [f"⚠️ **{project.name}**: the update needs attention."]
+    lines += [f"• {problem.what} {problem.why}" for problem in report.problems]
+    return "\n".join(lines)
+
+
 def update(project: Project, report: Report) -> bool:
     """Installs the newest release, or pulls the latest code and rebuilds in a Git clone."""
     if project.published:
-        return update_release(project, report)
+        installed: list[str] = []
+        ok = update_release(project, report, installed)
+        if notice := update_notice(project, report, ok, installed):
+            post_notice(project.root, notice)
+        return ok
     section("Updating the code")
     folders = [project.root]
     if project.compose_file == "compose.stack.yml":

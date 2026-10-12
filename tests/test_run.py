@@ -2,9 +2,12 @@
 
 import importlib.util
 import io
+import json
 import sys
 import tarfile
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -642,3 +645,128 @@ def test_restore_refuses_a_file_that_is_not_a_database(
 
     assert not run_script.restore(run_script.detect_project(bot), report)
     assert "not a SQLite database" in report.problems[0].what
+
+
+WEBHOOK = "https://discord.com/api/webhooks/1/secret-token"
+
+
+def test_update_notice_lists_what_was_installed(released_bot: Path) -> None:
+    project = run_script.detect_project(released_bot)
+
+    text = run_script.update_notice(
+        project, run_script.Report(), True, ["api-media 2.5.0 → 2.6.0"]
+    )
+
+    assert text == f"✅ **{project.name}** installed api-media 2.5.0 → 2.6.0."
+
+
+def test_a_quiet_night_sends_no_notice(released_bot: Path) -> None:
+    project = run_script.detect_project(released_bot)
+
+    assert run_script.update_notice(project, run_script.Report(), True, []) is None
+
+
+def test_a_failed_update_names_every_problem(released_bot: Path) -> None:
+    project = run_script.detect_project(released_bot)
+    report = run_script.Report()
+    report.problem(
+        "The new release failed to start.", "The old one runs.", "Read the log."
+    )
+
+    text = run_script.update_notice(project, report, False, [])
+
+    assert text is not None
+    assert "needs attention" in text
+    assert "• The new release failed to start. The old one runs." in text
+
+
+def test_the_notice_goes_to_the_webhook_in_env(
+    released_bot: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (released_bot / ".env").write_text(
+        f"UPDATE_WEBHOOK_URL={WEBHOOK}\n", encoding="utf-8"
+    )
+    sent: list[urllib.request.Request] = []
+
+    class Answer:
+        def __enter__(self) -> "Answer":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+    def fake_urlopen(request: urllib.request.Request, timeout: float) -> Answer:
+        sent.append(request)
+        return Answer()
+
+    monkeypatch.setattr(run_script.urllib.request, "urlopen", fake_urlopen)
+
+    run_script.post_notice(released_bot, "Hello <@123>")
+
+    assert sent[0].full_url == WEBHOOK
+    body = json.loads(sent[0].data)  # type: ignore[arg-type]
+    assert body == {"content": "Hello <@123>", "allowed_mentions": {"parse": []}}
+    # The URL works like a password, so it never reaches the log.
+    assert "secret-token" not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "",
+        "# UPDATE_WEBHOOK_URL=" + WEBHOOK,
+        "UPDATE_WEBHOOK_URL=https://example.com/hook",
+    ],
+)
+def test_no_notice_without_a_discord_webhook(
+    released_bot: Path, monkeypatch: pytest.MonkeyPatch, line: str
+) -> None:
+    (released_bot / ".env").write_text(line + "\n", encoding="utf-8")
+    monkeypatch.setattr(
+        run_script.urllib.request,
+        "urlopen",
+        lambda *args, **kwargs: pytest.fail("A notice was sent."),
+    )
+
+    run_script.post_notice(released_bot, "Hello")
+
+
+def test_a_failed_post_never_fails_the_update(
+    released_bot: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (released_bot / ".env").write_text(
+        f"UPDATE_WEBHOOK_URL={WEBHOOK}\n", encoding="utf-8"
+    )
+
+    def refuse(*args: object, **kwargs: object) -> None:
+        raise urllib.error.URLError(f"no route to {WEBHOOK}")
+
+    monkeypatch.setattr(run_script.urllib.request, "urlopen", refuse)
+
+    run_script.post_notice(released_bot, "Hello")
+
+    output = capsys.readouterr().out
+    assert "Could not post" in output
+    assert "secret-token" not in output
+
+
+def test_an_installed_update_reports_its_versions(
+    released_bot: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_docker(monkeypatch, pulled={BOT_IMAGE: "sha256:bot-new"}, starts=[True])
+    monkeypatch.setattr(
+        run_script,
+        "version_of",
+        lambda image: {"sha256:bot-new": "1.7.0"}.get(image, "1.6.0"),
+    )
+    installed: list[str] = []
+
+    assert run_script.update_release(
+        run_script.detect_project(released_bot), run_script.Report(), installed
+    )
+
+    assert installed == [f"{run_script.image_name(BOT_IMAGE)} 1.6.0 → 1.7.0"]
