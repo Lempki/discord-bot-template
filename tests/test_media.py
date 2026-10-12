@@ -1493,13 +1493,15 @@ async def test_stop_asks_before_it_removes_waiting_songs() -> None:
     player = queued_player(cog, 3)
     player.current = panel_track()
     interaction, voice_client = playing_guild()
+    interaction.original_response = AsyncMock(return_value=MagicMock())
 
     await view.stop_button.callback(interaction)  # type: ignore[call-arg]
 
     # Nothing stops until the presser answers.
     voice_client.stop.assert_not_called()
     assert len(player.queue) == 3
-    call = interaction.followup.send.call_args
+    # The question is the press's own reply, sent before any other round trip.
+    call = interaction.response.send_message.call_args
     assert call.args[0] == EN.stop_confirm.format(count=3)
     assert call.kwargs["ephemeral"] is True
     question = call.kwargs["view"]

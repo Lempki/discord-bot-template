@@ -1992,22 +1992,32 @@ class PanelView(discord.ui.View):
     async def _start(
         self, interaction: discord.Interaction
     ) -> tuple[discord.Guild, discord.VoiceClient, GuildPlayer]:
-        """Acknowledges a press and returns what the controls act on.
+        """Returns what the controls act on.
 
         interaction_check has made sure that the bot is in voice.
-        The panel itself shows the result, so the press gets no message of its own.
+        A press acts first and is acknowledged after, with _ack() or _tell().
+        Acting before the round trip to Discord makes a pause or a skip heard sooner.
         Never call finish() after a press.
         A press's original response is the panel itself, which finish() would delete.
         """
-        await interaction.response.defer()
         guild = guild_of(interaction)
         voice_client = guild.voice_client
         assert isinstance(voice_client, discord.VoiceClient)
         return guild, voice_client, self.cog.player(guild)
 
+    async def _ack(self, interaction: discord.Interaction) -> None:
+        """Acknowledges a press that got no message, before the panel shows the result."""
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+
     async def _tell(self, interaction: discord.Interaction, text: str) -> None:
-        if text:
+        """Answers a press with a message that only the presser sees."""
+        if not text:
+            await self._ack(interaction)
+        elif interaction.response.is_done():
             await interaction.followup.send(text, ephemeral=True)
+        else:
+            await interaction.response.send_message(text, ephemeral=True)
 
     def _strings(self, interaction: discord.Interaction) -> CoreStrings:
         return self.cog.bot.strings_for(interaction, private=True)
@@ -2023,6 +2033,7 @@ class PanelView(discord.ui.View):
             return
         if player.shuffle():
             player.note("shuffled", interaction.user.display_name)
+            await self._ack(interaction)
             await self.cog.refresh_panel(guild)
         else:
             text = self._strings(interaction).queue_nothing_waiting
@@ -2037,6 +2048,7 @@ class PanelView(discord.ui.View):
         user = interaction.user.display_name
         if self.cog.go_back(player, voice_client, user) is None:
             await self._tell(interaction, self._strings(interaction).previous_none)
+        await self._ack(interaction)
 
     @discord.ui.button(emoji="⏸️", custom_id="media:pause", row=0)
     async def pause_button(
@@ -2048,6 +2060,7 @@ class PanelView(discord.ui.View):
             await self._tell(interaction, self._strings(interaction).nothing_playing)
             return
         paused = player.toggle_pause(voice_client)
+        await self._ack(interaction)
         player.note("paused" if paused else "resumed", interaction.user.display_name)
         await self.cog.refresh_panel(guild)
 
@@ -2068,6 +2081,7 @@ class PanelView(discord.ui.View):
                 )
         else:
             await self._tell(interaction, self._strings(interaction).nothing_playing)
+        await self._ack(interaction)
 
     @discord.ui.button(emoji="🔁", custom_id="media:loop", row=0)
     async def loop_button(
@@ -2080,6 +2094,7 @@ class PanelView(discord.ui.View):
             return
         player.loop = NEXT_LOOP_MODE[player.loop]
         player.note("loop", interaction.user.display_name, loop=player.loop)
+        await self._ack(interaction)
         await self.cog.refresh_panel(guild)
 
     @discord.ui.button(
@@ -2096,15 +2111,14 @@ class PanelView(discord.ui.View):
         if not player.queue:
             # Nothing waits, so nothing can be lost.
             self.cog.stop_music(guild, interaction.user.display_name)
+            await self._ack(interaction)
             return
         s = self._strings(interaction)
         view = StopConfirmView(self.cog, s)
-        view.message = await interaction.followup.send(
-            s.stop_confirm.format(count=len(player.queue)),
-            view=view,
-            ephemeral=True,
-            wait=True,
+        await interaction.response.send_message(
+            s.stop_confirm.format(count=len(player.queue)), view=view, ephemeral=True
         )
+        view.message = await interaction.original_response()
 
     @discord.ui.button(emoji="📜", custom_id="media:queue", row=1)
     async def queue_button(
@@ -2131,7 +2145,7 @@ class StopConfirmView(discord.ui.View):
         super().__init__(timeout=STOP_CONFIRM_TIMEOUT)
         self.cog = cog
         self.s = s
-        self.message: discord.WebhookMessage | None = None
+        self.message: discord.Message | None = None
         self.confirm.label = s.stop_confirm_yes or None
         self.cancel.label = s.stop_confirm_no or None
 
