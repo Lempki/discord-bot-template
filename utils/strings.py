@@ -101,7 +101,7 @@ class CoreStrings:
     panel_loop_off: str = ""
     panel_loop_track: str = ""
     panel_loop_queue: str = ""
-    panel_shuffle: str = ""
+    panel_stop: str = ""
     panel_queue: str = ""
     panel_lyrics: str = ""
     panel_not_listening: str = ""
@@ -114,6 +114,9 @@ class CoreStrings:
     about_text: str = ""
     about_link: str = ""
     help_footer: str = ""
+    # The bot's status, which is the same in every server and so names no song.
+    status_idle: str = ""
+    status_playing: str = ""
     help_empty: str = ""
     section_admin: str = ""
     section_help: str = ""
@@ -241,6 +244,8 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "lyrics_none": "No lyrics were found for **{title}**.",
         "lyrics_unavailable": "The lyrics service could not be reached. Try again later.",
         "lyrics_footer": "Lyrics from LRCLIB",
+        "status_idle": "/help shows the commands",
+        "status_playing": "🎵 Playing music",
         "panel_playing": "Now playing",
         "panel_paused": "Paused",
         "panel_ended": "Finished playing",
@@ -255,7 +260,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "panel_loop_off": "off",
         "panel_loop_track": "this song",
         "panel_loop_queue": "the whole queue",
-        "panel_shuffle": "Shuffle",
+        "panel_stop": "Stop",
         "panel_queue": "Queue",
         "panel_lyrics": "Lyrics",
         "panel_not_listening": "Join the bot's voice channel to control the music.",
@@ -390,6 +395,8 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "lyrics_none": "Kappaleelle **{title}** ei löytynyt sanoja.",
         "lyrics_unavailable": "Sanapalveluun ei saatu yhteyttä. Yritä myöhemmin uudelleen.",
         "lyrics_footer": "Sanat: LRCLIB",
+        "status_idle": "/help näyttää komennot",
+        "status_playing": "🎵 Soittaa musiikkia",
         "panel_playing": "Nyt soi",
         "panel_paused": "Tauolla",
         "panel_ended": "Soitto päättyi",
@@ -404,7 +411,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "panel_loop_off": "pois",
         "panel_loop_track": "tämä kappale",
         "panel_loop_queue": "koko jono",
-        "panel_shuffle": "Sekoita",
+        "panel_stop": "Pysäytä",
         "panel_queue": "Jono",
         "panel_lyrics": "Sanat",
         "panel_not_listening": "Liity botin äänikanavalle ohjataksesi musiikkia.",

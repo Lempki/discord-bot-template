@@ -14,7 +14,7 @@ from discord.ext import commands
 from config import Config, ConfigError
 from localization import COMMAND_TEXT, LOCALES, Strings
 from utils import database
-from utils.about import IDLE_STATUS, listening_to, read_project_info
+from utils.about import custom_status, read_project_info
 from utils.heartbeat import Heartbeat
 from utils.i18n import SILENT, LocaleTranslator, pick_locale
 from utils.replies import finish, respond
@@ -51,8 +51,10 @@ class BotApp(commands.Bot):
             command_prefix=commands.when_mentioned,
             intents=intents,
             help_command=None,
-            # Shown under the bot's name in every server.
-            activity=listening_to(IDLE_STATUS),
+            # Shown under the bot's name in every server, in the bot's own language.
+            activity=custom_status(
+                pick_locale(LOCALES, None, config.locale).status_idle
+            ),
             # Messages repeat text from users and from sites, such as song titles.
             # So no message may ping everyone or a role, while member mentions still work.
             allowed_mentions=discord.AllowedMentions(everyone=False, roles=False),

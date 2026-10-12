@@ -955,7 +955,7 @@ def voice_channel(guild_id: int = GUILD_ID) -> MagicMock:
     return channel
 
 
-async def test_a_playing_song_shows_in_the_channel_and_the_bot_status() -> None:
+async def test_the_channel_names_the_song_and_the_bot_says_it_plays_music() -> None:
     bot, cog = await media_cog()
     bot.change_presence = AsyncMock()  # type: ignore[method-assign]
     cog.player(MagicMock(id=GUILD_ID)).now_playing = "Hotel California"
@@ -967,7 +967,9 @@ async def test_a_playing_song_shows_in_the_channel_and_the_bot_status() -> None:
     channel.edit.assert_awaited_with(status="🎵 Hotel California")
     # An unchanged bot status is not sent to Discord again.
     bot.change_presence.assert_awaited_once()
-    assert bot.change_presence.call_args.kwargs["activity"].name == "Hotel California"
+    activity = bot.change_presence.call_args.kwargs["activity"]
+    assert isinstance(activity, discord.CustomActivity)
+    assert activity.name == EN.status_playing
 
 
 async def test_the_statuses_clear_when_the_music_ends() -> None:
@@ -982,18 +984,75 @@ async def test_the_statuses_clear_when_the_music_ends() -> None:
     await cog.show_idle(channel)
 
     channel.edit.assert_awaited_with(status=None)
-    assert bot.change_presence.call_args.kwargs["activity"].name == "/help"
+    assert bot.change_presence.call_args.kwargs["activity"].name == EN.status_idle
 
 
-async def test_the_bot_status_stays_on_help_while_two_servers_play() -> None:
+async def test_the_bot_status_stays_on_music_while_another_server_plays() -> None:
     bot, cog = await media_cog()
     bot.change_presence = AsyncMock()  # type: ignore[method-assign]
     cog.player(MagicMock(id=1)).now_playing = "One"
-    cog.player(MagicMock(id=2)).now_playing = "Two"
-
+    two = cog.player(MagicMock(id=2))
+    two.now_playing = "Two"
     await cog.show_playing(voice_channel(1), "One")
+    two.now_playing = None
 
-    bot.change_presence.assert_not_awaited()
+    await cog.show_idle(voice_channel(2))
+
+    bot.change_presence.assert_awaited_once()
+    assert bot.change_presence.call_args.kwargs["activity"].name == EN.status_playing
+
+
+def test_the_starting_status_points_to_help_in_the_bots_language() -> None:
+    bot = media_bot()
+
+    # discord.py keeps the payload that it sends on login, with the text as its state.
+    sent = bot._connection._activity
+    assert sent is not None
+    assert (sent["type"], sent.get("state")) == (
+        discord.ActivityType.custom.value,
+        EN.status_idle,
+    )
+
+
+async def test_a_song_keeps_the_names_it_was_queued_with() -> None:
+    bot, cog = await media_cog()
+    cog.client.get_info = AsyncMock(
+        return_value={
+            "webpage_url": "https://youtu.be/x",
+            "title": "Baby Talk",
+            "artist": "Himiko Kikuchi",
+            "track": "Baby Talk",
+            "album": "Flying Beagle",
+            "thumbnail_url": "https://i.ytimg.com/x.jpg",
+        }
+    )
+    seen: list[Track | None] = []
+    player = GuildPlayer(cog, connected_guild())
+    bot.voice_presence.play = AsyncMock(
+        side_effect=lambda vc, source: seen.append(player.current)
+    )  # type: ignore[method-assign]
+    queued = Track(
+        "https://youtu.be/x",
+        "Ada",
+        MagicMock(send=AsyncMock()),
+        "菊池ひみこ - Baby Talk",
+        thumbnail="https://i.scdn.co/cover.jpg",
+        artist="菊池ひみこ",
+        song="Baby Talk",
+    )
+
+    player.enqueue([queued])
+    await asyncio.wait_for(player._task, timeout=1)  # type: ignore[arg-type]
+
+    current = seen[0]
+    assert current is not None
+    assert current.title == "菊池ひみこ - Baby Talk"
+    assert (current.artist, current.song, current.album) == (
+        "菊池ひみこ",
+        "Baby Talk",
+        None,
+    )
+    assert current.thumbnail == "https://i.scdn.co/cover.jpg"
 
 
 async def test_a_server_that_refuses_the_channel_status_is_not_asked_again() -> None:
@@ -1192,6 +1251,15 @@ async def test_the_panel_buttons_show_the_state() -> None:
     assert str(view.loop_button.emoji) == "🔂"
     assert view.loop_button.style is discord.ButtonStyle.primary
     assert view.queue_button.label == EN.panel_queue
+    assert view.stop_button.style is discord.ButtonStyle.danger
+    # The top row is the usual player row, and stop sits below it.
+    rows = [
+        [item.custom_id for item in view.children if item.row == row] for row in (0, 1)
+    ]  # type: ignore[attr-defined]
+    assert rows == [
+        ["media:shuffle", "media:previous", "media:pause", "media:skip", "media:loop"],
+        ["media:stop", "media:queue", "media:lyrics"],
+    ]
     assert all(item.custom_id.startswith("media:") for item in view.children)  # type: ignore[attr-defined]
 
 

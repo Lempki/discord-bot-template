@@ -16,7 +16,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from utils import database
-from utils.about import IDLE_STATUS, listening_to
+from utils.about import custom_status
 from utils.audio import (
     MediaAPIClient,
     is_spotify_collection,
@@ -402,7 +402,10 @@ class GuildPlayer:
             ):
                 await track.channel.send(message)
             return
-        title = info.get("title") or track.query
+        # A song keeps the names it was queued with, such as Spotify's for a Spotify link.
+        # The lookup fills in only what the queue did not know.
+        title = track.title or info.get("title") or track.query
+        names = track if track.artist else None
         log.info(f"Playing '{title}' in {self._guild}.")
         duration = info.get("duration_seconds") or track.duration
         played = replace(
@@ -411,10 +414,10 @@ class GuildPlayer:
             title=title,
             duration=duration,
             source=track.source or source_name(page_url),
-            thumbnail=info.get("thumbnail_url") or track.thumbnail,
-            artist=info.get("artist") or track.artist,
-            song=info.get("track") or track.song,
-            album=info.get("album") or track.album,
+            thumbnail=track.thumbnail or info.get("thumbnail_url"),
+            artist=names.artist if names else info.get("artist"),
+            song=names.song if names else info.get("track"),
+            album=names.album if names else info.get("album"),
         )
         self.current = played
         self.now_playing = title
@@ -455,7 +458,8 @@ class MediaCog(commands.Cog, name="Media"):
         self._suggestions: OrderedDict[
             tuple[str, str], list[app_commands.Choice[str]]
         ] = OrderedDict()
-        self._status = IDLE_STATUS
+        # The bot's status as last sent, so an unchanged one is not sent again.
+        self._status: str | None = None
         # Servers that refused the voice channel status, which are not asked again.
         self._status_refused: set[int] = set()
         # The panel buttons' cooldown of each member, as the commands have.
@@ -1033,7 +1037,7 @@ class MediaCog(commands.Cog, name="Media"):
         for player in self._players.values():
             player.cancel()
         with contextlib.suppress(Exception):
-            await self._set_bot_status(IDLE_STATUS)
+            await self._set_bot_status(playing=False)
         with contextlib.suppress(Exception):
             await self.client.aclose()
 
@@ -1234,16 +1238,23 @@ class MediaCog(commands.Cog, name="Media"):
         await self._refresh_bot_status()
 
     async def _refresh_bot_status(self) -> None:
-        """Shows the song while exactly one server plays, because the status is the same in all."""
-        playing = [p.now_playing for p in self._players.values() if p.now_playing]
-        await self._set_bot_status(playing[0] if len(playing) == 1 else IDLE_STATUS)
+        """Says whether music plays in any server.
 
-    async def _set_bot_status(self, name: str) -> None:
-        if name == self._status:
+        The status is the same in every server, so it names no song.
+        The voice channel's status and the panel name the song where it plays.
+        """
+        playing = any(p.now_playing for p in self._players.values())
+        await self._set_bot_status(playing=playing)
+
+    async def _set_bot_status(self, *, playing: bool) -> None:
+        # The status is no reply, so the silent locale still shows it in the bot's language.
+        s = self.bot.strings_for(None, private=True)
+        text = s.status_playing if playing else s.status_idle
+        if text == self._status:
             return
-        self._status = name
+        self._status = text
         try:
-            await self.bot.change_presence(activity=listening_to(name))
+            await self.bot.change_presence(activity=custom_status(text))
         except Exception as error:
             log.warning(f"Could not change the bot's status: {error!r}")
 
@@ -1296,7 +1307,7 @@ class PanelView(discord.ui.View):
         if loop == "track":
             self.loop_button.emoji = "🔂"
         if s is not None:
-            self.shuffle_button.label = s.panel_shuffle or None
+            self.stop_button.label = s.panel_stop or None
             self.queue_button.label = s.panel_queue or None
             self.lyrics_button.label = s.panel_lyrics or None
 
@@ -1354,6 +1365,18 @@ class PanelView(discord.ui.View):
     def _strings(self, interaction: discord.Interaction) -> CoreStrings:
         return self.cog.bot.strings_for(interaction, private=True)
 
+    @discord.ui.button(emoji="🔀", custom_id="media:shuffle", row=0)
+    async def shuffle_button(
+        self, interaction: discord.Interaction, _: discord.ui.Button["PanelView"]
+    ) -> None:
+        """Shuffles the waiting songs."""
+        guild, _, player = await self._start(interaction)
+        if player.shuffle():
+            await self.cog.refresh_panel(guild)
+        else:
+            text = self._strings(interaction).queue_nothing_waiting
+            await self._tell(interaction, text)
+
     @discord.ui.button(emoji="⏮️", custom_id="media:previous", row=0)
     async def previous_button(
         self, interaction: discord.Interaction, _: discord.ui.Button["PanelView"]
@@ -1395,7 +1418,9 @@ class PanelView(discord.ui.View):
         player.loop = NEXT_LOOP_MODE[player.loop]
         await self.cog.refresh_panel(guild)
 
-    @discord.ui.button(emoji="⏹️", custom_id="media:stop", row=0)
+    @discord.ui.button(
+        emoji="⏹️", custom_id="media:stop", style=discord.ButtonStyle.danger, row=1
+    )
     async def stop_button(
         self, interaction: discord.Interaction, _: discord.ui.Button["PanelView"]
     ) -> None:
@@ -1404,18 +1429,6 @@ class PanelView(discord.ui.View):
         player.clear()
         if voice_client.is_playing() or voice_client.is_paused():
             voice_client.stop()
-
-    @discord.ui.button(emoji="🔀", custom_id="media:shuffle", row=1)
-    async def shuffle_button(
-        self, interaction: discord.Interaction, _: discord.ui.Button["PanelView"]
-    ) -> None:
-        """Shuffles the waiting songs."""
-        guild, _, player = await self._start(interaction)
-        if player.shuffle():
-            await self.cog.refresh_panel(guild)
-        else:
-            text = self._strings(interaction).queue_nothing_waiting
-            await self._tell(interaction, text)
 
     @discord.ui.button(emoji="📜", custom_id="media:queue", row=1)
     async def queue_button(

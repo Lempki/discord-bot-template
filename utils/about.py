@@ -10,24 +10,23 @@ from pathlib import Path
 
 import discord
 
-__all__ = ["IDLE_STATUS", "ProjectInfo", "listening_to", "read_project_info"]
+__all__ = ["ProjectInfo", "custom_status", "read_project_info"]
 
 log = logging.getLogger(__name__)
 
 PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
 
-# The bot's status while no song plays, which points members to the help command.
-IDLE_STATUS = "/help"
-
-# Discord cuts an activity name at 128 characters.
+# Discord cuts a custom status at 128 characters.
 ACTIVITY_LIMIT = 128
 
 
-def listening_to(name: str) -> discord.Activity:
-    """Returns the "Listening to ..." status that shows under the bot's name."""
-    return discord.Activity(
-        type=discord.ActivityType.listening, name=name[:ACTIVITY_LIMIT]
-    )
+def custom_status(text: str) -> discord.CustomActivity:
+    """Returns the status that shows under the bot's name, as the text itself.
+
+    A custom status has no prefix such as "Listening to".
+    Discord translates that prefix for each reader, which can change what the text means.
+    """
+    return discord.CustomActivity(name=text[:ACTIVITY_LIMIT])
 
 
 @dataclass(frozen=True)
