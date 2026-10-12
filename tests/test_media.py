@@ -15,10 +15,12 @@ from discord import app_commands
 
 from bot import BotApp
 from cogs.media import (
+    DEFAULT_VOLUME,
     QUEUE_PAGE_SIZE,
     GuildPlayer,
     MediaCog,
     PanelView,
+    Prepared,
     QueueView,
     StopConfirmView,
     Track,
@@ -755,7 +757,7 @@ async def test_play_names_the_chosen_search_site() -> None:
     cog.bot.voice_presence.connect = AsyncMock()  # type: ignore[method-assign]
     source = app_commands.Choice(name="SoundCloud", value="soundcloud")
 
-    await cog.play.callback(cog, interaction, "b", source, False)  # type: ignore[arg-type]
+    await cog.play.callback(cog, interaction, "b", source, None)  # type: ignore[arg-type]
 
     cog.client.get_info.assert_awaited_once_with(query="b", source="soundcloud")
     assert "from SoundCloud" in sent_messages(interaction)[0]
@@ -1662,3 +1664,211 @@ async def test_a_withheld_spotify_playlist_is_explained() -> None:
     _, messages = await run_play(cog, "https://open.spotify.com/playlist/p2")
 
     assert messages == [EN.playlist_unavailable]
+
+
+async def test_a_prepared_song_starts_without_a_new_lookup_or_stream() -> None:
+    bot, cog = await media_cog()
+    cog.client.get_info = AsyncMock()
+    bot.voice_presence.play = AsyncMock()  # type: ignore[method-assign]
+    player = GuildPlayer(cog, connected_guild())
+    track = Track("https://youtu.be/next", "Ada", MagicMock(send=AsyncMock()), "Next")
+    pcm = MagicMock(spec=discord.AudioSource)
+    pcm.is_opus.return_value = False
+    buffering = discord.PCMVolumeTransformer(pcm, 0.2)
+    player._prepared = Prepared(
+        track, info={"webpage_url": "https://youtu.be/next"}, source=buffering
+    )
+
+    player.enqueue([track])
+    await asyncio.wait_for(player._task, timeout=1)  # type: ignore[arg-type]
+
+    cog.client.get_info.assert_not_awaited()
+    cog.client.audio_source.assert_not_called()
+    assert bot.voice_presence.play.call_args.args[1] is buffering
+    # The volume is the server's current one, not the one from when it was prepared.
+    assert buffering.volume == DEFAULT_VOLUME / 100
+
+
+async def test_a_prepared_song_that_is_no_longer_next_is_dropped() -> None:
+    bot, cog = await media_cog()
+    cog.client.get_info = AsyncMock(return_value={"webpage_url": "https://youtu.be/a"})
+    bot.voice_presence.play = AsyncMock()  # type: ignore[method-assign]
+    player = GuildPlayer(cog, connected_guild())
+    stale = MagicMock(spec=discord.AudioSource)
+    player._prepared = Prepared(song("Moved"), info={"webpage_url": "x"}, source=stale)
+
+    player.enqueue([song("Other")])
+    await asyncio.wait_for(player._task, timeout=1)  # type: ignore[arg-type]
+
+    stale.cleanup.assert_called_once()
+    cog.client.get_info.assert_awaited_once()
+
+
+async def test_the_next_song_is_looked_up_at_once_and_buffered_near_the_end(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("cogs.media.PREPARE_CHECK_SECONDS", 0.01)
+    _, cog = await media_cog()
+    cog.client.get_info = AsyncMock(return_value={"webpage_url": "https://youtu.be/b"})
+    player = queued_player(cog, 1)
+    upcoming = player.queue[0]
+    player.now_playing_duration = 200
+    player.started_at = time.monotonic() - 60
+    preparer = asyncio.create_task(player._prepare_next())
+
+    async def settle() -> None:
+        for _ in range(50):
+            await asyncio.sleep(0.01)
+
+    await settle()
+    assert player._prepared is not None and player._prepared.track is upcoming
+    assert player._prepared.info == {"webpage_url": "https://youtu.be/b"}
+    # 140 seconds are left, so no audio starts yet.
+    cog.client.audio_source.assert_not_called()
+
+    player.started_at = time.monotonic() - 190
+    await settle()
+    cog.client.audio_source.assert_called_once()
+    source = player._prepared.source
+    assert source is not None
+
+    player.queue.clear()
+    await settle()
+    preparer.cancel()
+    # The queue changed, so the buffering audio was closed.
+    assert player._prepared is None
+    source.cleanup.assert_called_once()
+
+
+async def test_a_paused_song_starts_no_audio_early(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("cogs.media.PREPARE_CHECK_SECONDS", 0.01)
+    _, cog = await media_cog()
+    cog.client.get_info = AsyncMock(return_value={"webpage_url": "https://youtu.be/b"})
+    player = queued_player(cog, 1)
+    player.now_playing_duration = 200
+    player.started_at = time.monotonic() - 195
+    player.paused_at = time.monotonic()
+    preparer = asyncio.create_task(player._prepare_next())
+
+    for _ in range(30):
+        await asyncio.sleep(0.01)
+    preparer.cancel()
+
+    cog.client.audio_source.assert_not_called()
+
+
+def listener_named(
+    member_id: int, *, roles: tuple[int, ...] = (), admin: bool = False
+) -> MagicMock:
+    member = MagicMock(spec=discord.Member)
+    member.id = member_id
+    member.bot = False
+    member.display_name = f"Member {member_id}"
+    member.roles = [MagicMock(id=role) for role in roles]
+    member.guild_permissions = MagicMock(manage_guild=admin)
+    return member
+
+
+def dj_guild(cog: MediaCog, members: list[MagicMock], dj_role: int | None) -> MagicMock:
+    """A guild where the bot plays a song, the members listen, and dj_role is the DJ role."""
+    guild = MagicMock(id=GUILD_ID)
+    voice_client = MagicMock(spec=discord.VoiceClient)
+    voice_client.channel = MagicMock(members=members)
+    guild.voice_client = voice_client
+    cog._dj_role = AsyncMock(return_value=dj_role)  # type: ignore[method-assign]
+    cog.refresh_panel = AsyncMock()  # type: ignore[method-assign]
+    player = cog.player(guild)
+    player.current = replace(song("Current"), requested_by_id=1)
+    return guild
+
+
+@pytest.mark.parametrize(
+    ("dj_role", "member", "listening", "allowed"),
+    [
+        (None, listener_named(5), 4, True),
+        (77, listener_named(5, roles=(77,)), 4, True),
+        (77, listener_named(5, admin=True), 4, True),
+        (77, listener_named(5), 1, True),
+        (77, listener_named(5), 4, False),
+    ],
+    ids=["no-dj-role", "dj", "admin", "alone", "listener"],
+)
+async def test_who_may_control_the_music(
+    dj_role: int | None, member: MagicMock, listening: int, allowed: bool
+) -> None:
+    _, cog = await media_cog()
+    others = [listener_named(100 + n) for n in range(listening - 1)]
+    guild = dj_guild(cog, [member, *others], dj_role)
+
+    assert await cog.may_control(member, guild) is allowed
+
+
+async def test_a_skip_needs_half_of_the_listeners_while_others_listen() -> None:
+    _, cog = await media_cog()
+    # Five members listen.
+    members = [listener_named(n) for n in range(2, 7)]
+    guild = dj_guild(cog, members, 77)
+    player = cog.player(guild)
+
+    first = await cog.request_skip(guild, members[0])
+    again = await cog.request_skip(guild, members[0])
+    second = await cog.request_skip(guild, members[1])
+    third = await cog.request_skip(guild, members[2])
+
+    assert first == (False, 1, 3)
+    # A second vote from the same member does not count twice.
+    assert again == (False, 1, 3)
+    assert second == (False, 2, 3)
+    assert third == (True, 3, 3)
+    assert player.last_action is not None
+    assert player.last_action[0] == "skipped_vote"
+
+
+@pytest.mark.parametrize(
+    ("skipper", "listening"),
+    [(1, 5), (2, 2)],
+    ids=["added-the-song", "two-listeners"],
+)
+async def test_some_skips_need_no_vote(skipper: int, listening: int) -> None:
+    _, cog = await media_cog()
+    members = [listener_named(n) for n in range(1, listening + 1)]
+    guild = dj_guild(cog, members, 77)
+    member = next(m for m in members if m.id == skipper)
+
+    assert await cog.request_skip(guild, member) == (True, 0, 0)
+
+
+async def test_a_listener_without_the_dj_role_cannot_clear_the_queue() -> None:
+    _, cog = await media_cog()
+    member = listener_named(5)
+    guild = dj_guild(cog, [member, listener_named(6)], 77)
+    player = queued_player(cog, 3)
+    interaction = make_interaction(user=member)
+    interaction.guild = guild
+
+    await cog.clear.callback(cog, interaction)  # type: ignore[arg-type]
+
+    assert len(player.queue) == 3
+    assert sent_messages(interaction) == [EN.dj_only]
+    assert interaction.response.send_message.call_args.kwargs["ephemeral"] is True
+
+
+async def test_a_listener_may_remove_their_own_song_but_not_others() -> None:
+    _, cog = await media_cog()
+    member = listener_named(5)
+    guild = dj_guild(cog, [member, listener_named(6)], 77)
+    player = queued_player(cog, 2)
+    player.queue[0] = replace(player.queue[0], requested_by_id=5)
+    player.queue[1] = replace(player.queue[1], requested_by_id=6)
+
+    others = make_interaction(user=member)
+    others.guild = guild
+    await cog.remove.callback(cog, others, 2)  # type: ignore[arg-type]
+    own = make_interaction(user=member)
+    own.guild = guild
+    await cog.remove.callback(cog, own, 1)  # type: ignore[arg-type]
+
+    assert sent_messages(others) == [EN.dj_only]
+    assert titles(player) == ["Song 2"]

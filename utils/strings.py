@@ -50,6 +50,10 @@ class CoreStrings:
     queue_cut: str = ""
     # A Spotify playlist whose songs Spotify does not share with the bot.
     playlist_unavailable: str = ""
+    # The DJ role and vote skipping. Placeholders are {votes} and {needed}.
+    dj_only: str = ""
+    skip_voted: str = ""
+    skip_already_voted: str = ""
     # A playlist's or album's name with its site, which fills {source}.
     # The placeholders are {collection} and {source}.
     collection_on: str = ""
@@ -125,6 +129,8 @@ class CoreStrings:
     action_cleared: str = ""
     action_volume: str = ""
     action_stopped: str = ""
+    action_skipvote: str = ""
+    action_skipped_vote: str = ""
 
     # Help. A section_<cog> field names the section of that cog.
     # A cog without a section field falls back to its own name.
@@ -152,6 +158,8 @@ class CoreStrings:
     admin_channel_cleared: str = ""
     admin_autorole_set: str = ""
     admin_autorole_cleared: str = ""
+    admin_dj_set: str = ""
+    admin_dj_cleared: str = ""
     admin_threshold_set: str = ""
     admin_action_set: str = ""
     admin_timeout_set: str = ""
@@ -236,6 +244,9 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queue_full": "The queue is full, because it holds at most {limit} songs. /clear or /remove makes room.",
         "queue_cut": "{left} tracks were left out, because the queue holds at most {limit} songs.",
         "playlist_unavailable": "Spotify does not let the bot read this playlist. Albums, single songs, and YouTube playlists still work.",
+        "dj_only": "Only members with the DJ role can do that while others listen.",
+        "skip_voted": "Your vote to skip counts: {votes} of {needed} needed.",
+        "skip_already_voted": "You already voted to skip this song: {votes} of {needed} needed.",
         "collection_on": "{collection} on {source}",
         "load_error": "Could not load the audio. Try again.",
         "play_failed": "Could not play **{title}**, added by {user}. Moving on to the next track.",
@@ -300,6 +311,8 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "action_cleared": "🧹 {user} cleared the queue",
         "action_volume": "🔊 {user} set the volume to {volume}%",
         "action_stopped": "⏹️ {user} stopped the music",
+        "action_skipvote": "🗳️ {user} voted to skip: {votes} of {needed} votes",
+        "action_skipped_vote": "⏭️ The listeners voted to skip **{title}**",
         "help_title": "Commands",
         "about_text": "**{name}** {version}\nOnline since {since}\nResponse time: {latency} ms\nServers: {servers}",
         "about_link": "Source code: <{url}>",
@@ -314,11 +327,13 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "admin_channel_cleared": "Bot channel restriction removed.",
         "admin_autorole_set": "Auto-role set to {role}.",
         "admin_autorole_cleared": "Auto-role cleared.",
+        "admin_dj_set": "DJ role set to {role}. While others listen, only it, admins, and a lone listener control the music, and other skips go by vote.",
+        "admin_dj_cleared": "DJ role cleared. Everyone controls the music again.",
         "admin_threshold_set": "Warning threshold set to {count}.",
         "admin_action_set": "Warning action set to **{action}**.",
         "admin_timeout_set": "Timeout length set to {minutes} minutes.",
         "admin_status": (
-            "**Bot settings**\nChannel: {channel}\nAuto-role: {autorole}\n"
+            "**Bot settings**\nChannel: {channel}\nAuto-role: {autorole}\nDJ role: {dj}\n"
             "Warning threshold: {threshold}\nWarning action: {action}\n"
             "Timeout length: {timeout} minutes\nAutoMod escalation: {escalation}\n"
             "AutoMod alerts: {alert}\nAutoMod keywords: {keywords}\n"
@@ -403,6 +418,9 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queue_full": "Jono on täynnä, koska siihen mahtuu enintään {limit} kappaletta. /clear tai /remove tekee tilaa.",
         "queue_cut": "{left} kappaletta jäi pois, koska jonoon mahtuu enintään {limit} kappaletta.",
         "playlist_unavailable": "Spotify ei anna botin lukea tätä soittolistaa. Albumit, yksittäiset kappaleet ja YouTube-soittolistat toimivat yhä.",
+        "dj_only": "Vain DJ-roolin jäsenet voivat tehdä tämän, kun muut kuuntelevat.",
+        "skip_voted": "Äänesi ohittamisen puolesta laskettiin: {votes}/{needed} tarvitaan.",
+        "skip_already_voted": "Äänestit jo tämän kappaleen ohittamista: {votes}/{needed} tarvitaan.",
         "collection_on": "{collection} – {source}",
         "load_error": "Äänen lataaminen epäonnistui. Yritä uudelleen.",
         "play_failed": "Kappaletta **{title}** ei voitu soittaa, lisännyt {user}. Siirrytään seuraavaan.",
@@ -467,6 +485,8 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "action_cleared": "🧹 {user} tyhjensi jonon",
         "action_volume": "🔊 {user} asetti äänenvoimakkuudeksi {volume} %",
         "action_stopped": "⏹️ {user} pysäytti musiikin",
+        "action_skipvote": "🗳️ {user} äänesti ohittamisen puolesta: {votes}/{needed} ääntä",
+        "action_skipped_vote": "⏭️ Kuuntelijat äänestivät kappaleen **{title}** ohitetuksi",
         "help_title": "Komennot",
         "about_text": "**{name}** {version}\nPäällä {since} alkaen\nVasteaika: {latency} ms\nPalvelimia: {servers}",
         "about_link": "Lähdekoodi: <{url}>",
@@ -480,12 +500,14 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "admin_channel_set": "Bottikanavaksi asetettiin {channel}.",
         "admin_channel_cleared": "Bottikanavan rajoitus poistettiin.",
         "admin_autorole_set": "Automaattiseksi rooliksi asetettiin {role}.",
+        "admin_dj_set": "DJ-rooliksi asetettiin {role}. Kun muut kuuntelevat, vain se, ylläpitäjät ja yksin kuunteleva ohjaavat musiikkia, ja muut ohitukset äänestetään.",
+        "admin_dj_cleared": "DJ-rooli poistettiin. Kaikki ohjaavat musiikkia taas.",
         "admin_autorole_cleared": "Automaattinen rooli poistettiin.",
         "admin_threshold_set": "Varoitusrajaksi asetettiin {count}.",
         "admin_action_set": "Varoitusrajan seuraukseksi asetettiin **{action}**.",
         "admin_timeout_set": "Aikalisän pituudeksi asetettiin {minutes} minuuttia.",
         "admin_status": (
-            "**Botin asetukset**\nKanava: {channel}\nAutomaattinen rooli: {autorole}\n"
+            "**Botin asetukset**\nKanava: {channel}\nAutomaattinen rooli: {autorole}\nDJ-rooli: {dj}\n"
             "Varoitusraja: {threshold}\nSeuraus: {action}\n"
             "Aikalisän pituus: {timeout} minuuttia\nAutoMod-seuraus: {escalation}\n"
             "AutoMod-hälytykset: {alert}\nAutoMod-avainsanat: {keywords}\n"
@@ -562,6 +584,8 @@ CORE_COMMAND_TEXT: dict[str, dict[str, str]] = {
         "Configure the bot for this server.": "Määritä botin asetukset tälle palvelimelle.",
         "Set or clear the only channel where the bot accepts commands.": "Aseta tai poista kanava, jolla botti ainoastaan ottaa komentoja vastaan.",
         "The channel to allow. Leave it empty to allow every channel.": "Sallittu kanava. Jätä tyhjäksi salliaksesi kaikki kanavat.",
+        "Set or clear the DJ role, which controls the music while others listen.": "Aseta tai poista DJ-rooli, joka ohjaa musiikkia muiden kuunnellessa.",
+        "The DJ role. Leave it empty to let everyone control the music.": "DJ-rooli. Jätä tyhjäksi, niin kaikki ohjaavat musiikkia.",
         "Set or clear the role that new members get automatically.": "Aseta tai poista rooli, jonka uudet jäsenet saavat automaattisesti.",
         "The role to give. Leave it empty to give no role.": "Annettava rooli. Jätä tyhjäksi, jos roolia ei anneta.",
         "Set how many warnings trigger the warning action.": "Aseta, montako varoitusta johtaa seuraukseen.",

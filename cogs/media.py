@@ -53,6 +53,12 @@ PANEL_TICK_SECONDS = 10
 # The progress bar has this many steps.
 PROGRESS_WIDTH = 12
 
+# The next song's audio starts buffering when this many seconds of the current one are left.
+PREPARE_AUDIO_SECONDS = 20
+
+# How often the player checks whether to prepare the next song, in seconds.
+PREPARE_CHECK_SECONDS = 1.0
+
 # A title in a list is cut to this many characters, so a page stays within an embed's limit.
 LIST_TITLE_LIMIT = 80
 
@@ -189,6 +195,7 @@ class Track:
         album: The album that the song is on.
         collection: The playlist or album that the track was queued from, by name.
         collection_url: That playlist's or album's link.
+        requested_by_id: The ID of the member who queued it, which may skip it without a vote.
     """
 
     query: str
@@ -203,6 +210,7 @@ class Track:
     album: str | None = None
     collection: str | None = None
     collection_url: str | None = None
+    requested_by_id: int | None = None
 
     @property
     def label(self) -> str:
@@ -227,6 +235,30 @@ class Track:
             # An embed shows no preview cards, so the link needs no angle brackets.
             title = f"[{title}]({self.query})"
         return f"{title} `{clock(self.duration)}`" if self.duration else title
+
+
+@dataclass
+class Prepared:
+    """The next song, looked up and maybe already buffering, while the current one plays.
+
+    Attributes:
+        track: The queued track that was prepared. It counts only while it is next in the queue.
+        info: Its api-media fields, or None while the lookup runs or after it failed.
+        source: Its audio, which starts buffering shortly before the current song ends.
+        failed: Whether the lookup failed, so it is not tried again until the track plays.
+    """
+
+    track: Track
+    info: dict[str, Any] | None = None
+    source: discord.AudioSource | None = None
+    failed: bool = False
+
+    def close(self) -> None:
+        """Stops the buffering audio, such as its FFmpeg process and its stream."""
+        if self.source is not None:
+            with contextlib.suppress(Exception):
+                self.source.cleanup()
+            self.source = None
 
 
 class GuildPlayer:
@@ -256,12 +288,16 @@ class GuildPlayer:
         # A skip's note waits for the song that the skip started, so it shows on that song.
         self.last_action: tuple[str, str, dict[str, Any]] | None = None
         self.action_carries = False
+        # The members who voted to skip the playing song.
+        self.skip_votes: set[int] = set()
         # When the playing track was paused, so its progress stands still until it resumes.
         self.paused_at: float | None = None
         # The message that shows the playing track with its buttons.
         # The lock keeps two updates from posting two panels.
         self.panel: discord.Message | None = None
         self.panel_lock = asyncio.Lock()
+        # The next song, prepared while the current one plays.
+        self._prepared: Prepared | None = None
         self._task: asyncio.Task[None] | None = None
 
     @property
@@ -426,8 +462,74 @@ class GuildPlayer:
     def cancel(self) -> None:
         """Stops the player task, used when the cog unloads."""
         self.clear()
+        self._drop_prepared()
         if self._task is not None:
             self._task.cancel()
+
+    def _drop_prepared(self) -> None:
+        if self._prepared is not None:
+            self._prepared.close()
+            self._prepared = None
+
+    def _take_prepared(self, track: Track) -> Prepared | None:
+        """Hands over the prepared song if it is the track that starts, and drops it otherwise."""
+        prepared, self._prepared = self._prepared, None
+        if prepared is not None and prepared.track is track:
+            return prepared
+        if prepared is not None:
+            prepared.close()
+        return None
+
+    async def _lookup(self, track: Track) -> dict[str, Any]:
+        """Asks api-media for a track's page and details."""
+        if is_url(track.query):
+            return await self._cog.client.get_info(url=track.query)
+        return await self._cog.client.get_info(query=track.query)
+
+    async def _prepare_next(self) -> None:
+        """Gets the next song ready while the current one plays.
+
+        It looks the next song up at once.
+        Its audio starts buffering when PREPARE_AUDIO_SECONDS of the current song are left.
+        A change to the queue, such as a skip, a move, or a shuffle, drops what was prepared.
+        A paused song, or one of unknown length, starts no audio early.
+        """
+        while True:
+            await asyncio.sleep(PREPARE_CHECK_SECONDS)
+            upcoming = self.queue[0] if self.queue else None
+            if self._prepared is not None and self._prepared.track is not upcoming:
+                self._drop_prepared()
+            if upcoming is None:
+                continue
+            if self._prepared is None:
+                prepared = self._prepared = Prepared(upcoming)
+                try:
+                    info = await self._lookup(upcoming)
+                except Exception as error:
+                    # The song is looked up again when it starts, which reports a failure.
+                    log.info(f"Could not prepare '{upcoming.query}': {error}")
+                    prepared.failed = True
+                    continue
+                if prepared is self._prepared:
+                    prepared.info = info
+                continue
+            prepared = self._prepared
+            duration = self.now_playing_duration
+            if (
+                prepared.info is None
+                or prepared.source is not None
+                or duration is None
+                or self.paused_at is not None
+                or duration - self.elapsed() > PREPARE_AUDIO_SECONDS
+            ):
+                continue
+            volume = await self._cog.volume(self._guild.id) / 100
+            if prepared is self._prepared:
+                prepared.source = self._cog.client.audio_source(
+                    prepared.info["webpage_url"],
+                    self._cog.bot.config.ffmpeg_path,
+                    volume=volume,
+                )
 
     async def _run(self) -> None:
         channel: discord.abc.Connectable | None = None
@@ -445,6 +547,7 @@ class GuildPlayer:
                 channel = voice_client.channel
                 await self._play(track, voice_client)
         finally:
+            self._drop_prepared()
             # The statuses and the panel keep the last song between tracks.
             # They change when the music ends.
             await self._cog.end_panel(self)
@@ -484,13 +587,16 @@ class GuildPlayer:
     async def _play(self, track: Track, voice_client: discord.VoiceClient) -> None:
         bot = self._cog.bot
         s = bot.strings_for(self._guild)
+        prepared = self._take_prepared(track)
         try:
-            if is_url(track.query):
-                info = await self._cog.client.get_info(url=track.query)
+            if prepared is not None and prepared.info is not None:
+                info = prepared.info
             else:
-                info = await self._cog.client.get_info(query=track.query)
+                info = await self._lookup(track)
             page_url = info["webpage_url"]
         except Exception as error:
+            if prepared is not None:
+                prepared.close()
             # The service or the source site failed. The queue moves on to the next track.
             log.warning(f"Could not load '{track.query}': {error}")
             if message := s.play_failed.format(
@@ -520,6 +626,7 @@ class GuildPlayer:
         self.now_playing_duration = duration
         self.started_at = time.monotonic()
         self.paused_at = None
+        self.skip_votes.clear()
         if self.action_carries:
             self.action_carries = False
         else:
@@ -527,18 +634,29 @@ class GuildPlayer:
         await self._cog.show_playing(voice_client.channel, title)
         await self._cog.refresh_panel(self._guild, new_track=True)
         volume = await self._cog.volume(self._guild.id) / 100
-        source = self._cog.client.audio_source(
-            page_url, bot.config.ffmpeg_path, volume=volume
-        )
+        if prepared is not None and prepared.source is not None:
+            # The audio has been buffering since shortly before the previous song ended.
+            source = prepared.source
+            if isinstance(source, discord.PCMVolumeTransformer):
+                source.volume = volume
+        else:
+            source = self._cog.client.audio_source(
+                page_url, bot.config.ffmpeg_path, volume=volume
+            )
         # The player's clock starts when audio waits, or the song's start plays too fast.
         await prime(source)
         ticker = asyncio.create_task(self._tick(), name=f"media-panel-{self._guild.id}")
+        preparer = asyncio.create_task(
+            self._prepare_next(), name=f"media-prepare-{self._guild.id}"
+        )
         try:
             await bot.voice_presence.play(voice_client, source)
         except Exception as error:
             log.warning(f"Playback of '{title}' failed: {error}")
         finally:
             ticker.cancel()
+            # What it prepared stays for the next song, which takes it if it is still next.
+            preparer.cancel()
             listened = self.elapsed()
             finished = duration is None or listened >= duration - END_TOLERANCE_SECONDS
             self.current = None
@@ -576,6 +694,99 @@ class MediaCog(commands.Cog, name="Media"):
         if guild.id not in self._players:
             self._players[guild.id] = GuildPlayer(self, guild)
         return self._players[guild.id]
+
+    async def _dj_role(self, guild_id: int) -> int | None:
+        """Returns a guild's DJ role, or None when it has none or the setting cannot be read."""
+        try:
+            settings = await database.get_settings(guild_id)
+        except Exception as error:
+            log.warning(f"Could not read the DJ role of guild {guild_id}: {error}")
+            return None
+        return settings.dj_role_id
+
+    @staticmethod
+    def listeners(guild: discord.Guild) -> list[discord.Member]:
+        """Returns the members, not bots, in the bot's voice channel."""
+        voice_client = guild.voice_client
+        if not isinstance(voice_client, discord.VoiceClient):
+            return []
+        return [m for m in voice_client.channel.members if not m.bot]
+
+    async def may_control(
+        self, member: discord.Member | discord.User, guild: discord.Guild
+    ) -> bool:
+        """Whether a member may use the controls that change the music for everyone.
+
+        Without a DJ role, everyone may.
+        With one, members with the role, admins who may manage the server, and a lone listener may.
+        """
+        role_id = await self._dj_role(guild.id)
+        if role_id is None or not isinstance(member, discord.Member):
+            return role_id is None
+        if member.guild_permissions.manage_guild:
+            return True
+        if any(role.id == role_id for role in member.roles):
+            return True
+        return [m.id for m in self.listeners(guild)] == [member.id]
+
+    async def _deny(self, interaction: discord.Interaction) -> None:
+        """Tells a member privately that only the DJ role may do that, and ends the command."""
+        s = self.bot.strings_for(interaction, private=True)
+        await respond(interaction, s.dj_only, ephemeral=True)
+        await finish(interaction)
+
+    async def _may_change(
+        self, interaction: discord.Interaction, player: GuildPlayer, position: int
+    ) -> bool:
+        """Lets a member change their own queued songs, and others' songs only with control."""
+        if 1 <= position <= len(player.queue):
+            track = player.queue[position - 1]
+            if track.requested_by_id != interaction.user.id and not (
+                await self.may_control(interaction.user, guild_of(interaction))
+            ):
+                await self._deny(interaction)
+                return False
+        return True
+
+    async def request_skip(
+        self, guild: discord.Guild, member: discord.Member | discord.User
+    ) -> tuple[bool, int, int]:
+        """Skips the playing song at once, or counts the member's vote to skip it.
+
+        The song is skipped at once without a DJ role, for members with control, and for its adder.
+        It is also skipped at once while at most two members listen.
+        Otherwise it is skipped once half of the listeners voted.
+
+        Returns:
+            Whether the song should stop now, the votes so far, and the votes needed.
+        """
+        player = self._players.get(guild.id)
+        current = player.current if player is not None else None
+        if player is None or current is None:
+            return True, 0, 0
+        listeners = self.listeners(guild)
+        if (
+            len(listeners) <= 2
+            or current.requested_by_id == member.id
+            or await self.may_control(member, guild)
+        ):
+            self.note_skip(guild, member.display_name)
+            return True, 0, 0
+        player.skip_votes.add(member.id)
+        listening = {m.id for m in listeners}
+        votes = len(player.skip_votes & listening)
+        needed = ceil(len(listeners) / 2)
+        if votes >= needed:
+            player.note(
+                "skipped_vote",
+                member.display_name,
+                carries=True,
+                title=escape(shorten(current.label, LIST_TITLE_LIMIT)),
+            )
+            return True, votes, needed
+        player.note("skipvote", member.display_name, votes=votes, needed=needed)
+        await self.refresh_panel(guild)
+        return False, votes, needed
 
     async def volume(self, guild_id: int) -> int:
         """Returns a guild's music volume in percent, or the default when it cannot be read."""
@@ -649,6 +860,10 @@ class MediaCog(commands.Cog, name="Media"):
             return
 
         player = self.player(guild)
+        interrupts = when is not None and when.value == "now" and not player.idle
+        if interrupts and not await self.may_control(member, guild):
+            await self._deny(interaction)
+            return
         limit = self.bot.config.max_queue_length
         room = limit - len(player.queue)
         if room <= 0:
@@ -693,6 +908,7 @@ class MediaCog(commands.Cog, name="Media"):
                 info.get("album"),
                 collection,
                 query if collection else None,
+                member.id,
             )
             for info in found
         ]
@@ -814,6 +1030,9 @@ class MediaCog(commands.Cog, name="Media"):
             voice_client.is_playing() or voice_client.is_paused()
         ):
             await respond(interaction, s.nothing_playing)
+        elif not await self.may_control(interaction.user, guild):
+            await self._deny(interaction)
+            return
         else:
             player = self.player(guild)
             player.note("stopped", interaction.user.display_name)
@@ -932,7 +1151,10 @@ class MediaCog(commands.Cog, name="Media"):
     ) -> None:
         """Remove a track from the queue."""
         s = self.bot.strings_for(interaction)
-        track = self.player(guild_of(interaction)).remove(position)
+        player = self.player(guild_of(interaction))
+        if not await self._may_change(interaction, player, position):
+            return
+        track = player.remove(position)
         if track is None:
             await self._queue_reply(interaction, s.queue_no_position, position=position)
         else:
@@ -956,6 +1178,8 @@ class MediaCog(commands.Cog, name="Media"):
         """Move a track to another place in the queue."""
         s = self.bot.strings_for(interaction)
         player = self.player(guild_of(interaction))
+        if not await self._may_change(interaction, player, position):
+            return
         track = player.move(position, to)
         if track is None:
             await self._queue_reply(interaction, s.queue_no_position, position=position)
@@ -974,7 +1198,11 @@ class MediaCog(commands.Cog, name="Media"):
     async def shuffle(self, interaction: discord.Interaction) -> None:
         """Shuffle the tracks waiting in the queue."""
         s = self.bot.strings_for(interaction)
-        player = self.player(guild_of(interaction))
+        guild = guild_of(interaction)
+        if not await self.may_control(interaction.user, guild):
+            await self._deny(interaction)
+            return
+        player = self.player(guild)
         count = player.shuffle()
         if count:
             player.note("shuffled", interaction.user.display_name)
@@ -988,7 +1216,11 @@ class MediaCog(commands.Cog, name="Media"):
     async def clear(self, interaction: discord.Interaction) -> None:
         """Remove every waiting track. The current track keeps playing."""
         s = self.bot.strings_for(interaction)
-        player = self.player(guild_of(interaction))
+        guild = guild_of(interaction)
+        if not await self.may_control(interaction.user, guild):
+            await self._deny(interaction)
+            return
+        player = self.player(guild)
         count = player.clear()
         if count:
             player.note("cleared", interaction.user.display_name)
@@ -1006,6 +1238,9 @@ class MediaCog(commands.Cog, name="Media"):
         """Skip to a track in the queue, dropping the tracks before it."""
         s = self.bot.strings_for(interaction)
         guild = guild_of(interaction)
+        if not await self.may_control(interaction.user, guild):
+            await self._deny(interaction)
+            return
         player = self.player(guild)
         track = player.skip_to(position)
         if track is None:
@@ -1041,6 +1276,9 @@ class MediaCog(commands.Cog, name="Media"):
             await self._queue_reply(
                 interaction, s.volume_now, volume=await self.volume(guild.id)
             )
+            return
+        if not await self.may_control(interaction.user, guild):
+            await self._deny(interaction)
             return
         await database.upsert_settings(guild.id, music_volume=percent)
         self.player(guild).note("volume", interaction.user.display_name, volume=percent)
@@ -1106,7 +1344,11 @@ class MediaCog(commands.Cog, name="Media"):
     ) -> None:
         """Repeat the current song or the whole queue."""
         s = self.bot.strings_for(interaction)
-        player = self.player(guild_of(interaction))
+        guild = guild_of(interaction)
+        if not await self.may_control(interaction.user, guild):
+            await self._deny(interaction)
+            return
+        player = self.player(guild)
         player.loop = mode.value
         player.note("loop", interaction.user.display_name, loop=mode.value)
         template = {"off": s.loop_off, "track": s.loop_track, "queue": s.loop_queue}
@@ -1555,6 +1797,9 @@ class PanelView(discord.ui.View):
     ) -> None:
         """Shuffles the waiting songs."""
         guild, _, player = await self._start(interaction)
+        if not await self.cog.may_control(interaction.user, guild):
+            await self._tell(interaction, self._strings(interaction).dj_only)
+            return
         if player.shuffle():
             player.note("shuffled", interaction.user.display_name)
             await self.cog.refresh_panel(guild)
@@ -1589,11 +1834,17 @@ class PanelView(discord.ui.View):
     async def skip_button(
         self, interaction: discord.Interaction, _: discord.ui.Button["PanelView"]
     ) -> None:
-        """Skips to the next song, which then shows on the panel."""
+        """Skips to the next song, or counts a vote to skip it while others listen."""
         guild, voice_client, _ = await self._start(interaction)
         if voice_client.is_playing() or voice_client.is_paused():
-            self.cog.note_skip(guild, interaction.user.display_name)
-            voice_client.stop()
+            skip, votes, needed = await self.cog.request_skip(guild, interaction.user)
+            if skip:
+                voice_client.stop()
+            else:
+                s = self._strings(interaction)
+                await self._tell(
+                    interaction, s.skip_voted.format(votes=votes, needed=needed)
+                )
         else:
             await self._tell(interaction, self._strings(interaction).nothing_playing)
 
@@ -1603,6 +1854,9 @@ class PanelView(discord.ui.View):
     ) -> None:
         """Steps through repeating nothing, the whole queue, and the current song."""
         guild, _, player = await self._start(interaction)
+        if not await self.cog.may_control(interaction.user, guild):
+            await self._tell(interaction, self._strings(interaction).dj_only)
+            return
         player.loop = NEXT_LOOP_MODE[player.loop]
         player.note("loop", interaction.user.display_name, loop=player.loop)
         await self.cog.refresh_panel(guild)
@@ -1615,6 +1869,9 @@ class PanelView(discord.ui.View):
     ) -> None:
         """Stops the music, asking first when it would remove waiting songs."""
         guild, voice_client, player = await self._start(interaction)
+        if not await self.cog.may_control(interaction.user, guild):
+            await self._tell(interaction, self._strings(interaction).dj_only)
+            return
         if not player.queue:
             # Nothing waits, so nothing can be lost.
             self.cog.stop_music(guild, interaction.user.display_name)

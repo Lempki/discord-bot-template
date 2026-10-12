@@ -87,6 +87,25 @@ class AdminCog(commands.Cog, name="Admin"):
         else:
             await respond(interaction, s.admin_autorole_cleared, ephemeral=True)
 
+    @admin.command(name="djrole")
+    @app_commands.describe(
+        role="The DJ role. Leave it empty to let everyone control the music."
+    )
+    async def set_dj_role(
+        self, interaction: discord.Interaction, role: discord.Role | None = None
+    ) -> None:
+        """Set or clear the DJ role, which controls the music while others listen."""
+        s = self.bot.strings_for(interaction, private=True)
+        await database.upsert_settings(
+            guild_of(interaction).id, dj_role_id=role.id if role else None
+        )
+        if role:
+            await respond(
+                interaction, s.admin_dj_set, ephemeral=True, role=role.mention
+            )
+        else:
+            await respond(interaction, s.admin_dj_cleared, ephemeral=True)
+
     @admin.command(name="warnthreshold")
     @app_commands.describe(count="How many warnings trigger the action, from 1 to 20.")
     async def set_threshold(
@@ -179,6 +198,7 @@ class AdminCog(commands.Cog, name="Admin"):
             ephemeral=True,
             channel=channel,
             autorole=autorole,
+            dj=f"<@&{settings.dj_role_id}>" if settings.dj_role_id else s.status_none,
             threshold=settings.warn_threshold,
             action=_action_name(s, settings.warn_action),
             timeout=settings.warn_timeout_minutes,

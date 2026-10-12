@@ -43,6 +43,7 @@ _SETTINGS_COLUMNS = frozenset(
         "automod_escalation",
         "automod_alert_channel_id",
         "music_volume",
+        "dj_role_id",
     }
 )
 
@@ -64,6 +65,7 @@ class GuildSettings:
             "none" leaves blocked messages to AutoMod alone.
         automod_alert_channel_id: The channel for AutoMod alerts and escalation reports, or None.
         music_volume: The media cog's playback volume in percent, from 0 to 100.
+        dj_role_id: The role that controls the music while others listen, or None for everyone.
     """
 
     guild_id: int
@@ -76,6 +78,7 @@ class GuildSettings:
     automod_escalation: str = "none"
     automod_alert_channel_id: int | None = None
     music_volume: int = 50
+    dj_role_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -194,11 +197,17 @@ async def _migrate_to_3(db: aiosqlite.Connection) -> None:
     )
 
 
+async def _migrate_to_4(db: aiosqlite.Connection) -> None:
+    """Adds the DJ role, which no server has until an admin picks one."""
+    await db.execute("ALTER TABLE guild_settings ADD COLUMN dj_role_id INTEGER")
+
+
 # Each entry upgrades the schema by one version. Append new migrations and never edit old ones.
 _MIGRATIONS: list[Callable[[aiosqlite.Connection], Awaitable[None]]] = [
     _migrate_to_1,
     _migrate_to_2,
     _migrate_to_3,
+    _migrate_to_4,
 ]
 
 

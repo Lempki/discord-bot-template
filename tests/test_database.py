@@ -220,6 +220,7 @@ async def test_version_2_database_gains_the_music_volume(tmp_path: Path) -> None
     with sqlite3.connect(path) as conn:
         conn.executescript(
             """
+            ALTER TABLE guild_settings DROP COLUMN dj_role_id;
             ALTER TABLE guild_settings DROP COLUMN music_volume;
             PRAGMA user_version = 2;
             """
@@ -248,3 +249,30 @@ async def test_reopening_an_upgraded_database_changes_nothing(tmp_path: Path) ->
         assert await database.count_warnings(GUILD, USER) == 1
     finally:
         await database.close()
+
+
+async def test_version_3_database_gains_an_empty_dj_role(tmp_path: Path) -> None:
+    path = tmp_path / "bot.db"
+    await database.init(path)
+    await database.upsert_settings(GUILD, music_volume=80)
+    await database.close()
+    with sqlite3.connect(path) as conn:
+        conn.executescript(
+            """
+            ALTER TABLE guild_settings DROP COLUMN dj_role_id;
+            PRAGMA user_version = 3;
+            """
+        )
+
+    await database.init(path)
+    try:
+        settings = await database.get_settings(GUILD)
+        await database.upsert_settings(GUILD, dj_role_id=42)
+        updated = await database.get_settings(GUILD)
+    finally:
+        await database.close()
+
+    # Without a DJ role, everyone keeps control of the music.
+    assert settings.dj_role_id is None
+    assert settings.music_volume == 80
+    assert updated.dj_role_id == 42

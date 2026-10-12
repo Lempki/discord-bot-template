@@ -84,9 +84,20 @@ class VoiceCog(commands.Cog, name="Voice"):
         if isinstance(voice_client, discord.VoiceClient) and (
             voice_client.is_playing() or voice_client.is_paused()
         ):
-            # The media cog's panel names who skipped, when that cog is loaded.
-            if note_skip := getattr(self.bot.get_cog("Media"), "note_skip", None):
-                note_skip(guild, interaction.user.display_name)
+            # The media cog decides whether the skip needs votes, when that cog is loaded.
+            if request_skip := getattr(self.bot.get_cog("Media"), "request_skip", None):
+                skip, votes, needed = await request_skip(guild, interaction.user)
+                if not skip:
+                    private = self.bot.strings_for(interaction, private=True)
+                    await respond(
+                        interaction,
+                        private.skip_voted,
+                        ephemeral=True,
+                        votes=votes,
+                        needed=needed,
+                    )
+                    await finish(interaction)
+                    return
             # Stopping ends the current source, and the media queue moves on to the next track.
             voice_client.stop()
             await respond(interaction, s.skipped)

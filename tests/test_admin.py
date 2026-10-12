@@ -93,6 +93,7 @@ def status_text(**overrides: object) -> str:
     values: dict[str, object] = {
         "channel": EN.status_any_channel,
         "autorole": EN.status_none,
+        "dj": EN.status_none,
         "threshold": 3,
         "action": EN.action_kick,
         "timeout": 60,
@@ -172,3 +173,20 @@ async def test_admin_replies_even_when_bot_is_silent(db: None) -> None:
     await cog.set_threshold.callback(cog, interaction, count=4)
 
     assert sent_messages(interaction) == [EN.admin_threshold_set.format(count=4)]
+
+
+async def test_djrole_sets_and_clears_the_dj_role(db: None, bot: BotApp) -> None:
+    cog = AdminCog(bot)
+    role = MagicMock(spec=discord.Role)
+    role.id = 77
+    role.mention = "<@&77>"
+    interaction = make_interaction()
+
+    await cog.set_dj_role.callback(cog, interaction, role)  # type: ignore[arg-type]
+    assert (await database.get_settings(GUILD_ID)).dj_role_id == 77
+    assert sent_messages(interaction) == [EN.admin_dj_set.format(role="<@&77>")]
+
+    cleared = make_interaction()
+    await cog.set_dj_role.callback(cog, cleared, None)  # type: ignore[arg-type]
+    assert (await database.get_settings(GUILD_ID)).dj_role_id is None
+    assert sent_messages(cleared) == [EN.admin_dj_cleared]
