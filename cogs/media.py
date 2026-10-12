@@ -42,6 +42,13 @@ QUEUE_VIEW_TIMEOUT = 600
 # The panel lists this many waiting tracks and counts the rest.
 PANEL_NEXT_SHOWN = 3
 
+# The panel's progress moves this often, in seconds.
+# Discord limits how often a bot may edit messages, so it cannot move every second.
+PANEL_TICK_SECONDS = 10
+
+# The progress bar has this many steps.
+PROGRESS_WIDTH = 12
+
 # A title in a list is cut to this many characters, so a page stays within an embed's limit.
 LIST_TITLE_LIMIT = 80
 
@@ -80,6 +87,11 @@ LOOP_MODES = [
     app_commands.Choice(name="Off", value="off"),
     app_commands.Choice(name="This song", value="track"),
     app_commands.Choice(name="The whole queue", value="queue"),
+]
+
+WHEN_CHOICES = [
+    app_commands.Choice(name="Next", value="next"),
+    app_commands.Choice(name="Now", value="now"),
 ]
 
 # The panel's repeat button steps through the modes in this order, as music apps do.
@@ -124,6 +136,25 @@ def clock(seconds: float) -> str:
     hours, rest = divmod(whole, 3600)
     minutes, secs = divmod(rest, 60)
     return f"{hours}:{minutes:02d}:{secs:02d}" if hours else f"{minutes}:{secs:02d}"
+
+
+def progress_line(elapsed: float, duration: int | None) -> str:
+    """Shows how far a song has played, as a bar and as M:SS / M:SS."""
+    if not duration:
+        return f"`{clock(elapsed)}`"
+    played = min(elapsed, duration)
+    filled = round(played / duration * PROGRESS_WIDTH)
+    bar = "▰" * filled + "▱" * (PROGRESS_WIDTH - filled)
+    return f"{bar} `{clock(played)} / {clock(duration)}`"
+
+
+def loop_name(s: CoreStrings, mode: str) -> str:
+    """Names a repeat mode in the panel's language."""
+    return {
+        "off": s.panel_loop_off,
+        "track": s.panel_loop_track,
+        "queue": s.panel_loop_queue,
+    }[mode]
 
 
 def cut_lyrics(lyrics: str, limit: int = LYRICS_LIMIT) -> str:
@@ -212,8 +243,15 @@ class GuildPlayer:
         self.history: deque[Track] = deque(maxlen=HISTORY_SIZE)
         # off, track, or queue, as /loop sets it.
         self.loop = "off"
-        # Set while /previous stops the current track, which then stays out of the history.
-        self.going_back = False
+        # Set while a track is stopped and put back in the queue, as /previous and Now do.
+        # It then stays out of the history and out of the repeat.
+        self.requeued = False
+        # Set while /stop ends the music, so that repeating the queue does not restart it.
+        self.halted = False
+        # Who last changed the music, how, and the values that the panel's line names.
+        # A skip's note waits for the song that the skip started, so it shows on that song.
+        self.last_action: tuple[str, str, dict[str, Any]] | None = None
+        self.action_carries = False
         # When the playing track was paused, so its progress stands still until it resumes.
         self.paused_at: float | None = None
         # The message that shows the playing track with its buttons.
@@ -251,6 +289,45 @@ class GuildPlayer:
         voice_client.pause()
         self.paused_at = time.monotonic()
         return True
+
+    def note(
+        self, action: str, user: str, *, carries: bool = False, **values: Any
+    ) -> None:
+        """Records who changed the music and how, for the panel's line.
+
+        Args:
+            action: The change, which names an action_<action> text, such as skipped.
+            user: The member's display name.
+            carries: Whether the note belongs to the next song, as after a skip.
+            **values: The values that the text names, such as title.
+        """
+        self.last_action = (action, user, values)
+        self.action_carries = carries
+
+    def play_now(self, track: Track, voice_client: discord.VoiceClient) -> bool:
+        """Plays a track at once, putting the current one back in the queue right after it.
+
+        Returns:
+            Whether a playing track was interrupted.
+        """
+        if self.current is not None and (
+            voice_client.is_playing() or voice_client.is_paused()
+        ):
+            # The current song comes back after the new one, from its start.
+            self.queue.appendleft(self.current)
+            self.queue.appendleft(track)
+            self.requeued = True
+            voice_client.stop()
+            return True
+        self.enqueue([track], first=True)
+        return False
+
+    def halt(self, voice_client: discord.VoiceClient) -> None:
+        """Stops the playing track and drops the queue, as /stop does."""
+        self.clear()
+        if voice_client.is_playing() or voice_client.is_paused():
+            self.halted = True
+            voice_client.stop()
 
     def wait_seconds(self, position: int) -> int | None:
         """Estimates how long until the track at a queue position starts.
@@ -376,14 +453,29 @@ class GuildPlayer:
             played: The track with its page and title filled in.
             finished: Whether it played to its end rather than being skipped.
         """
-        if self.going_back:
-            self.going_back = False
-        else:
-            self.history.append(played)
+        if self.requeued:
+            # The track is already back in the queue, so it is neither recorded nor repeated.
+            self.requeued = False
+            return
+        self.history.append(played)
+        if self.halted:
+            self.halted = False
+            return
         if self.loop == "track" and finished:
             self.queue.appendleft(played)
         elif self.loop == "queue":
             self.queue.append(played)
+
+    async def _tick(self) -> None:
+        """Moves the panel's progress while a song plays, and stands still while it is paused."""
+        while True:
+            await asyncio.sleep(PANEL_TICK_SECONDS)
+            if self.paused_at is not None or self.panel is None:
+                continue
+            try:
+                await self._cog.refresh_panel(self._guild)
+            except Exception as error:
+                log.warning(f"Could not move the panel's progress: {error!r}")
 
     async def _play(self, track: Track, voice_client: discord.VoiceClient) -> None:
         bot = self._cog.bot
@@ -424,17 +516,23 @@ class GuildPlayer:
         self.now_playing_duration = duration
         self.started_at = time.monotonic()
         self.paused_at = None
+        if self.action_carries:
+            self.action_carries = False
+        else:
+            self.last_action = None
         await self._cog.show_playing(voice_client.channel, title)
         await self._cog.refresh_panel(self._guild, new_track=True)
         volume = await self._cog.volume(self._guild.id) / 100
         source = self._cog.client.audio_source(
             page_url, bot.config.ffmpeg_path, volume=volume
         )
+        ticker = asyncio.create_task(self._tick(), name=f"media-panel-{self._guild.id}")
         try:
             await bot.voice_presence.play(voice_client, source)
         except Exception as error:
             log.warning(f"Playback of '{title}' failed: {error}")
         finally:
+            ticker.cancel()
             listened = self.elapsed()
             finished = duration is None or listened >= duration - END_TOLERANCE_SECONDS
             self.current = None
@@ -512,19 +610,18 @@ class MediaCog(commands.Cog, name="Media"):
     @app_commands.guild_only()
     @in_bot_channel()
     @app_commands.checks.cooldown(PLAY_RATE, PLAY_PER_SECONDS)
-    @app_commands.rename(play_next="next")
     @app_commands.describe(
         query="A YouTube, SoundCloud, or Spotify link, or words to search for.",
         source="Where a search looks. A link plays from its own site.",
-        play_next="Put the track first in the queue, so it plays after the current one.",
+        when="When it plays. Leave it out to add it to the end of the queue.",
     )
-    @app_commands.choices(source=SEARCH_SOURCES)
+    @app_commands.choices(source=SEARCH_SOURCES, when=WHEN_CHOICES)
     async def play(
         self,
         interaction: discord.Interaction,
         query: str,
         source: app_commands.Choice[str] | None = None,
-        play_next: bool = False,
+        when: app_commands.Choice[str] | None = None,
     ) -> None:
         """Play a link or search result, or add it to the queue."""
         await interaction.response.defer()
@@ -578,9 +675,28 @@ class MediaCog(commands.Cog, name="Media"):
         ]
         player = self.player(guild)
         idle = player.idle
-        position = 1 if play_next else len(player.queue) + 1
+        # With nothing playing, the first track starts at once whatever when says.
+        mode = "end" if idle or when is None else when.value
+        waiting = len(player.queue)
+        position = waiting + 1 if mode == "end" else 1
         wait = player.wait_seconds(position)
-        player.enqueue(tracks, first=play_next)
+        if mode == "end":
+            player.enqueue(tracks)
+        else:
+            # Only the first track jumps ahead, so a playlist never buries the waiting tracks.
+            player.enqueue(tracks[1:])
+            voice_client = guild.voice_client
+            interrupted = player.current
+            if mode == "now" and isinstance(voice_client, discord.VoiceClient):
+                if player.play_now(tracks[0], voice_client) and interrupted:
+                    player.note(
+                        "now",
+                        member.display_name,
+                        carries=True,
+                        title=escape(shorten(interrupted.label, LIST_TITLE_LIMIT)),
+                    )
+            else:
+                player.enqueue(tracks[:1], first=True)
         log.info(f"Queued {len(tracks)} track(s) from {member} in {guild}.")
 
         values: dict[str, Any] = {
@@ -591,9 +707,16 @@ class MediaCog(commands.Cog, name="Media"):
             "more": len(tracks) - 1,
             "title": tracks[0].linked_title,
         }
+        playing_now = idle or mode == "now"
         if len(tracks) > 1:
-            # The first track of a playlist starts at once when nothing played.
-            template = s.queued_many_now if idle else s.queued_many
+            if playing_now:
+                template = s.queued_many_now
+            elif mode == "next":
+                template = s.queued_many_next
+                # The rest follow the tracks that were waiting, after the first one.
+                values["position"] = waiting + 2
+            else:
+                template = s.queued_many
             # A playlist reply links to the playlist that the member gave, by its name if known.
             if collection:
                 values["source"] = s.collection_on.format(
@@ -601,7 +724,7 @@ class MediaCog(commands.Cog, name="Media"):
                 )
             else:
                 values["source"] = link(named, query)
-        elif idle:
+        elif playing_now:
             template = s.queued_now
         elif wait is not None:
             template = s.queued_one_wait
@@ -667,8 +790,9 @@ class MediaCog(commands.Cog, name="Media"):
         ):
             await respond(interaction, s.nothing_playing)
         else:
-            self.player(guild).clear()
-            voice_client.stop()
+            player = self.player(guild)
+            player.note("stopped", interaction.user.display_name)
+            player.halt(voice_client)
             await respond(interaction, s.stopped)
         await finish(interaction)
 
@@ -686,7 +810,9 @@ class MediaCog(commands.Cog, name="Media"):
             await respond(interaction, s.nothing_playing)
             await finish(interaction)
             return
-        paused = self.player(guild).toggle_pause(voice_client)
+        player = self.player(guild)
+        paused = player.toggle_pause(voice_client)
+        player.note("paused" if paused else "resumed", interaction.user.display_name)
         await respond(interaction, s.paused if paused else s.resumed)
         await finish(interaction)
         await self.refresh_panel(guild)
@@ -823,7 +949,10 @@ class MediaCog(commands.Cog, name="Media"):
     async def shuffle(self, interaction: discord.Interaction) -> None:
         """Shuffle the tracks waiting in the queue."""
         s = self.bot.strings_for(interaction)
-        count = self.player(guild_of(interaction)).shuffle()
+        player = self.player(guild_of(interaction))
+        count = player.shuffle()
+        if count:
+            player.note("shuffled", interaction.user.display_name)
         template = s.queue_shuffled if count else s.queue_nothing_waiting
         await self._queue_reply(interaction, template, count=count)
 
@@ -834,7 +963,10 @@ class MediaCog(commands.Cog, name="Media"):
     async def clear(self, interaction: discord.Interaction) -> None:
         """Remove every waiting track. The current track keeps playing."""
         s = self.bot.strings_for(interaction)
-        count = self.player(guild_of(interaction)).clear()
+        player = self.player(guild_of(interaction))
+        count = player.clear()
+        if count:
+            player.note("cleared", interaction.user.display_name)
         template = s.queue_cleared if count else s.queue_nothing_waiting
         await self._queue_reply(interaction, template, count=count)
 
@@ -849,7 +981,8 @@ class MediaCog(commands.Cog, name="Media"):
         """Skip to a track in the queue, dropping the tracks before it."""
         s = self.bot.strings_for(interaction)
         guild = guild_of(interaction)
-        track = self.player(guild).skip_to(position)
+        player = self.player(guild)
+        track = player.skip_to(position)
         if track is None:
             await self._queue_reply(interaction, s.queue_no_position, position=position)
             return
@@ -857,6 +990,7 @@ class MediaCog(commands.Cog, name="Media"):
         if isinstance(voice_client, discord.VoiceClient) and (
             voice_client.is_playing() or voice_client.is_paused()
         ):
+            player.note("skipto", interaction.user.display_name, carries=True)
             # Stopping the current track makes the player start the next one.
             voice_client.stop()
         await self._queue_reply(
@@ -884,6 +1018,7 @@ class MediaCog(commands.Cog, name="Media"):
             )
             return
         await database.upsert_settings(guild.id, music_volume=percent)
+        self.player(guild).note("volume", interaction.user.display_name, volume=percent)
         voice_client = guild.voice_client
         if isinstance(voice_client, discord.VoiceClient) and isinstance(
             voice_client.source, discord.PCMVolumeTransformer
@@ -907,7 +1042,7 @@ class MediaCog(commands.Cog, name="Media"):
         ):
             await self._queue_reply(interaction, s.bot_not_in_voice)
             return
-        earlier = self.go_back(player, voice_client)
+        earlier = self.go_back(player, voice_client, interaction.user.display_name)
         if earlier is None:
             await self._queue_reply(interaction, s.previous_none)
         else:
@@ -916,9 +1051,14 @@ class MediaCog(commands.Cog, name="Media"):
             )
 
     def go_back(
-        self, player: GuildPlayer, voice_client: discord.VoiceClient
+        self, player: GuildPlayer, voice_client: discord.VoiceClient, user: str
     ) -> Track | None:
         """Plays the song before, for /previous and the panel.
+
+        Args:
+            player: The guild's player.
+            voice_client: The bot's voice connection in the guild.
+            user: The display name of the member who went back.
 
         Returns:
             The song that plays now, or None when no song played before.
@@ -926,16 +1066,8 @@ class MediaCog(commands.Cog, name="Media"):
         if not player.history:
             return None
         earlier = player.history.pop()
-        if player.current is not None and (
-            voice_client.is_playing() or voice_client.is_paused()
-        ):
-            # The current song comes back after the earlier one, from its start.
-            player.queue.appendleft(player.current)
-            player.queue.appendleft(earlier)
-            player.going_back = True
-            voice_client.stop()
-        else:
-            player.enqueue([earlier], first=True)
+        player.note("previous", user, carries=True)
+        player.play_now(earlier, voice_client)
         return earlier
 
     @app_commands.command(name="loop")
@@ -949,7 +1081,9 @@ class MediaCog(commands.Cog, name="Media"):
     ) -> None:
         """Repeat the current song or the whole queue."""
         s = self.bot.strings_for(interaction)
-        self.player(guild_of(interaction)).loop = mode.value
+        player = self.player(guild_of(interaction))
+        player.loop = mode.value
+        player.note("loop", interaction.user.display_name, loop=mode.value)
         template = {"off": s.loop_off, "track": s.loop_track, "queue": s.loop_queue}
         await self._queue_reply(interaction, template[mode.value])
 
@@ -1091,23 +1225,10 @@ class MediaCog(commands.Cog, name="Media"):
         lines.append(
             s.panel_details.format(source=source, user=escape(track.requested_by))
         )
-        elapsed = player.elapsed()
-        if state == "playing" and track.duration:
-            # Discord counts a relative timestamp down by itself, so the panel needs no edits.
-            ends = int(time.time() + max(0.0, track.duration - elapsed))
-            lines.append(
-                s.panel_ends.format(
-                    duration=clock(track.duration), ends=f"<t:{ends}:R>"
-                )
-            )
-        elif state == "playing":
-            started = int(time.time() - elapsed)
-            lines.append(s.panel_started.format(started=f"<t:{started}:R>"))
-        elif state == "paused":
-            progress = clock(elapsed)
-            if track.duration:
-                progress += f" / {clock(track.duration)}"
-            lines.append(s.panel_paused_at.format(progress=progress))
+        if state != "ended":
+            lines.append(progress_line(player.elapsed(), track.duration))
+        if action := self._action_line(player, s, state):
+            lines.append(action)
         embed.description = "\n".join(lines)
         if state == "ended":
             return embed
@@ -1124,13 +1245,25 @@ class MediaCog(commands.Cog, name="Media"):
             value="\n".join(upcoming) or s.panel_next_none,
             inline=False,
         )
-        loop_name = {
-            "off": s.panel_loop_off,
-            "track": s.panel_loop_track,
-            "queue": s.panel_loop_queue,
-        }[player.loop]
-        embed.set_footer(text=s.panel_footer.format(loop=loop_name, volume=volume))
+        embed.set_footer(
+            text=s.panel_footer.format(loop=loop_name(s, player.loop), volume=volume)
+        )
         return embed
+
+    def _action_line(self, player: GuildPlayer, s: CoreStrings, state: str) -> str:
+        """Says who last changed the music and how, or nothing.
+
+        An ended panel names only a stop, because other changes belong to the songs that played.
+        """
+        if player.last_action is None:
+            return ""
+        action, user, values = player.last_action
+        if state == "ended" and action != "stopped":
+            return ""
+        template: str = getattr(s, f"action_{action}", "")
+        if "loop" in values:
+            values = {**values, "loop": loop_name(s, values["loop"])}
+        return template.format(user=escape(user), **values) if template else ""
 
     async def refresh_panel(
         self, guild: discord.Guild, *, new_track: bool = False
@@ -1218,6 +1351,22 @@ class MediaCog(commands.Cog, name="Media"):
                     await panel.edit(embed=embed, view=None)
             except discord.HTTPException as error:
                 log.info(f"Could not end the music panel: {error}")
+
+    def note_skip(self, guild: discord.Guild, user: str) -> None:
+        """Records a skip for the panel of the song that the skip starts.
+
+        The voice cog's /skip calls it too, so the panel names who skipped either way.
+        """
+        player = self._players.get(guild.id)
+        if player is None:
+            return
+        title = player.current.label if player.current is not None else ""
+        player.note(
+            "skipped",
+            user,
+            carries=True,
+            title=escape(shorten(title, LIST_TITLE_LIMIT)),
+        )
 
     def button_retry_after(self, user_id: int) -> float | None:
         """Counts a member's panel press, and returns the wait when they press too fast."""
@@ -1372,6 +1521,7 @@ class PanelView(discord.ui.View):
         """Shuffles the waiting songs."""
         guild, _, player = await self._start(interaction)
         if player.shuffle():
+            player.note("shuffled", interaction.user.display_name)
             await self.cog.refresh_panel(guild)
         else:
             text = self._strings(interaction).queue_nothing_waiting
@@ -1383,7 +1533,8 @@ class PanelView(discord.ui.View):
     ) -> None:
         """Goes back to the song before."""
         _, voice_client, player = await self._start(interaction)
-        if self.cog.go_back(player, voice_client) is None:
+        user = interaction.user.display_name
+        if self.cog.go_back(player, voice_client, user) is None:
             await self._tell(interaction, self._strings(interaction).previous_none)
 
     @discord.ui.button(emoji="⏸️", custom_id="media:pause", row=0)
@@ -1395,7 +1546,8 @@ class PanelView(discord.ui.View):
         if not (voice_client.is_playing() or voice_client.is_paused()):
             await self._tell(interaction, self._strings(interaction).nothing_playing)
             return
-        player.toggle_pause(voice_client)
+        paused = player.toggle_pause(voice_client)
+        player.note("paused" if paused else "resumed", interaction.user.display_name)
         await self.cog.refresh_panel(guild)
 
     @discord.ui.button(emoji="⏭️", custom_id="media:skip", row=0)
@@ -1403,8 +1555,9 @@ class PanelView(discord.ui.View):
         self, interaction: discord.Interaction, _: discord.ui.Button["PanelView"]
     ) -> None:
         """Skips to the next song, which then shows on the panel."""
-        _, voice_client, _ = await self._start(interaction)
+        guild, voice_client, _ = await self._start(interaction)
         if voice_client.is_playing() or voice_client.is_paused():
+            self.cog.note_skip(guild, interaction.user.display_name)
             voice_client.stop()
         else:
             await self._tell(interaction, self._strings(interaction).nothing_playing)
@@ -1416,6 +1569,7 @@ class PanelView(discord.ui.View):
         """Steps through repeating nothing, the whole queue, and the current song."""
         guild, _, player = await self._start(interaction)
         player.loop = NEXT_LOOP_MODE[player.loop]
+        player.note("loop", interaction.user.display_name, loop=player.loop)
         await self.cog.refresh_panel(guild)
 
     @discord.ui.button(
@@ -1426,9 +1580,9 @@ class PanelView(discord.ui.View):
     ) -> None:
         """Stops the music and clears the queue, which ends the panel."""
         _, voice_client, player = await self._start(interaction)
-        player.clear()
         if voice_client.is_playing() or voice_client.is_paused():
-            voice_client.stop()
+            player.note("stopped", interaction.user.display_name)
+        player.halt(voice_client)
 
     @discord.ui.button(emoji="📜", custom_id="media:queue", row=1)
     async def queue_button(

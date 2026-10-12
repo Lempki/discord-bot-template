@@ -23,6 +23,7 @@ from cogs.media import (
     clock,
     cut_lyrics,
     link,
+    progress_line,
     suggestion_name,
 )
 from config import Config, ServiceConfig
@@ -338,12 +339,13 @@ def member_in_voice() -> MagicMock:
 
 
 async def run_play(
-    cog: MediaCog, url: str, *, play_next: bool = False
+    cog: MediaCog, url: str, *, when: str | None = None
 ) -> tuple[MagicMock, list[str]]:
     interaction = make_interaction(user=member_in_voice())
     interaction.channel = MagicMock(spec=discord.TextChannel)
     cog.bot.voice_presence.connect = AsyncMock()  # type: ignore[method-assign]
-    await cog.play.callback(cog, interaction, url, None, play_next)  # type: ignore[arg-type]
+    choice = app_commands.Choice(name=when, value=when) if when else None
+    await cog.play.callback(cog, interaction, url, None, choice)  # type: ignore[arg-type]
     return interaction, sent_messages(interaction)
 
 
@@ -399,7 +401,7 @@ async def test_play_next_puts_the_track_first() -> None:
         return_value={"webpage_url": "https://youtu.be/n", "title": "Next"}
     )
 
-    _, messages = await run_play(cog, "https://youtu.be/n", play_next=True)
+    _, messages = await run_play(cog, "https://youtu.be/n", when="next")
 
     assert player.queue[0].query == "https://youtu.be/n"
     assert messages == [
@@ -447,19 +449,17 @@ async def test_play_counts_the_tracks_of_a_playlist() -> None:
         )
     )
 
-    _, messages = await run_play(
-        cog, "https://open.spotify.com/album/x", play_next=True
-    )
+    _, messages = await run_play(cog, "https://open.spotify.com/album/x")
 
     assert messages == [
         EN.queued_many.format(
             count=2,
             source="[Spotify](<https://open.spotify.com/album/x>)",
-            position=1,
+            position=2,
             user="Ada",
         )
     ]
-    assert [t.title for t in list(player.queue)[:2]] == ["One", "Two"]
+    assert titles(player) == ["Song 0", "One", "Two"]
 
 
 async def test_an_album_that_starts_at_once_names_its_first_track_and_itself() -> None:
@@ -772,6 +772,7 @@ def playing_guild(*, playing: bool = True) -> tuple[MagicMock, MagicMock]:
     voice_client.is_paused.return_value = False
     voice_client.channel = MagicMock(spec=discord.VoiceChannel)
     interaction.guild.voice_client = voice_client
+    interaction.user.display_name = "Ada"
     return interaction, voice_client
 
 
@@ -785,7 +786,7 @@ async def test_previous_plays_the_last_song_and_then_the_current_one_again() -> 
     await cog.previous.callback(cog, interaction)  # type: ignore[arg-type]
 
     assert titles(player) == ["Earlier", "Current", "Song 1"]
-    assert player.going_back
+    assert player.requeued
     voice_client.stop.assert_called_once()
     assert sent_messages(interaction) == [
         EN.previous_playing.format(title="[Earlier](<https://youtu.be/Earlier>)")
@@ -824,15 +825,15 @@ async def test_a_stopped_song_is_recorded_and_repeated_as_loop_says(
     assert [t.title for t in player.history] == history
 
 
-async def test_going_back_leaves_the_stopped_song_out_of_the_history() -> None:
+async def test_requeued_leaves_the_stopped_song_out_of_the_history() -> None:
     _, cog = await media_cog()
     player = cog.player(MagicMock(id=GUILD_ID))
-    player.going_back = True
+    player.requeued = True
 
     player._after(song("Current"), finished=False)
 
     assert not player.history
-    assert not player.going_back
+    assert not player.requeued
 
 
 async def test_loop_sets_the_mode() -> None:
@@ -1111,11 +1112,7 @@ async def test_the_panel_shows_the_song_its_end_and_whats_next() -> None:
     assert embed.url == "https://youtu.be/now"
     details, progress = embed.description.splitlines()
     assert details == EN.panel_details.format(source="Spotify", user="Ada")
-    ends = int(time.time()) + 300
-    assert progress in {
-        EN.panel_ends.format(duration="6:31", ends=f"<t:{ends + d}:R>")
-        for d in (-1, 0, 1)
-    }
+    assert progress == progress_line(91, 391)
     upcoming = embed.fields[0].value.splitlines()
     assert upcoming[0] == "`1.` [Song 1](https://youtu.be/1)"
     assert upcoming[-1] == EN.panel_more.format(count=2)
@@ -1134,9 +1131,8 @@ async def test_a_paused_panel_shows_where_the_song_stopped() -> None:
     embed = cog.panel_embed(player, player.current, EN, state="paused")
 
     assert embed.author.name == EN.panel_paused
-    assert embed.description.splitlines()[1] == EN.panel_paused_at.format(
-        progress="1:15 / 6:31"
-    )
+    # The progress stands still at the pause.
+    assert embed.description.splitlines()[1] == progress_line(75, 391)
     assert embed.fields[0].value == EN.panel_next_none
 
 
@@ -1335,3 +1331,140 @@ async def test_the_player_takes_the_names_that_the_service_found() -> None:
         "20180512",
         "One Wayne G",
     )
+
+
+@pytest.mark.parametrize(
+    ("elapsed", "duration", "line"),
+    [
+        (0, 240, "▱▱▱▱▱▱▱▱▱▱▱▱ `0:00 / 4:00`"),
+        (60, 240, "▰▰▰▱▱▱▱▱▱▱▱▱ `1:00 / 4:00`"),
+        (300, 240, "▰▰▰▰▰▰▰▰▰▰▰▰ `4:00 / 4:00`"),
+        (75, None, "`1:15`"),
+    ],
+    ids=["start", "quarter", "past-the-end", "unknown-length"],
+)
+def test_progress_line(elapsed: float, duration: int | None, line: str) -> None:
+    assert progress_line(elapsed, duration) == line
+
+
+async def test_play_next_puts_only_a_playlists_first_track_ahead() -> None:
+    _, cog = await media_cog()
+    player = busy_player(cog, now_playing=240, waiting=[200, 100])
+    cog.client.get_playlist = AsyncMock(
+        return_value=(
+            "Album",
+            [
+                {"webpage_url": f"https://youtu.be/new{n}", "title": f"New {n}"}
+                for n in range(3)
+            ],
+        )
+    )
+
+    _, messages = await run_play(cog, "https://open.spotify.com/album/x", when="next")
+
+    assert titles(player) == ["New 0", "Song 0", "Song 1", "New 1", "New 2"]
+    assert messages == [
+        EN.queued_many_next.format(
+            count=3,
+            source=EN.collection_on.format(
+                collection="[Album](<https://open.spotify.com/album/x>)",
+                source="Spotify",
+            ),
+            title="[New 0](<https://youtu.be/new0>)",
+            position=4,
+        )
+    ]
+
+
+async def test_play_now_interrupts_the_song_and_plays_it_after() -> None:
+    _, cog = await media_cog()
+    player = busy_player(cog, now_playing=240, waiting=[200])
+    player.current = song("Current")
+    cog.client.get_info = AsyncMock(
+        return_value={"webpage_url": "https://youtu.be/urgent", "title": "Urgent"}
+    )
+    interaction = make_interaction(user=member_in_voice())
+    interaction.channel = MagicMock(spec=discord.TextChannel)
+    voice_client = MagicMock(spec=discord.VoiceClient)
+    voice_client.is_playing.return_value = True
+    interaction.guild.voice_client = voice_client
+    cog.bot.voice_presence.connect = AsyncMock()  # type: ignore[method-assign]
+
+    now = app_commands.Choice(name="Now", value="now")
+    await cog.play.callback(cog, interaction, "urgent", None, now)  # type: ignore[arg-type]
+
+    assert titles(player) == ["Urgent", "Current", "Song 0"]
+    assert player.requeued
+    voice_client.stop.assert_called_once()
+    assert sent_messages(interaction) == [
+        EN.queued_now.format(
+            title="[Urgent](<https://youtu.be/urgent>)", source="YouTube"
+        )
+    ]
+    assert player.last_action == ("now", "Ada", {"title": "Current"})
+    assert player.action_carries
+
+
+async def test_stop_does_not_restart_a_repeating_queue() -> None:
+    _, cog = await media_cog()
+    player = queued_player(cog, 2)
+    player.loop = "queue"
+    _, voice_client = playing_guild()
+
+    player.halt(voice_client)
+    player._after(song("Current"), finished=False)
+
+    assert not player.queue
+    assert [t.title for t in player.history] == ["Current"]
+
+
+async def test_previous_does_not_repeat_the_song_that_it_put_back() -> None:
+    _, cog = await media_cog()
+    player = cog.player(MagicMock(id=GUILD_ID))
+    player.loop = "queue"
+    player.requeued = True
+
+    player._after(song("Current"), finished=False)
+
+    assert not player.queue
+
+
+async def test_the_panel_names_who_skipped_on_the_next_song() -> None:
+    _, cog = await media_cog()
+    view = PanelView(cog)
+    player = queued_player(cog, 2)
+    player.current = panel_track()
+    interaction, _ = playing_guild()
+
+    await view.skip_button.callback(interaction)  # type: ignore[call-arg]
+    assert player.action_carries
+    next_song = replace(panel_track(), title="Next song")
+    embed = cog.panel_embed(player, next_song, EN, state="playing")
+
+    assert embed.description.splitlines()[-1] == EN.action_skipped.format(
+        user="Ada", title="Hotel California"
+    )
+
+
+async def test_the_panel_names_the_repeat_mode_in_its_language() -> None:
+    _, cog = await media_cog()
+    player = cog.player(MagicMock(id=GUILD_ID))
+    player.note("loop", "**Ada**", loop="track")
+
+    embed = cog.panel_embed(player, panel_track(), EN, state="playing")
+
+    assert embed.description.splitlines()[-1] == EN.action_loop.format(
+        user=r"\*\*Ada\*\*", loop=EN.panel_loop_track
+    )
+
+
+async def test_an_ended_panel_names_only_a_stop() -> None:
+    _, cog = await media_cog()
+    player = cog.player(MagicMock(id=GUILD_ID))
+    player.note("paused", "Ada")
+    paused = cog.panel_embed(player, panel_track(), EN, state="ended")
+    player.note("stopped", "Ada")
+    stopped = cog.panel_embed(player, panel_track(), EN, state="ended")
+
+    assert EN.action_paused.format(user="Ada") not in paused.description
+    assert stopped.description.splitlines()[-1] == EN.action_stopped.format(user="Ada")

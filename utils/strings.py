@@ -43,6 +43,8 @@ class CoreStrings:
     queued_many: str = ""
     # queued_many_now also uses {more}, the tracks added after the one that starts.
     queued_many_now: str = ""
+    # A playlist with when=Next. {position} is where the rest of its tracks start.
+    queued_many_next: str = ""
     # A playlist's or album's name with its site, which fills {source}.
     # The placeholders are {collection} and {source}.
     collection_on: str = ""
@@ -83,17 +85,12 @@ class CoreStrings:
     lyrics_none: str = ""
     lyrics_unavailable: str = ""
     lyrics_footer: str = ""
-    # The now-playing panel.
-    # Placeholders are {source}, {user}, {duration}, {ends}, {started}, {progress}, {count}, {loop}, {volume}.
-    # {ends} and {started} are Discord timestamps, which count in each reader's language.
+    # The now-playing panel. Placeholders are {source}, {user}, {count}, {loop}, and {volume}.
     # An empty panel_playing posts no panel.
     panel_playing: str = ""
     panel_paused: str = ""
     panel_ended: str = ""
     panel_details: str = ""
-    panel_ends: str = ""
-    panel_started: str = ""
-    panel_paused_at: str = ""
     panel_next: str = ""
     panel_next_none: str = ""
     panel_more: str = ""
@@ -105,6 +102,19 @@ class CoreStrings:
     panel_queue: str = ""
     panel_lyrics: str = ""
     panel_not_listening: str = ""
+    # The panel's line about who last changed the music, by a button or a command.
+    # Placeholders are {user}, {title}, {loop}, and {volume}.
+    action_skipped: str = ""
+    action_skipto: str = ""
+    action_previous: str = ""
+    action_now: str = ""
+    action_paused: str = ""
+    action_resumed: str = ""
+    action_loop: str = ""
+    action_shuffled: str = ""
+    action_cleared: str = ""
+    action_volume: str = ""
+    action_stopped: str = ""
 
     # Help. A section_<cog> field names the section of that cog.
     # A cog without a section field falls back to its own name.
@@ -212,6 +222,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queued_one_wait": "Added **{title}** from {source} to the queue at #{position}. It plays in about {minutes} min.",
         "queued_many": "Added {count} tracks from {source} to the queue, starting at #{position}.",
         "queued_many_now": "Playing **{title}** from {source}, and added {more} more tracks to the queue.",
+        "queued_many_next": "Added {count} tracks from {source}. **{title}** plays next, and the rest start at #{position}.",
         "collection_on": "{collection} on {source}",
         "load_error": "Could not load the audio. Try again.",
         "play_failed": "Could not play **{title}**, added by {user}. Moving on to the next track.",
@@ -250,9 +261,6 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "panel_paused": "Paused",
         "panel_ended": "Finished playing",
         "panel_details": "From {source}, added by {user}",
-        "panel_ends": "{duration} · ends {ends}",
-        "panel_started": "Started {started}",
-        "panel_paused_at": "Paused at {progress}",
         "panel_next": "Up next",
         "panel_next_none": "Nothing yet. /play adds more.",
         "panel_more": "…and {count} more",
@@ -264,6 +272,17 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "panel_queue": "Queue",
         "panel_lyrics": "Lyrics",
         "panel_not_listening": "Join the bot's voice channel to control the music.",
+        "action_skipped": "⏭️ {user} skipped **{title}**",
+        "action_skipto": "⏭️ {user} skipped ahead in the queue",
+        "action_previous": "⏮️ {user} went back a song",
+        "action_now": "▶️ {user} interrupted **{title}**, which plays next",
+        "action_paused": "⏸️ {user} paused",
+        "action_resumed": "▶️ {user} resumed",
+        "action_loop": "🔁 {user} set repeat to {loop}",
+        "action_shuffled": "🔀 {user} shuffled the queue",
+        "action_cleared": "🧹 {user} cleared the queue",
+        "action_volume": "🔊 {user} set the volume to {volume}%",
+        "action_stopped": "⏹️ {user} stopped the music",
         "help_title": "Commands",
         "about_text": "**{name}** {version}\nOnline since {since}\nResponse time: {latency} ms\nServers: {servers}",
         "about_link": "Source code: <{url}>",
@@ -363,6 +382,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queued_one_wait": "Lisätty **{title}** ({source}) jonoon sijalle {position}. Se soi noin {minutes} min päästä.",
         "queued_many": "Lisätty jonoon {count} kappaletta ({source}) sijalta {position} alkaen.",
         "queued_many_now": "Soitetaan **{title}** ({source}), ja jonoon lisätty {more} muuta kappaletta.",
+        "queued_many_next": "Lisätty {count} kappaletta ({source}). **{title}** soi seuraavaksi, ja loput alkavat sijalta {position}.",
         "collection_on": "{collection} – {source}",
         "load_error": "Äänen lataaminen epäonnistui. Yritä uudelleen.",
         "play_failed": "Kappaletta **{title}** ei voitu soittaa, lisännyt {user}. Siirrytään seuraavaan.",
@@ -401,9 +421,6 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "panel_paused": "Tauolla",
         "panel_ended": "Soitto päättyi",
         "panel_details": "Lähde: {source}, lisännyt {user}",
-        "panel_ends": "{duration} · päättyy {ends}",
-        "panel_started": "Alkoi {started}",
-        "panel_paused_at": "Tauolla kohdassa {progress}",
         "panel_next": "Seuraavaksi",
         "panel_next_none": "Ei vielä mitään. /play lisää kappaleita.",
         "panel_more": "…ja {count} muuta",
@@ -415,6 +432,17 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "panel_queue": "Jono",
         "panel_lyrics": "Sanat",
         "panel_not_listening": "Liity botin äänikanavalle ohjataksesi musiikkia.",
+        "action_skipped": "⏭️ {user} ohitti kappaleen **{title}**",
+        "action_skipto": "⏭️ {user} hyppäsi jonossa eteenpäin",
+        "action_previous": "⏮️ {user} palasi edelliseen kappaleeseen",
+        "action_now": "▶️ {user} keskeytti kappaleen **{title}**, joka soi seuraavaksi",
+        "action_paused": "⏸️ {user} tauotti soiton",
+        "action_resumed": "▶️ {user} jatkoi soittoa",
+        "action_loop": "🔁 {user} asetti toiston: {loop}",
+        "action_shuffled": "🔀 {user} sekoitti jonon",
+        "action_cleared": "🧹 {user} tyhjensi jonon",
+        "action_volume": "🔊 {user} asetti äänenvoimakkuudeksi {volume} %",
+        "action_stopped": "⏹️ {user} pysäytti musiikin",
         "help_title": "Komennot",
         "about_text": "**{name}** {version}\nPäällä {since} alkaen\nVasteaika: {latency} ms\nPalvelimia: {servers}",
         "about_link": "Lähdekoodi: <{url}>",
@@ -542,7 +570,9 @@ CORE_COMMAND_TEXT: dict[str, dict[str, str]] = {
         "Show this server's bot settings.": "Näytä tämän palvelimen botin asetukset.",
         "Show the commands you can use here.": "Näytä komennot, joita voit käyttää täällä.",
         "Show the bot's version, how long it has been online, and its response time.": "Näytä botin versio, käynnissäoloaika ja vasteaika.",
-        "Put the track first in the queue, so it plays after the current one.": "Laita kappale jonon kärkeen, jolloin se soi nykyisen jälkeen.",
+        "When it plays. Leave it out to add it to the end of the queue.": "Milloin se soi. Jätä pois, niin se lisätään jonon loppuun.",
+        "Next": "Seuraavaksi",
+        "Now": "Heti",
         "Play a link or search result, or add it to the queue.": "Soita linkki tai hakutulos, tai lisää se jonoon.",
         "A YouTube, SoundCloud, or Spotify link, or words to search for.": "YouTube-, SoundCloud- tai Spotify-linkki tai hakusanat.",
         "Where a search looks. A link plays from its own site.": "Mistä haku etsii. Linkki soi omalta sivustoltaan.",

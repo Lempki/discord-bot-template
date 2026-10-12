@@ -79,10 +79,14 @@ class VoiceCog(commands.Cog, name="Voice"):
     async def skip(self, interaction: discord.Interaction) -> None:
         """Skip the audio that is playing now."""
         s = self.bot.strings_for(interaction)
-        voice_client = guild_of(interaction).voice_client
+        guild = guild_of(interaction)
+        voice_client = guild.voice_client
         if isinstance(voice_client, discord.VoiceClient) and (
             voice_client.is_playing() or voice_client.is_paused()
         ):
+            # The media cog's panel names who skipped, when that cog is loaded.
+            if note_skip := getattr(self.bot.get_cog("Media"), "note_skip", None):
+                note_skip(guild, interaction.user.display_name)
             # Stopping ends the current source, and the media queue moves on to the next track.
             voice_client.stop()
             await respond(interaction, s.skipped)
