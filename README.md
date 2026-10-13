@@ -287,6 +287,8 @@ All configuration is read from environment variables or from a `.env` file locat
 | `FFMPEG_PATH` | No | `ffmpeg` | The FFmpeg executable. Leave it unset to use FFmpeg from the system PATH. |
 | `DEV_GUILD_ID` | No | None | A server ID for development. Commands sync to that server instantly instead of globally. |
 | `HEARTBEAT_URL` | No | None | The ping URL of a heartbeat service, such as healthchecks.io, which alerts you when the bot stops reporting that it is online. See [Offline alerts](#offline-alerts). |
+| `MAX_QUEUE_LENGTH` | No | `500` | How many songs may wait in a server's music queue. A playlist that does not fit adds the songs that fit. |
+| `UPDATE_WEBHOOK_URL` | No | None | A Discord webhook that hears when a nightly update installs a new release or fails. See [Updates](#updates). It works like a password. |
 | `API_<NAME>_URL` | No | None | The base URL of a api-* service, for example `API_MEDIA_URL`. |
 | `API_<NAME>_SECRET` | No | None | The bearer token of that service. It must match `API_SECRET` in the service's own configuration. |
 
@@ -305,12 +307,13 @@ discord-bot-template/
 ├── config.py               # Reads settings and api-* service URLs from the environment.
 ├── localization.py         # This bot's own messages and translations, layered on the core ones.
 ├── cogs/
-│   ├── help.py             # /help and /about. /help lists the loaded commands the user may run, grouped by cog.
+│   ├── help.py             # /help, a short guide to the bot's features, and /about.
 │   ├── template.py         # Template cog. Use this as a starting point for new features.
-│   ├── voice.py            # /join, /leave, and /skip. The bot leaves on its own when alone or idle.
-│   ├── media.py            # Per-server audio queue with YouTube, SoundCloud, and Spotify support.
+│   ├── voice.py            # /voice join, leave, and stop. The bot leaves on its own when alone or idle.
+│   ├── media.py            # /play, /music, and /queue, with a per-server queue and the now-playing panel.
+│   ├── info.py             # /info server, member, and avatar.
 │   ├── admin.py            # /admin command group, including /admin automod.
-│   ├── moderation.py       # /warn, /warnings, /clearwarning, /clearwarnings, /kick, /ban, and AutoMod escalation.
+│   ├── moderation.py       # /warn, /warnings, /timeout, /untimeout, /kick, /ban, /purge, the right-click Warn and Report, and AutoMod escalation.
 │   └── events.py           # on_member_join: auto-role assignment and welcome message.
 ├── utils/
 │   ├── audio.py            # MediaAPIClient, URL helpers, and audio sources for files, bytes, and streams.

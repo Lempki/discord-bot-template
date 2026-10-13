@@ -87,7 +87,7 @@ class CoreStrings:
     loop_off: str = ""
     loop_track: str = ""
     loop_queue: str = ""
-    # /lyrics. The placeholder is {title}.
+    # /music lyrics. The placeholder is {title}.
     lyrics_nothing: str = ""
     lyrics_none: str = ""
     lyrics_unavailable: str = ""

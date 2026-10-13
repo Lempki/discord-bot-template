@@ -90,15 +90,15 @@ class VoiceCog(commands.Cog, name="Voice"):
         ):
             # The media cog decides whether the skip needs votes, when that cog is loaded.
             if request_skip := getattr(self.bot.get_cog("Media"), "request_skip", None):
-                skip, votes, needed = await request_skip(guild, interaction.user)
-                if not skip:
+                outcome = await request_skip(guild, interaction.user)
+                if not outcome.skip:
                     private = self.bot.strings_for(interaction, private=True)
+                    text = outcome.vote_text(private)
+                    # The text is filled in already, so respond() must not fill it again.
                     await respond(
                         interaction,
-                        private.skip_voted,
+                        text.replace("{", "{{").replace("}", "}}"),
                         ephemeral=True,
-                        votes=votes,
-                        needed=needed,
                     )
                     await finish(interaction)
                     return

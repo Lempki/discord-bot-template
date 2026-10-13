@@ -124,6 +124,12 @@ path = "tests/test_voice.py"
 path = "tests/test_info.py"
 
 [[file]]
+path = "tests/test_events.py"
+
+[[file]]
+path = "tests/test_template_cog.py"
+
+[[file]]
 path = "Dockerfile"
 
 [[file]]

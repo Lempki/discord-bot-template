@@ -1803,11 +1803,12 @@ async def test_a_skip_needs_half_of_the_listeners_while_others_listen() -> None:
     second = await cog.request_skip(guild, members[1])
     third = await cog.request_skip(guild, members[2])
 
-    assert first == (False, 1, 3)
-    # A second vote from the same member does not count twice.
-    assert again == (False, 1, 3)
-    assert second == (False, 2, 3)
-    assert third == (True, 3, 3)
+    assert first == (False, 1, 3, False)
+    # A second vote from the same member does not count twice, and they hear so.
+    assert again.vote_text(EN) == EN.skip_already_voted.format(votes=1, needed=3)
+    assert again == (False, 1, 3, True)
+    assert second == (False, 2, 3, False)
+    assert third == (True, 3, 3, False)
     assert player.last_action is not None
     assert player.last_action[0] == "skipped_vote"
 
@@ -1823,7 +1824,7 @@ async def test_some_skips_need_no_vote(skipper: int, listening: int) -> None:
     guild = dj_guild(cog, members, 77)
     member = next(m for m in members if m.id == skipper)
 
-    assert await cog.request_skip(guild, member) == (True, 0, 0)
+    assert await cog.request_skip(guild, member) == (True, 0, 0, False)
 
 
 async def test_a_listener_without_the_dj_role_cannot_clear_the_queue() -> None:

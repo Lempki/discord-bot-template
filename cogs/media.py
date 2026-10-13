@@ -8,7 +8,7 @@ import time
 from collections import Counter, OrderedDict, deque
 from dataclasses import dataclass, replace
 from math import ceil
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import discord
 import httpx
@@ -74,7 +74,7 @@ LIST_URL_LIMIT = 200
 # An embed's title holds 256 characters.
 EMBED_TITLE_LIMIT = 256
 
-# The volume of a server that never set one, in percent, as the bot played before /volume.
+# The volume of a server that never set one, in percent, as before /music volume existed.
 DEFAULT_VOLUME = 50
 
 # Search suggestions while typing in /play.
@@ -116,7 +116,7 @@ NEXT_LOOP_MODE = {"off": "queue", "queue": "track", "track": "off"}
 # The panel's buttons that only show something to the presser, so anyone may press them.
 PRIVATE_PANEL_BUTTONS = {"media:queue", "media:lyrics"}
 
-# /previous can go back this many songs.
+# /music previous can go back this many songs.
 HISTORY_SIZE = 20
 
 # A song that stopped this close to its end counts as finished, not skipped.
@@ -278,6 +278,27 @@ class Track:
         return f"{title} `{clock(self.duration)}`" if self.duration else title
 
 
+class SkipOutcome(NamedTuple):
+    """What a request to skip did.
+
+    Attributes:
+        skip: Whether the song stops now.
+        votes: The listeners' votes to skip so far, or 0 for a skip without a vote.
+        needed: The votes that skip the song, or 0 for a skip without a vote.
+        repeated: Whether the member had voted already, so their vote did not count again.
+    """
+
+    skip: bool
+    votes: int = 0
+    needed: int = 0
+    repeated: bool = False
+
+    def vote_text(self, s: CoreStrings) -> str:
+        """Tells the member how the vote stands, or that they voted already."""
+        template = s.skip_already_voted if self.repeated else s.skip_voted
+        return template.format(votes=self.votes, needed=self.needed)
+
+
 @dataclass
 class Prepared:
     """The next song, looked up and maybe already buffering, while the current one plays.
@@ -314,13 +335,13 @@ class GuildPlayer:
         # When the current track started and how long it is, for the wait estimate.
         self.started_at: float | None = None
         self.now_playing_duration: int | None = None
-        # The playing track with its page and title filled in, for /nowplaying and repeats.
+        # The playing track with its page and title filled in, for the panel and for repeats.
         self.current: Track | None = None
-        # The tracks that played, newest last, for /previous.
+        # The tracks that played, newest last, for /music previous.
         self.history: deque[Track] = deque(maxlen=HISTORY_SIZE)
-        # off, track, or queue, as /loop sets it.
+        # off, track, or queue, as /music loop sets it.
         self.loop = "off"
-        # Set while a track is stopped and put back in the queue, as /previous and Now do.
+        # Set while a track is stopped and put back in the queue, as /music previous and Now do.
         # It then stays out of the history and out of the repeat.
         self.requeued = False
         # Set while /stop ends the music, so that repeating the queue does not restart it.
@@ -601,7 +622,7 @@ class GuildPlayer:
             await self._cog.show_idle(channel)
 
     def _after(self, played: Track, finished: bool) -> None:
-        """Records a track that stopped and repeats it as /loop asks.
+        """Records a track that stopped and repeats it as /music loop asks.
 
         Args:
             played: The track with its page and title filled in.
@@ -802,7 +823,7 @@ class MediaCog(commands.Cog, name="Media"):
 
     async def request_skip(
         self, guild: discord.Guild, member: discord.Member | discord.User
-    ) -> tuple[bool, int, int]:
+    ) -> SkipOutcome:
         """Skips the playing song at once, or counts the member's vote to skip it.
 
         The song is skipped at once without a DJ role, for members with control, and for its adder.
@@ -810,12 +831,12 @@ class MediaCog(commands.Cog, name="Media"):
         Otherwise it is skipped once half of the listeners voted.
 
         Returns:
-            Whether the song should stop now, the votes so far, and the votes needed.
+            Whether the song should stop now, and how the vote stands.
         """
         player = self._players.get(guild.id)
         current = player.current if player is not None else None
         if player is None or current is None:
-            return True, 0, 0
+            return SkipOutcome(True)
         listeners = self.listeners(guild)
         if (
             len(listeners) <= 2
@@ -823,7 +844,8 @@ class MediaCog(commands.Cog, name="Media"):
             or await self.may_control(member, guild)
         ):
             self.note_skip(guild, member.display_name)
-            return True, 0, 0
+            return SkipOutcome(True)
+        repeated = member.id in player.skip_votes
         player.skip_votes.add(member.id)
         listening = {m.id for m in listeners}
         votes = len(player.skip_votes & listening)
@@ -835,10 +857,11 @@ class MediaCog(commands.Cog, name="Media"):
                 carries=True,
                 title=escape(shorten(current.label, LIST_TITLE_LIMIT)),
             )
-            return True, votes, needed
-        player.note("skipvote", member.display_name, votes=votes, needed=needed)
-        await self.refresh_panel(guild)
-        return False, votes, needed
+            return SkipOutcome(True, votes, needed)
+        if not repeated:
+            player.note("skipvote", member.display_name, votes=votes, needed=needed)
+            await self.refresh_panel(guild)
+        return SkipOutcome(False, votes, needed, repeated)
 
     async def volume(self, guild_id: int) -> int:
         """Returns a guild's music volume in percent, or the default when it cannot be read."""
@@ -1362,15 +1385,12 @@ class MediaCog(commands.Cog, name="Media"):
             await respond(interaction, s.nothing_playing)
             await finish(interaction)
             return
-        skip, votes, needed = await self.request_skip(guild, interaction.user)
-        if not skip:
+        outcome = await self.request_skip(guild, interaction.user)
+        if not outcome.skip:
             private = self.bot.strings_for(interaction, private=True)
+            text = outcome.vote_text(private)
             await respond(
-                interaction,
-                private.skip_voted,
-                ephemeral=True,
-                votes=votes,
-                needed=needed,
+                interaction, text.replace("{", "{{").replace("}", "}}"), ephemeral=True
             )
             await finish(interaction)
             return
@@ -1404,7 +1424,7 @@ class MediaCog(commands.Cog, name="Media"):
     def go_back(
         self, player: GuildPlayer, voice_client: discord.VoiceClient, user: str
     ) -> Track | None:
-        """Plays the song before, for /previous and the panel.
+        """Plays the song before, for /music previous and the panel.
 
         Args:
             player: The guild's player.
@@ -1454,7 +1474,7 @@ class MediaCog(commands.Cog, name="Media"):
     async def send_lyrics(
         self, interaction: discord.Interaction, song: str | None
     ) -> None:
-        """Shows lyrics privately, for /lyrics and the panel."""
+        """Shows lyrics privately, for /music lyrics and the panel."""
         # Thinking makes a button press answer with a new private message.
         await interaction.response.defer(ephemeral=True, thinking=True)
         s = self.bot.strings_for(interaction, private=True)
@@ -1814,7 +1834,7 @@ class MediaCog(commands.Cog, name="Media"):
     def note_skip(self, guild: discord.Guild, user: str) -> None:
         """Records a skip for the panel of the song that the skip starts.
 
-        The voice cog's /skip calls it too, so the panel names who skipped either way.
+        The voice cog's /voice stop calls it too, so the panel names who skipped either way.
         """
         player = self._players.get(guild.id)
         if player is None:
@@ -2084,13 +2104,12 @@ class PanelView(discord.ui.View):
         """Skips to the next song, or counts a vote to skip it while others listen."""
         guild, voice_client, _ = await self._start(interaction)
         if voice_client.is_playing() or voice_client.is_paused():
-            skip, votes, needed = await self.cog.request_skip(guild, interaction.user)
-            if skip:
+            outcome = await self.cog.request_skip(guild, interaction.user)
+            if outcome.skip:
                 voice_client.stop()
             else:
-                s = self._strings(interaction)
                 await self._tell(
-                    interaction, s.skip_voted.format(votes=votes, needed=needed)
+                    interaction, outcome.vote_text(self._strings(interaction))
                 )
         else:
             await self._tell(interaction, self._strings(interaction).nothing_playing)
