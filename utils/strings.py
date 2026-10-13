@@ -159,6 +159,23 @@ class CoreStrings:
     guide_admin: str = ""
     guide_template: str = ""
     guide_help: str = ""
+    guide_info: str = ""
+    section_info: str = ""
+    # /info. info_channel_counts uses {text} and {voice}, info_boost_level {level} and {count}.
+    # info_more uses {count}, and info_avatar_title {user}.
+    info_created: str = ""
+    info_owner: str = ""
+    info_members: str = ""
+    info_channels: str = ""
+    info_channel_counts: str = ""
+    info_roles: str = ""
+    info_boosts: str = ""
+    info_boost_level: str = ""
+    info_account_created: str = ""
+    info_joined: str = ""
+    info_boosting: str = ""
+    info_more: str = ""
+    info_avatar_title: str = ""
     # The placeholders of about_text are {name}, {version}, {since}, {latency}, and {servers}.
     # {since} is a Discord timestamp, which each reader's app shows in their own language.
     about_text: str = ""
@@ -235,6 +252,26 @@ class CoreStrings:
     ban_success: str = ""
     ban_failed: str = ""
     timeout_failed: str = ""
+    # /timeout and /untimeout use {user}, {until}, and {error}. /purge uses {count} and {error}.
+    timeout_success: str = ""
+    untimeout_success: str = ""
+    untimeout_none: str = ""
+    untimeout_failed: str = ""
+    purge_done: str = ""
+    purge_none: str = ""
+    purge_failed: str = ""
+    # The right-click Warn and Report. warn_modal_title uses {user}.
+    warn_modal_title: str = ""
+    warn_modal_reason: str = ""
+    report_no_channel: str = ""
+    report_sent: str = ""
+    report_failed: str = ""
+    report_title: str = ""
+    report_no_text: str = ""
+    report_author: str = ""
+    report_channel: str = ""
+    report_by: str = ""
+    report_files: str = ""
     mod_target_self: str = ""
     mod_target_protected: str = ""
     mod_target_higher: str = ""
@@ -353,10 +390,25 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "help_bot_channel": "In this server, the bot takes commands only in {channel}.",
         "guide_media": "Join a voice channel, then use `/play` with a YouTube, SoundCloud, or Spotify link, or with words to search for. Each song shows on a panel whose buttons pause, skip, go back, and repeat, and `/queue show` lists what waits. `/music` and `/queue` hold the other controls. Spotify albums and songs work, but Spotify keeps most playlists from bots. When the server has a DJ role, some controls belong to DJs while others listen, and skips go by vote.",
         "guide_voice": "The bot joins your voice channel when a feature needs it, and leaves on its own when everyone else has left or nothing has played for a while. `/voice join` brings it to your channel, `/voice leave` sends it out, and `/voice stop` stops the sound that plays now.",
-        "guide_moderation": "`/warn` gives a member a warning, and at the server's limit the bot kicks, bans, or times them out. `/warnings` lists and removes warnings, and `/kick` and `/ban` act at once. Messages that Discord's AutoMod blocks can count as warnings too.",
+        "guide_moderation": "`/warn` gives a member a warning, and at the server's limit the bot kicks, bans, or times them out. `/warnings` lists and removes warnings, and `/timeout`, `/kick`, and `/ban` act at once. `/purge` deletes recent messages. Right-click a member and choose Apps, then Warn, to warn them quickly. Anyone can right-click a message and choose Report to moderators, which sends it to the AutoMod alert channel.",
         "guide_admin": "`/admin` sets the bot up for this server. `/admin channel` limits commands to one channel, `/admin autorole` gives new members a role and welcomes them, `/admin djrole` picks who controls the music, and `/admin automod` manages Discord's AutoMod filters. `/admin status` shows every setting.",
         "guide_template": "`/example hello` shows how a command of a new feature works. A new feature starts as a copy of cogs/template.py.",
         "guide_help": "`/help` shows this guide, and `/about` shows the bot's version, how long it has been online, and its response time.",
+        "guide_info": "`/info server` shows the server's age, size, and boosts, `/info member` shows when a member joined and their roles, and `/info avatar` shows an avatar in full size. Only you see the answers.",
+        "section_info": "Info",
+        "info_created": "Created",
+        "info_owner": "Owner",
+        "info_members": "Members",
+        "info_channels": "Channels",
+        "info_channel_counts": "{text} text, {voice} voice",
+        "info_roles": "Roles",
+        "info_boosts": "Boosts",
+        "info_boost_level": "Level {level}, {count} boosts",
+        "info_account_created": "Account created",
+        "info_joined": "Joined the server",
+        "info_boosting": "Boosting since",
+        "info_more": "and {count} more",
+        "info_avatar_title": "Avatar of {user}",
         "about_text": "**{name}** {version}\nOnline since {since}\nResponse time: {latency} ms\nServers: {servers}",
         "about_link": "Source code: <{url}>",
         "help_empty": "No commands are available to you here.",
@@ -432,6 +484,24 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "ban_success": "**{user}** was banned.",
         "ban_failed": "Could not ban **{user}**. Reason: {error}",
         "timeout_failed": "Could not time out **{user}**. Reason: {error}",
+        "timeout_success": "**{user}** is timed out until {until}.",
+        "untimeout_success": "The timeout of **{user}** was lifted.",
+        "untimeout_none": "**{user}** has no timeout.",
+        "untimeout_failed": "Could not lift the timeout of **{user}**. Reason: {error}",
+        "purge_done": "Deleted {count} messages.",
+        "purge_none": "No messages to delete were found among the messages of the last 14 days.",
+        "purge_failed": "Could not delete the messages. Reason: {error}",
+        "warn_modal_title": "Warn {user}",
+        "warn_modal_reason": "Reason (optional)",
+        "report_no_channel": "This server has no moderator channel for reports. An admin can set one with /admin automod alert.",
+        "report_sent": "Thanks. The moderators got your report.",
+        "report_failed": "The report did not reach the moderators. Try again later.",
+        "report_title": "Reported message",
+        "report_no_text": "(no text)",
+        "report_author": "Author",
+        "report_channel": "Channel",
+        "report_by": "Reported by",
+        "report_files": "Files",
         "mod_target_self": "You cannot moderate yourself.",
         "mod_target_protected": "**{user}** cannot be moderated.",
         "mod_target_higher": "**{user}** has a role equal to or higher than yours.",
@@ -546,10 +616,25 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "help_bot_channel": "Tällä palvelimella botti ottaa komentoja vastaan vain kanavalla {channel}.",
         "guide_media": "Liity äänikanavalle ja käytä `/play`-komentoa YouTube-, SoundCloud- tai Spotify-linkin tai hakusanojen kanssa. Jokainen kappale näkyy paneelissa, jonka painikkeilla voi tauottaa, ohittaa, palata ja toistaa, ja `/queue show` näyttää jonon. `/music` ja `/queue` sisältävät muut säätimet. Spotifyn albumit ja kappaleet toimivat, mutta useimpia soittolistoja Spotify ei jaa boteille. Jos palvelimella on DJ-rooli, osa säätimistä kuuluu DJ:lle muiden kuunnellessa, ja ohitukset äänestetään.",
         "guide_voice": "Botti liittyy äänikanavallesi, kun jokin ominaisuus tarvitsee sitä, ja poistuu itse, kun muut ovat lähteneet tai mitään ei ole soinut hetkeen. `/voice join` tuo sen kanavallesi, `/voice leave` lähettää sen pois, ja `/voice stop` pysäyttää nyt soivan äänen.",
-        "guide_moderation": "`/warn` antaa jäsenelle varoituksen, ja palvelimen rajalla botti potkaisee jäsenen, antaa porttikiellon tai aikalisän. `/warnings` näyttää ja poistaa varoituksia, ja `/kick` ja `/ban` toimivat heti. Myös Discordin AutoModin estämät viestit voivat laskea varoituksiksi.",
+        "guide_moderation": "`/warn` antaa jäsenelle varoituksen, ja palvelimen rajalla botti potkaisee jäsenen, antaa porttikiellon tai aikalisän. `/warnings` näyttää ja poistaa varoituksia, ja `/timeout`, `/kick` ja `/ban` toimivat heti. `/purge` poistaa viimeisimmät viestit. Napsauta jäsentä hiiren oikealla ja valitse Sovellukset ja Varoita, niin varoitat nopeasti. Kuka tahansa voi napsauttaa viestiä hiiren oikealla ja valita Ilmoita moderaattoreille, jolloin viesti menee AutoMod-hälytyskanavalle.",
         "guide_admin": "`/admin` määrittää botin tälle palvelimelle. `/admin channel` rajaa komennot yhdelle kanavalle, `/admin autorole` antaa uusille jäsenille roolin ja toivottaa heidät tervetulleiksi, `/admin djrole` valitsee, kuka ohjaa musiikkia, ja `/admin automod` hallitsee Discordin AutoMod-suodattimia. `/admin status` näyttää kaikki asetukset.",
         "guide_template": "`/example hello` näyttää, miten uuden ominaisuuden komento toimii. Uusi ominaisuus alkaa kopiona tiedostosta cogs/template.py.",
         "guide_help": "`/help` näyttää tämän ohjeen, ja `/about` näyttää botin version, kuinka kauan se on ollut päällä ja sen vasteajan.",
+        "guide_info": "`/info server` näyttää palvelimen iän, koon ja tehostukset, `/info member` näyttää, milloin jäsen liittyi ja hänen roolinsa, ja `/info avatar` näyttää profiilikuvan täysikokoisena. Vain sinä näet vastaukset.",
+        "section_info": "Tiedot",
+        "info_created": "Luotu",
+        "info_owner": "Omistaja",
+        "info_members": "Jäseniä",
+        "info_channels": "Kanavia",
+        "info_channel_counts": "{text} teksti, {voice} ääni",
+        "info_roles": "Roolit",
+        "info_boosts": "Tehostukset",
+        "info_boost_level": "Taso {level}, {count} tehostusta",
+        "info_account_created": "Tili luotu",
+        "info_joined": "Liittyi palvelimelle",
+        "info_boosting": "Tehostanut alkaen",
+        "info_more": "ja {count} muuta",
+        "info_avatar_title": "Käyttäjän {user} profiilikuva",
         "about_text": "**{name}** {version}\nPäällä {since} alkaen\nVasteaika: {latency} ms\nPalvelimia: {servers}",
         "about_link": "Lähdekoodi: <{url}>",
         "help_empty": "Sinulla ei ole täällä käytettävissä komentoja.",
@@ -626,6 +711,24 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "ban_success": "**{user}** sai porttikiellon.",
         "ban_failed": "Porttikiellon antaminen käyttäjälle **{user}** epäonnistui. Syy: {error}",
         "timeout_failed": "Aikalisän antaminen käyttäjälle **{user}** epäonnistui. Syy: {error}",
+        "timeout_success": "**{user}** sai aikalisän, joka päättyy {until}.",
+        "untimeout_success": "Käyttäjän **{user}** aikalisä poistettiin.",
+        "untimeout_none": "Käyttäjällä **{user}** ei ole aikalisää.",
+        "untimeout_failed": "Käyttäjän **{user}** aikalisän poistaminen epäonnistui. Syy: {error}",
+        "purge_done": "Poistettiin {count} viestiä.",
+        "purge_none": "Poistettavia viestejä ei löytynyt viimeisen 14 päivän viesteistä.",
+        "purge_failed": "Viestien poistaminen epäonnistui. Syy: {error}",
+        "warn_modal_title": "Varoita: {user}",
+        "warn_modal_reason": "Syy (valinnainen)",
+        "report_no_channel": "Tällä palvelimella ei ole moderaattorikanavaa ilmoituksille. Ylläpitäjä voi asettaa sen komennolla /admin automod alert.",
+        "report_sent": "Kiitos. Moderaattorit saivat ilmoituksesi.",
+        "report_failed": "Ilmoitus ei päässyt moderaattoreille. Yritä myöhemmin uudelleen.",
+        "report_title": "Ilmoitettu viesti",
+        "report_no_text": "(ei tekstiä)",
+        "report_author": "Kirjoittaja",
+        "report_channel": "Kanava",
+        "report_by": "Ilmoittaja",
+        "report_files": "Tiedostot",
         "mod_target_self": "Et voi moderoida itseäsi.",
         "mod_target_protected": "Käyttäjää **{user}** ei voi moderoida.",
         "mod_target_higher": (
@@ -718,6 +821,28 @@ CORE_COMMAND_TEXT: dict[str, dict[str, str]] = {
         "The warning number shown by /warnings list.": "Komennon /warnings list näyttämä varoituksen numero.",
         "Remove every warning of a member in this server.": "Poista jäsenen kaikki varoitukset tällä palvelimella.",
         "The member whose warnings to remove.": "Jäsen, jonka varoitukset poistetaan.",
+        "Time out a member, so they cannot write or speak for a while.": "Anna jäsenelle aikalisä, jolloin hän ei voi kirjoittaa tai puhua hetkeen.",
+        "The member to time out.": "Jäsen, joka saa aikalisän.",
+        "How long the timeout lasts.": "Kuinka kauan aikalisä kestää.",
+        "Why the member is timed out. It appears in the audit log.": "Aikalisän syy. Se näkyy tarkastuslokissa.",
+        "60 seconds": "60 sekuntia",
+        "5 minutes": "5 minuuttia",
+        "10 minutes": "10 minuuttia",
+        "1 hour": "1 tunti",
+        "1 day": "1 päivä",
+        "1 week": "1 viikko",
+        "Lift a member's timeout.": "Poista jäsenen aikalisä.",
+        "The member whose timeout to lift.": "Jäsen, jonka aikalisä poistetaan.",
+        "Delete recent messages in this channel, optionally only from one member.": "Poista tämän kanavan viimeisimmät viestit, halutessasi vain yhdeltä jäseneltä.",
+        "How many messages to delete, from 1 to 100.": "Kuinka monta viestiä poistetaan, 1–100.",
+        "Only delete this member's messages.": "Poista vain tämän jäsenen viestit.",
+        "Warn": "Varoita",
+        "Report to moderators": "Ilmoita moderaattoreille",
+        "Show facts about this server or one of its members.": "Näytä tietoja tästä palvelimesta tai sen jäsenestä.",
+        "Show this server's age, size, and boosts, only to you.": "Näytä palvelimen ikä, koko ja tehostukset vain sinulle.",
+        "Show when a member joined and which roles they have, only to you.": "Näytä, milloin jäsen liittyi ja mitkä roolit hänellä on, vain sinulle.",
+        "Show a member's avatar in full size, only to you.": "Näytä jäsenen profiilikuva täysikokoisena vain sinulle.",
+        "The member to show. Leave it empty to show yourself.": "Näytettävä jäsen. Jätä tyhjäksi, niin näet itsesi.",
         "Kick a member from this server.": "Potkaise jäsen tältä palvelimelta.",
         "The member to kick.": "Potkaistava jäsen.",
         "Why the member is kicked. It appears in the audit log.": "Potkun syy. Se näkyy tarkastuslokissa.",

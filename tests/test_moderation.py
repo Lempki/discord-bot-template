@@ -1,10 +1,12 @@
 """Tests for cogs/moderation.py, run against a real bot and an in-memory database."""
 
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import discord
 import pytest
+from discord import app_commands
 
 from bot import BotApp
 from cogs.moderation import ModerationCog, blocked_reason
@@ -317,3 +319,151 @@ async def test_kick_refuses_member_above_the_bot(
     assert sent_messages(scene.interaction) == [
         EN.mod_bot_too_low.format(user="TestUser")
     ]
+
+
+def timeout_target(*, timed_out: bool = False) -> MagicMock:
+    member = MagicMock(spec=discord.Member)
+    member.display_name = "Ada"
+    member.timeout = AsyncMock()
+    member.is_timed_out.return_value = timed_out
+    return member
+
+
+async def test_timeout_mutes_a_member_until_a_shown_time(bot: BotApp) -> None:
+    cog = ModerationCog(bot)
+    cog._refuse = AsyncMock(return_value=False)  # type: ignore[method-assign]
+    member = timeout_target()
+    interaction = make_interaction()
+    hour = app_commands.Choice(name="1 hour", value=60)
+
+    await cog.timeout.callback(cog, interaction, member, hour, "Spam")  # type: ignore[arg-type]
+
+    until = member.timeout.call_args.args[0]
+    assert abs((until - discord.utils.utcnow()).total_seconds() - 3600) < 5
+    assert member.timeout.call_args.kwargs["reason"] == "Spam"
+    assert sent_messages(interaction) == [
+        EN.timeout_success.format(user="Ada", until=discord.utils.format_dt(until, "f"))
+    ]
+
+
+async def test_untimeout_lifts_a_timeout_or_says_there_is_none(bot: BotApp) -> None:
+    cog = ModerationCog(bot)
+    cog._refuse = AsyncMock(return_value=False)  # type: ignore[method-assign]
+    muted = timeout_target(timed_out=True)
+    free = timeout_target()
+    first = make_interaction()
+    second = make_interaction()
+
+    await cog.untimeout.callback(cog, first, muted)  # type: ignore[arg-type]
+    await cog.untimeout.callback(cog, second, free)  # type: ignore[arg-type]
+
+    muted.timeout.assert_awaited_once_with(None)
+    assert sent_messages(first) == [EN.untimeout_success.format(user="Ada")]
+    free.timeout.assert_not_awaited()
+    assert sent_messages(second) == [EN.untimeout_none.format(user="Ada")]
+
+
+async def test_purge_deletes_only_the_chosen_members_recent_messages(
+    bot: BotApp,
+) -> None:
+    cog = ModerationCog(bot)
+    member = MagicMock(spec=discord.Member)
+    member.id = 5
+    messages = [MagicMock(author=MagicMock(id=n % 2 + 5)) for n in range(10)]
+    channel = MagicMock(spec=discord.TextChannel)
+
+    async def purge(**kwargs: Any) -> list[Any]:
+        return [m for m in messages[: kwargs["limit"]] if kwargs["check"](m)]
+
+    channel.purge = AsyncMock(side_effect=purge)
+    interaction = make_interaction()
+    interaction.channel = channel
+
+    await cog.purge.callback(cog, interaction, 3, member)  # type: ignore[arg-type]
+
+    kwargs = channel.purge.call_args.kwargs
+    # Messages older than 14 days cannot be deleted in bulk, so purge never looks at them.
+    assert (discord.utils.utcnow() - kwargs["after"]).days == 13
+    assert sent_messages(interaction) == [EN.purge_done.format(count=3)]
+
+
+async def test_a_reported_message_reaches_the_alert_channel(
+    db: None, bot: BotApp
+) -> None:
+    cog = ModerationCog(bot)
+    await database.upsert_settings(GUILD_ID, automod_alert_channel_id=77)
+    alerts = MagicMock(spec=discord.TextChannel)
+    alerts.send = AsyncMock()
+    interaction = make_interaction()
+    interaction.guild.get_channel = MagicMock(return_value=alerts)
+    interaction.user.mention = "<@9>"
+    message = MagicMock(spec=discord.Message)
+    message.content = "Something rude"
+    message.jump_url = "https://discord.com/channels/1/2/3"
+    message.author.mention = "<@5>"
+    message.channel.mention = "<#2>"
+    message.attachments = []
+
+    await cog.report_message(interaction, message)
+
+    embed = alerts.send.call_args.kwargs["embed"]
+    assert embed.title == EN.report_title
+    assert embed.description == "Something rude"
+    assert embed.url == "https://discord.com/channels/1/2/3"
+    assert [field.value for field in embed.fields] == ["<@5>", "<#2>", "<@9>"]
+    assert sent_messages(interaction) == [EN.report_sent]
+
+
+async def test_a_report_without_an_alert_channel_says_so(db: None, bot: BotApp) -> None:
+    cog = ModerationCog(bot)
+    interaction = make_interaction()
+
+    await cog.report_message(interaction, MagicMock(spec=discord.Message))
+
+    assert sent_messages(interaction) == [EN.report_no_channel]
+
+
+async def test_the_warn_menu_asks_for_a_reason_and_warns(bot: BotApp) -> None:
+    cog = ModerationCog(bot)
+    cog.warn_member = AsyncMock()  # type: ignore[method-assign]
+    member = MagicMock(spec=discord.Member)
+    member.display_name = "Ada"
+    interaction = make_interaction()
+    interaction.response.send_modal = AsyncMock()
+
+    await cog.warn_from_menu(interaction, member)
+    modal = interaction.response.send_modal.call_args.args[0]
+    assert modal.title == EN.warn_modal_title.format(user="Ada")
+    modal.reason._value = "Spam"
+    submit = make_interaction()
+    await modal.on_submit(submit)
+
+    cog.warn_member.assert_awaited_once_with(submit, member, "Spam")
+
+
+async def test_the_right_click_menus_are_translated_but_commands_are_not(
+    bot: BotApp,
+) -> None:
+    from discord.app_commands import (
+        TranslationContext,
+        TranslationContextLocation,
+        locale_str,
+    )
+
+    from localization import COMMAND_TEXT
+    from utils.i18n import LocaleTranslator
+
+    translator = LocaleTranslator(COMMAND_TEXT)
+    cog = ModerationCog(bot)
+    location = TranslationContextLocation.command_name
+    as_menu = TranslationContext(location, cog._warn_menu)
+    as_command = TranslationContext(location, cog.timeout)
+
+    menu_name = await translator.translate(
+        locale_str("Warn"), discord.Locale.finnish, as_menu
+    )
+    command_name = await translator.translate(
+        locale_str("timeout"), discord.Locale.finnish, as_command
+    )
+
+    assert (menu_name, command_name) == ("Varoita", None)

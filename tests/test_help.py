@@ -70,7 +70,7 @@ async def test_an_admin_reads_the_setup_and_moderation_guides(bot: BotApp) -> No
     ]
     # A group such as /warnings counts once in the commands line.
     assert by_title[EN.section_moderation][1] == EN.help_commands.format(
-        commands="`/ban`, `/kick`, `/warn`, `/warnings`"
+        commands="`/ban`, `/kick`, `/purge`, `/timeout`, `/untimeout`, `/warn`, `/warnings`"
     )
     assert [section.title for section in sections] == [
         EN.section_moderation,

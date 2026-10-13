@@ -30,9 +30,13 @@ Commands are grouped by feature, so each name says what it acts on, and Discord'
 | `/music pause`, `stop`, `skip`, `previous`, `loop`, `volume`, `lyrics` | Controls the music that plays now. |
 | `/queue show`, `remove`, `move`, `shuffle`, `clear`, `skipto` | Shows and changes the songs waiting in the queue. |
 | `/voice join`, `leave`, `stop` | Brings the bot into a voice channel, sends it out, or stops what it plays. |
-| `/warn`, `/kick`, `/ban` | Moderates a member. |
+| `/warn`, `/timeout`, `/untimeout`, `/kick`, `/ban` | Moderates a member. A timeout lasts from 60 seconds to a week, as Discord's own menu offers. |
+| `/purge` | Deletes up to 100 recent messages in the channel, optionally only one member's. Discord deletes only messages younger than 14 days this way. |
+| Right-click a member, then **Apps**, then **Warn** | Warns the member after asking for a reason. |
+| Right-click a message, then **Apps**, then **Report to moderators** | Sends the message privately to the moderators' AutoMod alert channel. Anyone can use it, once a minute. |
 | `/warnings list`, `remove`, `clear` | Shows and removes the warnings of members. |
 | `/admin …` | Sets the bot up for the server, including AutoMod under `/admin automod`. |
+| `/info server`, `member`, `avatar` | Shows the server's age, size, and boosts, a member's join date and roles, or an avatar in full size, only to you. |
 | `/help`, `/about` | Shows a short guide to the bot, and its version and response time. |
 | `/example hello` | The template cog's example command, the starting point for new features. |
 
@@ -92,7 +96,8 @@ The **Requires OAuth2 Code Grant** toggle in the Bot page is not applicable to s
 | Manage Roles | Auto-role assignment on member join. |
 | Kick Members | `/kick` and the `kick` warning action. |
 | Ban Members | `/ban` and the `ban` warning action. |
-| Moderate Members | The `timeout` warning action. |
+| Moderate Members | `/timeout`, `/untimeout`, and the `timeout` warning action. |
+| Manage Messages | `/purge`. |
 | Manage Server | Managing AutoMod rules and receiving AutoMod executions. |
 
 None of the core cogs send files. Add **Attach Files** if one of your own cogs does.
@@ -276,7 +281,7 @@ All configuration is read from environment variables or from a `.env` file locat
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `DISCORD_TOKEN` | Yes | None | The Discord bot token used to authenticate with the API. |
-| `COGS_TO_LOAD` | No | `help` | A comma-separated list of cog module names to load at startup. Set it to `help,template,voice,media,admin,moderation,events` for the full feature set. |
+| `COGS_TO_LOAD` | No | `help` | A comma-separated list of cog module names to load at startup. Set it to `help,template,voice,media,info,admin,moderation,events` for the full feature set. |
 | `LOCALE` | No | `silent` | The fallback language for users whose Discord language the bot does not speak. Built-in values are `en` and `fi`. `silent` mutes public replies. Private replies, such as `/help`, admin and moderator replies, and error messages, are still sent because only the person who ran the command sees them. |
 | `DATABASE_PATH` | No | `data/bot.db` | The SQLite file for per-guild settings and moderation data. The directory is created if needed. The Docker image uses `/app/data/bot.db`. |
 | `FFMPEG_PATH` | No | `ffmpeg` | The FFmpeg executable. Leave it unset to use FFmpeg from the system PATH. |

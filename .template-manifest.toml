@@ -34,6 +34,9 @@ path = "cogs/template.py"
 path = "cogs/voice.py"
 
 [[file]]
+path = "cogs/info.py"
+
+[[file]]
 path = "utils/__init__.py"
 
 [[file]]
@@ -116,6 +119,9 @@ path = "tests/test_replies.py"
 
 [[file]]
 path = "tests/test_voice.py"
+
+[[file]]
+path = "tests/test_info.py"
 
 [[file]]
 path = "Dockerfile"

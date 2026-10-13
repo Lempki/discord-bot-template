@@ -103,7 +103,10 @@ class LocaleTranslator(app_commands.Translator):
         context: TranslationContextTypes,
     ) -> str | None:
         """Returns the translation of one string, or None to keep the English text."""
-        if context.location in _NAME_LOCATIONS:
+        # A context menu's name is a label in Discord's menu, so it is translated.
+        # A slash command's name is what members type, so it stays the same in every language.
+        menu = isinstance(getattr(context, "data", None), app_commands.ContextMenu)
+        if context.location in _NAME_LOCATIONS and not menu:
             return None
         table = self._text.get(locale.value) or self._text.get(
             locale.value.split("-")[0]

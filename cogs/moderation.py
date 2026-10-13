@@ -6,6 +6,8 @@ When a guild turns escalation on, every message that AutoMod blocks becomes a wa
 
 import logging
 import time
+from dataclasses import replace
+from datetime import timedelta
 from typing import TYPE_CHECKING
 
 import discord
@@ -79,6 +81,50 @@ def outcome_messages(s: "Strings", outcome: WarningOutcome, user: str) -> list[s
     return [message for message in messages if message]
 
 
+# Discord's own timeout lengths, in minutes, as its member menu offers them.
+TIMEOUT_LENGTHS = [
+    app_commands.Choice(name="60 seconds", value=1),
+    app_commands.Choice(name="5 minutes", value=5),
+    app_commands.Choice(name="10 minutes", value=10),
+    app_commands.Choice(name="1 hour", value=60),
+    app_commands.Choice(name="1 day", value=24 * 60),
+    app_commands.Choice(name="1 week", value=7 * 24 * 60),
+]
+
+# Discord deletes messages in bulk only while they are younger than 14 days.
+PURGE_MAX_AGE = timedelta(days=14)
+
+# /purge for one member looks through at most this many recent messages for theirs.
+PURGE_SCAN_LIMIT = 500
+
+# A member may report one message to the moderators this often, in seconds.
+REPORT_PER_SECONDS = 60.0
+
+# A report shows this much of the message, which an embed field holds 1024 characters of.
+REPORT_TEXT_LIMIT = 1000
+
+
+class WarnModal(discord.ui.Modal):
+    """Asks for the reason of a warning given from the member's right-click menu."""
+
+    def __init__(
+        self, cog: "ModerationCog", member: discord.Member, s: "Strings"
+    ) -> None:
+        super().__init__(title=s.warn_modal_title[:45] or "Warn")
+        self.cog = cog
+        self.member = member
+        self.reason: discord.ui.TextInput[WarnModal] = discord.ui.TextInput(
+            label=s.warn_modal_reason[:45] or "Reason",
+            required=False,
+            max_length=400,
+        )
+        self.add_item(self.reason)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        """Warns the member with the reason that the moderator typed."""
+        await self.cog.warn_member(interaction, self.member, self.reason.value or None)
+
+
 class ModerationCog(commands.Cog, name="Moderation"):
     """Member moderation. Requires the Kick Members or Ban Members permission."""
 
@@ -86,6 +132,16 @@ class ModerationCog(commands.Cog, name="Moderation"):
         self.bot = bot
         # When AutoMod last warned each member, as (guild ID, user ID) to a monotonic time.
         self._automod_warned_at: dict[tuple[int, int], float] = {}
+        # Right-click menus cannot live in a cog's body, so they are made and added here.
+        self._warn_menu = app_commands.ContextMenu(
+            name="Warn", callback=self.warn_from_menu
+        )
+        self._warn_menu.default_permissions = discord.Permissions(kick_members=True)
+        self._warn_menu.guild_only = True
+        self._report_menu = app_commands.ContextMenu(
+            name="Report to moderators", callback=self.report_message
+        )
+        self._report_menu.guild_only = True
 
     async def _refuse(
         self, interaction: discord.Interaction, s: "Strings", target: discord.Member
@@ -122,6 +178,15 @@ class ModerationCog(commands.Cog, name="Moderation"):
         reason: str | None = None,
     ) -> None:
         """Warn a member. At the warning limit they are kicked, banned, or timed out."""
+        await self.warn_member(interaction, member, reason)
+
+    async def warn_member(
+        self,
+        interaction: discord.Interaction,
+        member: discord.Member,
+        reason: str | None,
+    ) -> None:
+        """Warns a member, for /warn and for the member's right-click menu."""
         await interaction.response.defer(ephemeral=True)
         s = self.bot.strings_for(interaction, private=True)
         if await self._refuse(interaction, s, member):
@@ -342,9 +407,202 @@ class ModerationCog(commands.Cog, name="Moderation"):
         except discord.HTTPException as error:
             log.warning(f"Could not report an AutoMod warning in {channel_id}: {error}")
 
+    @app_commands.command(name="timeout")
+    @app_commands.guild_only()
+    @app_commands.default_permissions(moderate_members=True)
+    @app_commands.describe(
+        member="The member to time out.",
+        length="How long the timeout lasts.",
+        reason="Why the member is timed out. It appears in the audit log.",
+    )
+    @app_commands.choices(length=TIMEOUT_LENGTHS)
+    async def timeout(
+        self,
+        interaction: discord.Interaction,
+        member: discord.Member,
+        length: app_commands.Choice[int],
+        reason: str | None = None,
+    ) -> None:
+        """Time out a member, so they cannot write or speak for a while."""
+        await interaction.response.defer(ephemeral=True)
+        s = self.bot.strings_for(interaction, private=True)
+        if await self._refuse(interaction, s, member):
+            return
+        until = discord.utils.utcnow() + timedelta(minutes=length.value)
+        try:
+            await member.timeout(until, reason=reason)
+        except discord.HTTPException as error:
+            await respond(
+                interaction,
+                s.timeout_failed,
+                ephemeral=True,
+                user=member.display_name,
+                error=error,
+            )
+            return
+        # A Discord timestamp shows the end in each reader's own language and time zone.
+        await respond(
+            interaction,
+            s.timeout_success,
+            ephemeral=True,
+            user=member.display_name,
+            until=discord.utils.format_dt(until, "f"),
+        )
+        log.info(
+            f"{interaction.user} timed {member} out for {length.value} min: {reason}"
+        )
+
+    @app_commands.command(name="untimeout")
+    @app_commands.guild_only()
+    @app_commands.default_permissions(moderate_members=True)
+    @app_commands.describe(member="The member whose timeout to lift.")
+    async def untimeout(
+        self, interaction: discord.Interaction, member: discord.Member
+    ) -> None:
+        """Lift a member's timeout."""
+        await interaction.response.defer(ephemeral=True)
+        s = self.bot.strings_for(interaction, private=True)
+        if not member.is_timed_out():
+            await respond(
+                interaction, s.untimeout_none, ephemeral=True, user=member.display_name
+            )
+            return
+        if await self._refuse(interaction, s, member):
+            return
+        try:
+            await member.timeout(None)
+        except discord.HTTPException as error:
+            await respond(
+                interaction,
+                s.untimeout_failed,
+                ephemeral=True,
+                user=member.display_name,
+                error=error,
+            )
+            return
+        await respond(
+            interaction, s.untimeout_success, ephemeral=True, user=member.display_name
+        )
+        log.info(f"{interaction.user} lifted the timeout of {member}.")
+
+    @app_commands.command(name="purge")
+    @app_commands.guild_only()
+    @app_commands.default_permissions(manage_messages=True)
+    @app_commands.describe(
+        count="How many messages to delete, from 1 to 100.",
+        member="Only delete this member's messages.",
+    )
+    async def purge(
+        self,
+        interaction: discord.Interaction,
+        count: app_commands.Range[int, 1, 100],
+        member: discord.Member | None = None,
+    ) -> None:
+        """Delete recent messages in this channel, optionally only from one member."""
+        await interaction.response.defer(ephemeral=True)
+        s = self.bot.strings_for(interaction, private=True)
+        channel = interaction.channel
+        if not isinstance(
+            channel, discord.TextChannel | discord.Thread | discord.VoiceChannel
+        ):
+            await respond(interaction, s.purge_none, ephemeral=True)
+            return
+        matched = 0
+
+        def wanted(message: discord.Message) -> bool:
+            nonlocal matched
+            if matched >= count or (
+                member is not None and message.author.id != member.id
+            ):
+                return False
+            matched += 1
+            return True
+
+        # Older messages cannot be deleted in bulk, and deleting them one by one takes long.
+        after = discord.utils.utcnow() - PURGE_MAX_AGE + timedelta(minutes=1)
+        try:
+            deleted = await channel.purge(
+                limit=count if member is None else PURGE_SCAN_LIMIT,
+                check=wanted,
+                after=after,
+                reason=f"/purge by {interaction.user}",
+            )
+        except discord.HTTPException as error:
+            await respond(interaction, s.purge_failed, ephemeral=True, error=error)
+            return
+        if not deleted:
+            await respond(interaction, s.purge_none, ephemeral=True)
+            return
+        await respond(interaction, s.purge_done, ephemeral=True, count=len(deleted))
+        log.info(f"{interaction.user} purged {len(deleted)} message(s) in {channel}.")
+
+    async def warn_from_menu(
+        self, interaction: discord.Interaction, member: discord.Member
+    ) -> None:
+        """Opens the reason form of a warning, from the member's right-click menu."""
+        s = self.bot.strings_for(interaction, private=True)
+        title = s.warn_modal_title.format(user=member.display_name)
+        modal = WarnModal(self, member, replace(s, warn_modal_title=title))
+        await interaction.response.send_modal(modal)
+
+    @app_commands.checks.cooldown(1, REPORT_PER_SECONDS)
+    async def report_message(
+        self, interaction: discord.Interaction, message: discord.Message
+    ) -> None:
+        """Sends a message to the moderators' alert channel, from its right-click menu."""
+        s = self.bot.strings_for(interaction, private=True)
+        guild = guild_of(interaction)
+        settings = await database.get_settings(guild.id)
+        channel = (
+            guild.get_channel(settings.automod_alert_channel_id)
+            if settings.automod_alert_channel_id
+            else None
+        )
+        if not isinstance(channel, discord.abc.Messageable):
+            await respond(interaction, s.report_no_channel, ephemeral=True)
+            return
+        # The alert channel is for moderators, so it gets the report even when LOCALE=silent.
+        alert = self.bot.strings_for(guild, private=True)
+        text = message.content or alert.report_no_text
+        if len(text) > REPORT_TEXT_LIMIT:
+            text = text[: REPORT_TEXT_LIMIT - 1] + "…"
+        embed = discord.Embed(
+            title=alert.report_title,
+            description=text,
+            url=message.jump_url,
+            colour=discord.Colour.orange(),
+        )
+        # Mentions in an embed ping nobody, and they stay correct when names change.
+        embed.add_field(name=alert.report_author, value=message.author.mention)
+        embed.add_field(name=alert.report_channel, value=message.channel.mention)
+        embed.add_field(name=alert.report_by, value=interaction.user.mention)
+        if message.attachments:
+            embed.add_field(
+                name=alert.report_files,
+                value="\n".join(a.url for a in message.attachments[:5]),
+                inline=False,
+            )
+        try:
+            await channel.send(embed=embed)
+        except discord.HTTPException as error:
+            log.warning(f"Could not post a report in {guild}: {error}")
+            await respond(interaction, s.report_failed, ephemeral=True)
+            return
+        await respond(interaction, s.report_sent, ephemeral=True)
+        log.info(f"A message was reported to the moderators in {guild}.")
+
     async def cog_load(self) -> None:
-        """Logs that the cog is ready."""
+        """Adds the right-click menus and logs that the cog is ready."""
+        self.bot.tree.add_command(self._warn_menu)
+        self.bot.tree.add_command(self._report_menu)
         log.info(f"{self.qualified_name} cog loaded.")
+
+    async def cog_unload(self) -> None:
+        """Removes the right-click menus, which the cog added itself."""
+        self.bot.tree.remove_command(self._warn_menu.name, type=self._warn_menu.type)
+        self.bot.tree.remove_command(
+            self._report_menu.name, type=self._report_menu.type
+        )
 
 
 async def setup(bot: "BotApp") -> None:

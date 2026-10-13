@@ -26,7 +26,7 @@ EMBEDS_PER_MESSAGE = 10
 AnyCommand = app_commands.Command[commands.Cog, ..., object]
 
 # The guide shows the core features in this order, after the bot's own features.
-CORE_ORDER = ("media", "voice", "moderation", "admin", "template", "help")
+CORE_ORDER = ("media", "voice", "info", "moderation", "admin", "template", "help")
 
 
 @dataclass(frozen=True)
