@@ -1460,14 +1460,18 @@ class MediaCog(commands.Cog, name="Media"):
         s = self.bot.strings_for(interaction, private=True)
         player = self._players.get(guild_of(interaction).id)
         title, duration = song, None
+        artist = track = None
         if title is None and player is not None and player.current is not None:
-            title, duration = player.current.title, player.current.duration
+            current = player.current
+            title, duration = current.title, current.duration
+            # The artist and song name find the right lyrics more often than a site's title.
+            artist, track = current.artist, current.song
         if not title:
             await respond(interaction, s.lyrics_nothing, ephemeral=True)
             await finish(interaction)
             return
         try:
-            found = await self.client.get_lyrics(title, duration)
+            found = await self.client.get_lyrics(title, duration, artist, track)
         except httpx.HTTPStatusError as error:
             missing = error.response.status_code == 404
             template = s.lyrics_none if missing else s.lyrics_unavailable

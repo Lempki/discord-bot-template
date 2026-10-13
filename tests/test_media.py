@@ -897,7 +897,9 @@ async def test_lyrics_of_the_playing_song_come_in_a_private_embed() -> None:
 
     await cog.lyrics.callback(cog, interaction, None)  # type: ignore[arg-type]
 
-    cog.client.get_lyrics.assert_awaited_once_with("Eagles - Hotel California", 391)
+    cog.client.get_lyrics.assert_awaited_once_with(
+        "Eagles - Hotel California", 391, None, None
+    )
     kwargs = interaction.followup.send.call_args.kwargs
     assert kwargs["ephemeral"] is True
     assert kwargs["embed"].title == "Hotel California – Eagles"
