@@ -97,6 +97,7 @@ class CoreStrings:
     panel_playing: str = ""
     panel_paused: str = ""
     panel_ended: str = ""
+    panel_stopped: str = ""
     panel_details: str = ""
     panel_next: str = ""
     panel_next_none: str = ""
@@ -126,11 +127,13 @@ class CoreStrings:
     played_gone: str = ""
     # The question that the stop button asks while songs wait. The placeholder is {count}.
     stop_confirm: str = ""
+    stop_confirm_one: str = ""
     stop_confirm_yes: str = ""
     stop_confirm_no: str = ""
     stop_kept: str = ""
     # The panel's line about who last changed the music, by a button or a command.
     # Placeholders are {user}, {title}, {loop}, and {volume}.
+    # The action_stopped texts use {at} for where the song stopped and {count} for the songs cleared.
     action_skipped: str = ""
     action_skipto: str = ""
     action_previous: str = ""
@@ -142,6 +145,8 @@ class CoreStrings:
     action_cleared: str = ""
     action_volume: str = ""
     action_stopped: str = ""
+    action_stopped_cleared: str = ""
+    action_stopped_cleared_one: str = ""
     action_skipvote: str = ""
     action_skipped_vote: str = ""
 
@@ -338,11 +343,12 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "lyrics_none": "No lyrics were found for **{title}**.",
         "lyrics_unavailable": "The lyrics service could not be reached. Try again later.",
         "lyrics_footer": "Lyrics from LRCLIB",
-        "status_idle": "/help shows the commands",
+        "status_idle": "/help shows what I can do",
         "status_playing": "🎵 Playing music",
         "panel_playing": "Now playing",
         "panel_paused": "Paused",
         "panel_ended": "Finished playing",
+        "panel_stopped": "Stopped",
         "panel_details": "From {source}, added by {user}",
         "panel_next": "Up next",
         "panel_next_none": "Nothing yet. /play adds more.",
@@ -368,6 +374,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "played_title": "Played songs",
         "played_gone": "This list is no longer kept. The bot keeps the songs of the last 20 sessions.",
         "stop_confirm": "This stops the music and removes the {count} waiting songs.",
+        "stop_confirm_one": "This stops the music and removes the waiting song.",
         "stop_confirm_yes": "Stop and clear",
         "stop_confirm_no": "Cancel",
         "stop_kept": "The music goes on, and the queue stays as it was.",
@@ -381,7 +388,9 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "action_shuffled": "🔀 {user} shuffled the queue",
         "action_cleared": "🧹 {user} cleared the queue",
         "action_volume": "🔊 {user} set the volume to {volume}%",
-        "action_stopped": "⏹️ {user} stopped the music",
+        "action_stopped": "⏹️ {user} stopped the music at {at}",
+        "action_stopped_cleared": "⏹️ {user} stopped the music at {at} and cleared {count} waiting songs",
+        "action_stopped_cleared_one": "⏹️ {user} stopped the music at {at} and cleared 1 waiting song",
         "action_skipvote": "🗳️ {user} voted to skip: {votes} of {needed} votes",
         "action_skipped_vote": "⏭️ The listeners voted to skip **{title}**",
         "help_title": "How to use the bot",
@@ -564,11 +573,12 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "lyrics_none": "Kappaleelle **{title}** ei löytynyt sanoja.",
         "lyrics_unavailable": "Sanapalveluun ei saatu yhteyttä. Yritä myöhemmin uudelleen.",
         "lyrics_footer": "Sanat: LRCLIB",
-        "status_idle": "/help näyttää komennot",
+        "status_idle": "/help kertoo, mitä osaan",
         "status_playing": "🎵 Soittaa musiikkia",
         "panel_playing": "Nyt soi",
         "panel_paused": "Tauolla",
         "panel_ended": "Soitto päättyi",
+        "panel_stopped": "Soitto pysäytetty",
         "panel_details": "Lähde: {source}, lisännyt {user}",
         "panel_next": "Seuraavaksi",
         "panel_next_none": "Ei vielä mitään. /play lisää kappaleita.",
@@ -594,6 +604,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "played_title": "Soitetut kappaleet",
         "played_gone": "Tätä listaa ei enää säilytetä. Botti säilyttää 20 viimeisen kerran kappaleet.",
         "stop_confirm": "Tämä pysäyttää musiikin ja poistaa {count} jonossa odottavaa kappaletta.",
+        "stop_confirm_one": "Tämä pysäyttää musiikin ja poistaa jonossa odottavan kappaleen.",
         "stop_confirm_yes": "Pysäytä ja tyhjennä",
         "stop_confirm_no": "Peruuta",
         "stop_kept": "Musiikki jatkuu, ja jono pysyy ennallaan.",
@@ -607,7 +618,9 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "action_shuffled": "🔀 {user} sekoitti jonon",
         "action_cleared": "🧹 {user} tyhjensi jonon",
         "action_volume": "🔊 {user} asetti äänenvoimakkuudeksi {volume} %",
-        "action_stopped": "⏹️ {user} pysäytti musiikin",
+        "action_stopped": "⏹️ {user} pysäytti musiikin kohdassa {at}",
+        "action_stopped_cleared": "⏹️ {user} pysäytti musiikin kohdassa {at} ja poisti jonosta {count} kappaletta",
+        "action_stopped_cleared_one": "⏹️ {user} pysäytti musiikin kohdassa {at} ja poisti jonosta yhden kappaleen",
         "action_skipvote": "🗳️ {user} äänesti ohittamisen puolesta: {votes}/{needed} ääntä",
         "action_skipped_vote": "⏭️ Kuuntelijat äänestivät kappaleen **{title}** ohitetuksi",
         "help_title": "Botin käyttöohje",

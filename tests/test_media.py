@@ -25,6 +25,7 @@ from cogs.media import (
     StopConfirmView,
     Track,
     clock,
+    collection_label,
     cut_lyrics,
     ended_card,
     join_names,
@@ -1451,11 +1452,58 @@ async def test_an_ended_panel_names_only_a_stop() -> None:
     player = cog.player(MagicMock(id=GUILD_ID))
     player.note("paused", "Ada")
     paused = cog.panel_embed(player, panel_track(), EN, state="ended")
-    player.note("stopped", "Ada")
+    player.note("stopped", "Ada", at="1:15", count=0)
     stopped = cog.panel_embed(player, panel_track(), EN, state="ended")
 
     assert EN.action_paused.format(user="Ada") not in paused.description
-    assert stopped.description.splitlines()[-1] == EN.action_stopped.format(user="Ada")
+    assert paused.author.name == EN.panel_ended
+    assert stopped.description.splitlines()[-1] == EN.action_stopped.format(
+        user="Ada", at="1:15"
+    )
+    assert stopped.author.name == EN.panel_stopped
+
+
+@pytest.mark.parametrize(
+    ("waiting", "action"),
+    [(0, "stopped"), (1, "stopped_cleared_one"), (3, "stopped_cleared")],
+)
+async def test_a_stop_records_where_the_song_stopped_and_what_it_cleared(
+    waiting: int, action: str
+) -> None:
+    _, cog = await media_cog()
+    player = queued_player(cog, waiting)
+    player.current = panel_track()
+    player.started_at = time.monotonic() - 75
+    interaction, voice_client = playing_guild()
+
+    cog.stop_music(interaction.guild, "Ada")
+
+    assert player.last_action == (
+        action,
+        "Ada",
+        {"at": f"1:15 / {clock(panel_track().duration or 0)}", "count": waiting},
+    )
+    assert not player.queue
+    voice_client.stop.assert_called_once()
+    line = cog.panel_embed(player, panel_track(), EN, state="ended").description
+    assert line.splitlines()[-1] == getattr(EN, f"action_{action}").format(
+        user="Ada", at=f"1:15 / {clock(panel_track().duration or 0)}", count=waiting
+    )
+
+
+def test_collection_label_drops_an_artist_that_the_card_names() -> None:
+    album = replace(
+        panel_track(),
+        title="Toshiki Kadomatsu - Airport Lady",
+        collection="Toshiki Kadomatsu - After 5 Clash",
+    )
+    assert collection_label(album) == "After 5 Clash"
+    named = replace(album, title="Airport Lady", artist="Toshiki Kadomatsu")
+    assert collection_label(named) == "After 5 Clash"
+    # Another artist's name, or a playlist without one, stays whole.
+    mix = replace(album, collection="Various - City Pop")
+    assert collection_label(mix) == "Various - City Pop"
+    assert collection_label(replace(album, collection="City Pop")) == "City Pop"
 
 
 async def test_stop_asks_before_it_removes_waiting_songs() -> None:
@@ -1474,6 +1522,7 @@ async def test_stop_asks_before_it_removes_waiting_songs() -> None:
     # The question is the press's own reply, sent before any other round trip.
     call = interaction.response.send_message.call_args
     assert call.args[0] == EN.stop_confirm.format(count=3)
+    assert EN.stop_confirm_one != EN.stop_confirm
     assert call.kwargs["ephemeral"] is True
     question = call.kwargs["view"]
     assert isinstance(question, StopConfirmView)
@@ -1487,7 +1536,8 @@ async def test_stop_asks_before_it_removes_waiting_songs() -> None:
 
     assert not player.queue
     voice_client.stop.assert_called_once()
-    assert player.last_action == ("stopped", "Ada", {})
+    assert player.last_action is not None
+    assert player.last_action[:2] == ("stopped_cleared", "Ada")
     answer.response.edit_message.assert_awaited_once_with(content=EN.stopped, view=None)
 
 
@@ -1954,7 +2004,7 @@ async def test_a_session_card_sums_up_the_songs_and_who_added_them() -> None:
         ),
     ]
     player.session_seconds = 72 * 60
-    player.note("stopped", "Kempli")
+    player.note("stopped", "Kempli", at="2:13 / 4:20", count=0)
 
     card = cog.session_card(player, songs, EN)
 
@@ -1973,7 +2023,8 @@ async def test_a_session_card_sums_up_the_songs_and_who_added_them() -> None:
     assert last == EN.session_last.format(
         title="[20180701](https://youtu.be/20180701) `3:30` – Mac DeMarco"
     )
-    assert stopped == EN.action_stopped.format(user="Kempli")
+    assert stopped == EN.action_stopped.format(user="Kempli", at="2:13 / 4:20")
+    assert card.author.name == EN.panel_stopped
     assert card.thumbnail.url == "https://i.scdn.co/cover.jpg"
 
 
@@ -2013,6 +2064,9 @@ async def test_a_finished_session_keeps_its_songs_for_the_played_button(
 
     await cog.end_panel(player)
 
+    # The card says when the music ended, which Discord shows in each viewer's time zone.
+    assert panel.embeds[0].timestamp is not None
+    assert panel.embeds[0].author.name == EN.panel_ended
     assert panel.view is not None
     assert panel.view.played_button.label == EN.panel_played
     press = make_interaction()

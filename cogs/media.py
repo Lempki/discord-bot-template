@@ -173,6 +173,18 @@ def loop_name(s: CoreStrings, mode: str) -> str:
     }[mode]
 
 
+def stopped(player: "GuildPlayer") -> bool:
+    """Whether a member stopped the music, rather than the queue running out."""
+    return player.last_action is not None and player.last_action[0].startswith(
+        "stopped"
+    )
+
+
+def ended_heading(player: "GuildPlayer", s: CoreStrings) -> str:
+    """The heading of an ended panel, which tells a stop from a queue that ran out."""
+    return s.panel_stopped if stopped(player) else s.panel_ended
+
+
 def ended_card(embed: discord.Embed, s: CoreStrings) -> discord.Embed:
     """Turns the card of a panel that a restart left behind into a record of its song.
 
@@ -215,6 +227,23 @@ def cut_lyrics(lyrics: str, limit: int = LYRICS_LIMIT) -> str:
     cut = lyrics[: limit - 2]
     end = cut.rfind("\n")
     return (cut[:end] if end > 0 else cut).rstrip() + "\n…"
+
+
+def collection_label(track: "Track") -> str:
+    """The track's playlist or album by name, without an artist that the card names already.
+
+    YouTube names an artist's album "Artist - Album".
+    The card shows the artist in the song's title or credits, so the name drops it.
+    """
+    name = track.collection or ""
+    head, separator, rest = name.partition(" - ")
+    if (
+        separator
+        and rest
+        and (head == track.artist or track.label.startswith(f"{head} - "))
+    ):
+        return rest
+    return name
 
 
 @dataclass(frozen=True)
@@ -408,6 +437,19 @@ class GuildPlayer:
         """
         self.last_action = (action, user, values)
         self.action_carries = carries
+
+    def note_stop(self, user: str) -> None:
+        """Records a stop for the ended panel, with where the song stopped and what waited.
+
+        The waiting songs may be other members' requests, so the panel says that they went.
+        """
+        at = clock(self.elapsed())
+        duration = self.current.duration if self.current is not None else None
+        if duration:
+            at = f"{at} / {clock(duration)}"
+        count = len(self.queue)
+        action = {0: "stopped", 1: "stopped_cleared_one"}.get(count, "stopped_cleared")
+        self.note(action, user, at=at, count=count)
 
     def play_now(self, track: Track, voice_client: discord.VoiceClient) -> bool:
         """Plays a track at once, putting the current one back in the queue right after it.
@@ -1123,9 +1165,7 @@ class MediaCog(commands.Cog, name="Media"):
             await self._deny(interaction)
             return
         else:
-            player = self.player(guild)
-            player.note("stopped", interaction.user.display_name)
-            player.halt(voice_client)
+            self.stop_music(guild, interaction.user.display_name)
             await respond(interaction, s.stopped)
         await finish(interaction)
 
@@ -1555,7 +1595,7 @@ class MediaCog(commands.Cog, name="Media"):
         heading = {
             "playing": s.panel_playing,
             "paused": s.panel_paused,
-            "ended": s.panel_ended,
+            "ended": ended_heading(player, s),
         }[state]
         # With the artist known, the title names only the song, and the artist gets a line.
         named_song = bool(track.song and track.artist)
@@ -1577,7 +1617,7 @@ class MediaCog(commands.Cog, name="Media"):
             lines.append(" · ".join(credits))
         source = track.source or source_name(track.query)
         if track.collection:
-            collection = escape(track.collection)
+            collection = escape(collection_label(track))
             if track.collection_url:
                 collection = f"[{collection}]({track.collection_url})"
             source = s.collection_on.format(collection=collection, source=source)
@@ -1617,7 +1657,7 @@ class MediaCog(commands.Cog, name="Media"):
         if player.last_action is None:
             return ""
         action, user, values = player.last_action
-        if state == "ended" and action != "stopped":
+        if state == "ended" and not stopped(player):
             return ""
         template: str = getattr(s, f"action_{action}", "")
         if "loop" in values:
@@ -1718,6 +1758,7 @@ class MediaCog(commands.Cog, name="Media"):
                         view.stop()
                 else:
                     embed = self.panel_embed(player, last, s, state="ended")
+                embed.timestamp = discord.utils.utcnow()
                 await panel.edit(embed=embed, view=view)
             except discord.HTTPException as error:
                 log.info(f"Could not end the music panel: {error}")
@@ -1752,7 +1793,7 @@ class MediaCog(commands.Cog, name="Media"):
                 count=len(songs), length=session_length(player.session_seconds, s)
             )
         )
-        embed.set_author(name=s.panel_ended)
+        embed.set_author(name=ended_heading(player, s))
         if last.thumbnail:
             embed.set_thumbnail(url=last.thumbnail)
         counts = Counter(track.requested_by for track in songs)
@@ -1822,13 +1863,13 @@ class MediaCog(commands.Cog, name="Media"):
         mark_replied(interaction)
 
     def stop_music(self, guild: discord.Guild, user: str) -> None:
-        """Stops the playing song and drops the queue, for the panel's stop button."""
+        """Stops the playing song and drops the queue, for /music stop and the stop button."""
         voice_client = guild.voice_client
         if not isinstance(voice_client, discord.VoiceClient):
             return
         player = self.player(guild)
         if voice_client.is_playing() or voice_client.is_paused():
-            player.note("stopped", user)
+            player.note_stop(user)
         player.halt(voice_client)
 
     def note_skip(self, guild: discord.Guild, user: str) -> None:
@@ -2147,8 +2188,10 @@ class PanelView(discord.ui.View):
             return
         s = self._strings(interaction)
         view = StopConfirmView(self.cog, s)
+        count = len(player.queue)
+        question = s.stop_confirm_one if count == 1 else s.stop_confirm
         await interaction.response.send_message(
-            s.stop_confirm.format(count=len(player.queue)), view=view, ephemeral=True
+            question.format(count=count), view=view, ephemeral=True
         )
         view.message = await interaction.original_response()
 
