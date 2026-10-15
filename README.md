@@ -90,6 +90,7 @@ The **Requires OAuth2 Code Grant** toggle in the Bot page is not applicable to s
 |---|---|
 | View Channels | Reading channel state. |
 | Send Messages | Posting the welcome message, media track updates, and AutoMod reports. |
+| Embed Links | The now-playing panel, session summaries, and moderator reports, which are embeds. Without it, Discord strips them. |
 | Connect | Joining voice channels. |
 | Speak | Playing audio in voice channels. |
 | Set Voice Channel Status | Showing the playing song under the voice channel's name. Without it, the song still plays. |
@@ -97,10 +98,12 @@ The **Requires OAuth2 Code Grant** toggle in the Bot page is not applicable to s
 | Kick Members | `/kick` and the `kick` warning action. |
 | Ban Members | `/ban` and the `ban` warning action. |
 | Moderate Members | `/timeout`, `/untimeout`, and the `timeout` warning action. |
-| Manage Messages | `/purge`. |
+| Manage Messages | Deleting messages with `/purge`. |
+| Read Message History | `/purge`, which reads the channel's recent messages to find the ones to delete. |
 | Manage Server | Managing AutoMod rules and receiving AutoMod executions. |
 
 None of the core cogs send files. Add **Attach Files** if one of your own cogs does.
+Discord's role settings call Moderate Members **Timeout Members**.
 
 ## Moderation and AutoMod
 
