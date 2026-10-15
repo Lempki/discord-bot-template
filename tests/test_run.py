@@ -690,10 +690,12 @@ def test_update_notice_lists_what_was_installed(released_bot: Path) -> None:
     project = run_script.detect_project(released_bot)
 
     text = run_script.update_notice(
-        project, run_script.Report(), True, ["api-media 2.5.0 → 2.6.0"]
+        project, run_script.Report(), True, ["2.0.0 (was 1.7.0)", "api-media 2.6.0"]
     )
 
-    assert text == f"✅ **{project.name}** installed api-media 2.5.0 → 2.6.0."
+    assert (
+        text == f"✅ **{project.name}** installed 2.0.0 (was 1.7.0), api-media 2.6.0."
+    )
 
 
 def test_a_quiet_night_sends_no_notice(released_bot: Path) -> None:
@@ -793,11 +795,21 @@ def test_a_failed_post_never_fails_the_update(
 def test_an_installed_update_reports_its_versions(
     released_bot: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake_docker(monkeypatch, pulled={BOT_IMAGE: "sha256:bot-new"}, starts=[True])
+    docker = fake_docker(
+        monkeypatch,
+        pulled={BOT_IMAGE: "sha256:bot-new", MEDIA_IMAGE: "sha256:media-new"},
+        starts=[True],
+    )
+    versions = {
+        "sha256:bot-old": "1.6.0",
+        "sha256:bot-new": "1.7.0",
+        "sha256:media-new": "2.6.0",
+    }
+    # Like Docker, the fake knows a version only by an image ID or a name that still exists.
     monkeypatch.setattr(
         run_script,
         "version_of",
-        lambda image: {"sha256:bot-new": "1.7.0"}.get(image, "1.6.0"),
+        lambda target: versions.get(docker.ids.get(target, target), ""),
     )
     installed: list[str] = []
 
@@ -805,4 +817,5 @@ def test_an_installed_update_reports_its_versions(
         run_script.detect_project(released_bot), run_script.Report(), installed
     )
 
-    assert installed == [f"{run_script.image_name(BOT_IMAGE)} 1.6.0 → 1.7.0"]
+    # The project's own image needs no name, and an image without a version shows none.
+    assert installed == ["`1.7.0` (was `1.6.0`)", "api-media `2.6.0`"]

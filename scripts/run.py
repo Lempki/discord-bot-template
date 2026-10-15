@@ -894,7 +894,8 @@ def update_release(
     Args:
         project: The project to update.
         report: The report that records the outcome.
-        installed: Receives each image that changed, such as "api-media 2.5.0 → 2.6.0".
+        installed: Receives each image that changed, such as "api-media `2.6.0` (was `2.5.0`)".
+            The project's own image is named by the notice already, so its entry has only versions.
 
     Returns:
         Whether the newest release runs.
@@ -974,6 +975,9 @@ def update_release(
         project = detect_project(project.root)
         add_new_secrets(project, report)
 
+    # The previous versions lose their names once the update succeeds, so they are read now.
+    old_versions = {ref: version_of(kept[ref]) for ref in changed if ref in kept}
+
     section("Restarting")
     if not launch(project, report, [*project.compose, "up", "-d", "--no-build"]):
         roll_back(project.root, changed, kept, backup, report)
@@ -986,12 +990,14 @@ def update_release(
     state.save(project.root)
     report.ok("Updated to the newest release.")
     if installed is not None:
-        installed += [
-            f"{image_name(ref)} {version_of(kept[ref]) or '?'} → {version_of(new) or '?'}"
-            if ref in kept
-            else f"{image_name(ref)} {version_of(new) or '?'}"
-            for ref, new in changed.items()
-        ]
+        own = {image.ref for image in images if image.own}
+        for ref, new in changed.items():
+            entry = f"`{version_of(new) or '?'}`"
+            if ref not in own:
+                entry = f"{image_name(ref)} {entry}"
+            if old := old_versions.get(ref):
+                entry = f"{entry} (was `{old}`)"
+            installed.append(entry)
     show_result(project, True)
     return True
 
