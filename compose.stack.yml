@@ -16,6 +16,9 @@ x-logging: &logging
     max-size: "5m"
     max-file: "2"
 
+# Each container may use at most its mem_limit, which is several times its normal use.
+# A container that leaks past it is restarted alone, instead of slowing the whole computer.
+
 services:
   bot:
     image: ghcr.io/lempki/discord-bot-template:latest
@@ -32,6 +35,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     logging: *logging
+    mem_limit: 512m
 
   media:
     image: ghcr.io/lempki/api-media:latest
@@ -53,6 +57,7 @@ services:
       retries: 6
     restart: unless-stopped
     logging: *logging
+    mem_limit: 1g
 
 volumes:
   bot-data:

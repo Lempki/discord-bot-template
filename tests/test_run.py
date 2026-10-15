@@ -201,6 +201,37 @@ def test_update_refuses_a_downloaded_copy_before_pulling(
     assert commands == []
 
 
+@pytest.mark.parametrize("started", [True, False])
+def test_a_git_clone_update_clears_old_build_cache_after_rebuilding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, started: bool
+) -> None:
+    bot = make_bot(tmp_path, "DISCORD_TOKEN=a.b.c\nAPI_MEDIA_SECRET=generated\n")
+    (bot / ".git").mkdir()
+    (tmp_path / "api-media" / ".git").mkdir(parents=True)
+    quiet: list[tuple[str, ...]] = []
+    monkeypatch.setattr(run_script, "run", lambda _command: True)
+    monkeypatch.setattr(
+        run_script, "start", lambda _project, _report, pull=False: started
+    )
+    monkeypatch.setattr(
+        run_script, "docker_quietly", lambda *arguments: quiet.append(arguments) or True
+    )
+
+    assert (
+        run_script.update(run_script.detect_project(bot), run_script.Report())
+        is started
+    )
+    # A failed rebuild keeps the cache, which the next try can reuse.
+    assert quiet == (
+        [
+            ("image", "prune", "--force"),
+            ("builder", "prune", "--force", "--filter", "until=168h"),
+        ]
+        if started
+        else []
+    )
+
+
 @pytest.mark.parametrize(
     ("name", "expected"),
     [
@@ -390,6 +421,8 @@ def test_update_without_a_new_release_only_makes_sure_it_runs(
     assert run_script.update(run_script.detect_project(released_bot), report)
     assert docker.starts == []
     assert docker.ids == OLD_IMAGES
+    # Nothing was replaced, so there is nothing to clean up.
+    assert ("image", "prune", "--force") not in docker.commands
     assert (released_bot / "run.bat").read_text(encoding="utf-8") == "old run.bat"
 
 
@@ -406,6 +439,8 @@ def test_update_installs_the_new_release(
     # The previous versions lose their extra names, which lets Docker delete them.
     assert docker.ids == {BOT_IMAGE: "sha256:bot-new", MEDIA_IMAGE: "sha256:media-old"}
     assert not (released_bot / ".update" / "previous").exists()
+    # Docker setups that keep a replaced image without a name get it deleted too.
+    assert docker.commands[-1] == ("image", "prune", "--force")
     assert report.problems == []
     # The database is backed up before anything changes.
     assert docker.commands[0] == ("backup",)
@@ -430,6 +465,7 @@ def test_update_that_fails_to_start_is_undone(
         "sha256:media-new",
     }
     assert "undone" in report.problems[-1].what
+    assert ("image", "prune", "--force") in docker.commands
 
 
 def test_update_skips_a_release_that_failed_before(

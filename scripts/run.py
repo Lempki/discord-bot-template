@@ -123,6 +123,9 @@ BACKUP_PREFIX = "bot-"
 # Every nightly update makes a backup, so this keeps the last week.
 BACKUPS_KEPT = 7
 
+# A Git clone's update keeps the build cache of the last week, so a rebuild stays fast.
+BUILD_CACHE_KEPT_HOURS = 7 * 24
+
 # Every SQLite database file starts with these bytes.
 SQLITE_HEADER = b"SQLite format 3\x00"
 
@@ -808,6 +811,27 @@ def forget_previous(kept: dict[str, str]) -> None:
         docker_quietly("image", "rm", name)
 
 
+def remove_unnamed_images() -> None:
+    """Deletes the images that lost their last name, such as versions that an update replaced.
+
+    Some Docker setups keep a replaced image without a name instead of deleting it.
+    An image with a name stays, so a stopped project keeps its images and starts without a download.
+    """
+    docker_quietly("image", "prune", "--force")
+
+
+def remove_old_build_cache() -> None:
+    """Deletes the images and build steps that rebuilding a Git clone left behind.
+
+    Each rebuild replaces the images, and the build cache grows with every one of them.
+    The cache that a build used within BUILD_CACHE_KEPT_HOURS stays.
+    """
+    remove_unnamed_images()
+    docker_quietly(
+        "builder", "prune", "--force", "--filter", f"until={BUILD_CACHE_KEPT_HOURS}h"
+    )
+
+
 def roll_back(
     root: Path,
     changed: dict[str, str],
@@ -831,6 +855,7 @@ def roll_back(
         if ref in kept:
             docker_quietly("tag", kept[ref], ref)
     forget_previous(kept)
+    remove_unnamed_images()
     if backup is not None:
         restore_release_files(backup, root)
     state = UpdateState.load(root)
@@ -954,6 +979,7 @@ def update_release(
         roll_back(project.root, changed, kept, backup, report)
         return False
     forget_previous(kept)
+    remove_unnamed_images()
     if backup is not None:
         shutil.rmtree(backup.folder, ignore_errors=True)
     state.broken.difference_update(changed.values())
@@ -1253,7 +1279,10 @@ def update(project: Project, report: Report) -> bool:
                 "or resolve a diverged branch, then run this script again.",
             )
             return False
-    return start(project, report, pull=True)
+    if not start(project, report, pull=True):
+        return False
+    remove_old_build_cache()
+    return True
 
 
 def schedule(project: Project, report: Report) -> bool:
