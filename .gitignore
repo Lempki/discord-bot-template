@@ -1,5 +1,8 @@
 # >>> dev-standards managed block. Change it in dev-standards.
 .env
+.claude/settings.local.json
+
+# Python
 .venv/
 venv/
 __pycache__/
@@ -14,7 +17,6 @@ dist/
 *.db-journal
 *.db-shm
 *.db-wal
-.claude/settings.local.json
 # <<< dev-standards managed block.
 
 # Repository-specific entries.

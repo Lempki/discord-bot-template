@@ -1,11 +1,11 @@
-# Shared editor settings for every repository that uses dev-standards.
-# This file is managed by dev-standards. Change it there, not here.
-# EditorConfig covers whitespace and encoding only. Ruff and the check-prose hook cover the rest.
+# >>> dev-standards managed block. Change it in dev-standards.
+# Shared editor settings from dev-standards. Add this repository's own sections below the block.
+# EditorConfig covers whitespace and encoding only. The linters and the check-prose hook cover the rest.
 
 root = true
 
 [*]
-# UTF-8 without a BOM and LF endings, because every service is built and run in Linux containers.
+# UTF-8 without a BOM and LF endings, so a file reads the same on Windows, in Linux containers, and in Git.
 charset = utf-8
 end_of_line = lf
 insert_final_newline = true
@@ -19,3 +19,4 @@ indent_size = 2
 [*.{bat,cmd}]
 # The Windows command interpreter misreads some scripts saved with LF endings.
 end_of_line = crlf
+# <<< dev-standards managed block.
