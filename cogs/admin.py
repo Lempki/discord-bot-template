@@ -106,6 +106,44 @@ class AdminCog(commands.Cog, name="Admin"):
         else:
             await respond(interaction, s.admin_dj_cleared, ephemeral=True)
 
+    @admin.command(name="fairqueue")
+    @app_commands.describe(
+        enabled="Whether the queue takes turns between the members who add songs."
+    )
+    async def set_fair_queue(
+        self, interaction: discord.Interaction, enabled: bool
+    ) -> None:
+        """Turn on or off taking turns between members in the music queue."""
+        s = self.bot.strings_for(interaction, private=True)
+        await database.upsert_settings(guild_of(interaction).id, fair_queue=enabled)
+        await respond(
+            interaction,
+            s.admin_fair_on if enabled else s.admin_fair_off,
+            ephemeral=True,
+        )
+
+    @admin.command(name="goodbye")
+    @app_commands.describe(enabled="Whether the bot says goodbye when a member leaves.")
+    async def set_goodbye(
+        self, interaction: discord.Interaction, enabled: bool
+    ) -> None:
+        """Turn on or off a goodbye in the bot channel when a member leaves."""
+        s = self.bot.strings_for(interaction, private=True)
+        guild = guild_of(interaction)
+        await database.upsert_settings(guild.id, goodbye_message=enabled)
+        settings = await database.get_settings(guild.id)
+        if not enabled:
+            await respond(interaction, s.admin_goodbye_off, ephemeral=True)
+        elif settings.bot_channel_id is None:
+            await respond(interaction, s.admin_goodbye_no_channel, ephemeral=True)
+        else:
+            await respond(
+                interaction,
+                s.admin_goodbye_on,
+                ephemeral=True,
+                channel=f"<#{settings.bot_channel_id}>",
+            )
+
     @admin.command(name="warnthreshold")
     @app_commands.describe(count="How many warnings trigger the action, from 1 to 20.")
     async def set_threshold(
@@ -199,6 +237,8 @@ class AdminCog(commands.Cog, name="Admin"):
             channel=channel,
             autorole=autorole,
             dj=f"<@&{settings.dj_role_id}>" if settings.dj_role_id else s.status_none,
+            fair=s.status_on if settings.fair_queue else s.status_off,
+            goodbye=s.status_on if settings.goodbye_message else s.status_off,
             threshold=settings.warn_threshold,
             action=_action_name(s, settings.warn_action),
             timeout=settings.warn_timeout_minutes,

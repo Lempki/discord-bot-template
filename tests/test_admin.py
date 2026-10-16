@@ -94,6 +94,8 @@ def status_text(**overrides: object) -> str:
         "channel": EN.status_any_channel,
         "autorole": EN.status_none,
         "dj": EN.status_none,
+        "fair": EN.status_off,
+        "goodbye": EN.status_off,
         "threshold": 3,
         "action": EN.action_kick,
         "timeout": 60,
@@ -190,3 +192,49 @@ async def test_djrole_sets_and_clears_the_dj_role(db: None, bot: BotApp) -> None
     await cog.set_dj_role.callback(cog, cleared, None)  # type: ignore[arg-type]
     assert (await database.get_settings(GUILD_ID)).dj_role_id is None
     assert sent_messages(cleared) == [EN.admin_dj_cleared]
+
+
+async def test_fairqueue_turns_taking_turns_on_and_off(db: None, bot: BotApp) -> None:
+    cog = AdminCog(bot)
+    on = make_interaction()
+    await cog.set_fair_queue.callback(cog, on, True)  # type: ignore[arg-type]
+    assert (await database.get_settings(GUILD_ID)).fair_queue is True
+    assert sent_messages(on) == [EN.admin_fair_on]
+
+    off = make_interaction()
+    await cog.set_fair_queue.callback(cog, off, False)  # type: ignore[arg-type]
+    assert (await database.get_settings(GUILD_ID)).fair_queue is False
+    assert sent_messages(off) == [EN.admin_fair_off]
+
+
+async def test_goodbye_names_its_channel_or_asks_for_one(db: None, bot: BotApp) -> None:
+    cog = AdminCog(bot)
+    without = make_interaction()
+    await cog.set_goodbye.callback(cog, without, True)  # type: ignore[arg-type]
+    assert (await database.get_settings(GUILD_ID)).goodbye_message is True
+    # Without a bot channel, the goodbye has nowhere to go yet.
+    assert sent_messages(without) == [EN.admin_goodbye_no_channel]
+
+    await database.upsert_settings(GUILD_ID, bot_channel_id=CHANNEL_ID)
+    with_channel = make_interaction()
+    await cog.set_goodbye.callback(cog, with_channel, True)  # type: ignore[arg-type]
+    assert sent_messages(with_channel) == [
+        EN.admin_goodbye_on.format(channel=f"<#{CHANNEL_ID}>")
+    ]
+
+    off = make_interaction()
+    await cog.set_goodbye.callback(cog, off, False)  # type: ignore[arg-type]
+    assert (await database.get_settings(GUILD_ID)).goodbye_message is False
+    assert sent_messages(off) == [EN.admin_goodbye_off]
+
+
+async def test_status_shows_the_fair_queue_and_goodbye(db: None, bot: BotApp) -> None:
+    await database.upsert_settings(GUILD_ID, fair_queue=True, goodbye_message=True)
+    cog = AdminCog(bot)
+    interaction = make_interaction()
+
+    await cog.status.callback(cog, interaction)  # type: ignore[arg-type]
+
+    assert sent_messages(interaction) == [
+        status_text(fair=EN.status_on, goodbye=EN.status_on)
+    ]

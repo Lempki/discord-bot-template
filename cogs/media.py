@@ -229,6 +229,13 @@ def cut_lyrics(lyrics: str, limit: int = LYRICS_LIMIT) -> str:
     return (cut[:end] if end > 0 else cut).rstrip() + "\n…"
 
 
+def owner(track: "Track") -> int | str:
+    """Who queued a track, by ID when it is known, so the queue can take turns between members."""
+    if track.requested_by_id is not None:
+        return track.requested_by_id
+    return track.requested_by
+
+
 def collection_label(track: "Track") -> str:
     """The track's playlist or album by name, without an artist that the card names already.
 
@@ -496,21 +503,60 @@ class GuildPlayer:
             total += track.duration
         return round(total)
 
-    def enqueue(self, tracks: list[Track], *, first: bool = False) -> None:
+    def enqueue(
+        self, tracks: list[Track], *, first: bool = False, turns: bool = False
+    ) -> int:
         """Adds tracks to the queue and starts playing if the player is idle.
 
         Args:
             tracks: The tracks in the order they should play.
             first: Whether they go before the waiting tracks, right after the current one.
+            turns: Whether each track waits for its member's turn, so that the members take turns.
+                Without it, the tracks go to the end.
+
+        Returns:
+            The queue position of the first track, where 1 is the track after the current one.
         """
+        position = 1 if first else len(self.queue) + 1
         if first:
             self.queue.extendleft(reversed(tracks))
+        elif turns:
+            for number, track in enumerate(tracks):
+                place = self._turn_place(track)
+                self.queue.insert(place, track)
+                if number == 0:
+                    position = place + 1
         else:
             self.queue.extend(tracks)
         if self._task is None or self._task.done():
             self._task = asyncio.create_task(
                 self._run(), name=f"media-player-{self._guild.id}"
             )
+        return position
+
+    def _turn_place(self, track: Track) -> int:
+        """Finds where a track goes so that the members who add songs take turns.
+
+        Each member's songs make up turns: their first song is in turn 1, their second in turn 2.
+        The playing song counts as its member's first turn.
+        A new track goes before the first song of a later turn than its own.
+        It never passes a song of the same or an earlier turn, so the order stays as it was added.
+
+        Returns:
+            The index in the queue to insert the track at.
+        """
+        member = owner(track)
+        turns: Counter[int | str] = Counter()
+        if self.current is not None:
+            turns[owner(self.current)] += 1
+        own_turn = (
+            turns[member] + sum(owner(queued) == member for queued in self.queue) + 1
+        )
+        for index, queued in enumerate(self.queue):
+            turns[owner(queued)] += 1
+            if turns[owner(queued)] > own_turn:
+                return index
+        return len(self.queue)
 
     def remove(self, position: int) -> Track | None:
         """Takes the track at a queue position out of the queue.
@@ -905,6 +951,15 @@ class MediaCog(commands.Cog, name="Media"):
             await self.refresh_panel(guild)
         return SkipOutcome(False, votes, needed, repeated)
 
+    async def takes_turns(self, guild_id: int) -> bool:
+        """Whether a guild's queue takes turns between members, which is off when unreadable."""
+        try:
+            settings = await database.get_settings(guild_id)
+        except Exception as error:
+            log.warning(f"Could not read the queue order of guild {guild_id}: {error}")
+            return False
+        return settings.fair_queue
+
     async def volume(self, guild_id: int) -> int:
         """Returns a guild's music volume in percent, or the default when it cannot be read."""
         try:
@@ -1033,13 +1088,15 @@ class MediaCog(commands.Cog, name="Media"):
         # With nothing playing, the first track starts at once whatever when says.
         mode = "end" if idle or when is None else when.value
         waiting = len(player.queue)
-        position = waiting + 1 if mode == "end" else 1
-        wait = player.wait_seconds(position)
+        turns = await self.takes_turns(guild.id)
         if mode == "end":
-            player.enqueue(tracks)
+            position = placed = player.enqueue(tracks, turns=turns)
         else:
+            position = 1
             # Only the first track jumps ahead, so a playlist never buries the waiting tracks.
-            player.enqueue(tracks[1:])
+            placed = player.enqueue(tracks[1:], turns=turns)
+        wait = player.wait_seconds(position)
+        if mode != "end":
             voice_client = guild.voice_client
             interrupted = player.current
             if mode == "now" and isinstance(voice_client, discord.VoiceClient):
@@ -1068,8 +1125,8 @@ class MediaCog(commands.Cog, name="Media"):
                 template = s.queued_many_now
             elif mode == "next":
                 template = s.queued_many_next
-                # The rest follow the tracks that were waiting, after the first one.
-                values["position"] = waiting + 2
+                # The rest start where they were placed, behind the first one.
+                values["position"] = placed + 1
             else:
                 template = s.queued_many
             # A playlist reply links to the playlist that the member gave, by its name if known.
@@ -1089,6 +1146,9 @@ class MediaCog(commands.Cog, name="Media"):
         if left_out and template and s.queue_cut:
             template = f"{template}\n{s.queue_cut}"
             values.update(left=left_out, limit=limit)
+        if turns and placed <= waiting and template and s.queue_turns:
+            # The songs went ahead of others' songs, which the member would not expect.
+            template = f"{template}\n{s.queue_turns}"
         await respond(interaction, template, **values)
         await finish(interaction)
         if not idle:

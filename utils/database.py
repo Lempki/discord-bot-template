@@ -45,8 +45,13 @@ _SETTINGS_COLUMNS = frozenset(
         "automod_alert_channel_id",
         "music_volume",
         "dj_role_id",
+        "fair_queue",
+        "goodbye_message",
     }
 )
+
+# Settings that SQLite stores as 0 or 1, which get_settings turns into booleans.
+_BOOL_COLUMNS = ("fair_queue", "goodbye_message")
 
 
 @dataclass(frozen=True)
@@ -67,6 +72,8 @@ class GuildSettings:
         automod_alert_channel_id: The channel for AutoMod alerts and escalation reports, or None.
         music_volume: The media cog's playback volume in percent, from 0 to 100.
         dj_role_id: The role that controls the music while others listen, or None for everyone.
+        fair_queue: Whether the music queue takes turns between the members who add songs.
+        goodbye_message: Whether the bot says goodbye in the bot channel when a member leaves.
     """
 
     guild_id: int
@@ -80,6 +87,8 @@ class GuildSettings:
     automod_alert_channel_id: int | None = None
     music_volume: int = 50
     dj_role_id: int | None = None
+    fair_queue: bool = False
+    goodbye_message: bool = False
 
 
 @dataclass(frozen=True)
@@ -233,6 +242,16 @@ async def _migrate_to_6(db: aiosqlite.Connection) -> None:
     )
 
 
+async def _migrate_to_7(db: aiosqlite.Connection) -> None:
+    """Adds the fair queue and the goodbye message, which both start off."""
+    await db.execute(
+        "ALTER TABLE guild_settings ADD COLUMN fair_queue INTEGER NOT NULL DEFAULT 0"
+    )
+    await db.execute(
+        "ALTER TABLE guild_settings ADD COLUMN goodbye_message INTEGER NOT NULL DEFAULT 0"
+    )
+
+
 # Each entry upgrades the schema by one version. Append new migrations and never edit old ones.
 _MIGRATIONS: list[Callable[[aiosqlite.Connection], Awaitable[None]]] = [
     _migrate_to_1,
@@ -241,6 +260,7 @@ _MIGRATIONS: list[Callable[[aiosqlite.Connection], Awaitable[None]]] = [
     _migrate_to_4,
     _migrate_to_5,
     _migrate_to_6,
+    _migrate_to_7,
 ]
 
 
@@ -302,7 +322,12 @@ async def get_settings(guild_id: int) -> GuildSettings:
         "SELECT * FROM guild_settings WHERE guild_id = ?", (guild_id,)
     ) as cur:
         row = await cur.fetchone()
-    return GuildSettings(**dict(row)) if row else GuildSettings(guild_id=guild_id)
+    if not row:
+        return GuildSettings(guild_id=guild_id)
+    values = dict(row)
+    for column in _BOOL_COLUMNS:
+        values[column] = bool(values[column])
+    return GuildSettings(**values)
 
 
 async def upsert_settings(guild_id: int, **fields: Any) -> None:

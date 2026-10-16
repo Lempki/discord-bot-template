@@ -1,4 +1,4 @@
-"""Server event listeners: auto-role and welcome message on member join."""
+"""Server event listeners: the auto-role and welcome message on join, and the goodbye on leave."""
 
 import logging
 from typing import TYPE_CHECKING
@@ -72,9 +72,37 @@ class EventsCog(commands.Cog, name="Events"):
             await channel.send(msg)
             log.info(f"Welcomed {member} in #{channel.name}.")
 
+    @commands.Cog.listener()
+    async def on_member_remove(self, member: discord.Member) -> None:
+        """Says goodbye in the bot channel, when the server has goodbyes on."""
+        settings = await database.get_settings(member.guild.id)
+        if not settings.goodbye_message or settings.bot_channel_id is None:
+            return
+        channel = member.guild.get_channel(settings.bot_channel_id)
+        if not isinstance(channel, discord.TextChannel) or await _banned(member):
+            return
+        strings = self.bot.strings_for(member.guild)
+        name = discord.utils.escape_markdown(member.display_name)
+        if msg := strings.member_leave_goodbye.format(member=name):
+            # The member has left, so their name is plain text that pings nobody.
+            await channel.send(msg, allowed_mentions=discord.AllowedMentions.none())
+            log.info(f"Said goodbye to {member} in #{channel.name}.")
+
     async def cog_load(self) -> None:
         """Logs that the cog is ready."""
         log.info(f"{self.qualified_name} cog loaded.")
+
+
+async def _banned(member: discord.Member) -> bool:
+    """Whether a member left because of a ban, which gets no goodbye.
+
+    Telling a ban apart needs the Ban Members permission. Without it, the member counts as leaving.
+    """
+    try:
+        await member.guild.fetch_ban(member)
+    except discord.HTTPException:
+        return False
+    return True
 
 
 async def setup(bot: "BotApp") -> None:

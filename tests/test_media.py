@@ -2123,3 +2123,76 @@ async def test_music_skip_stops_the_song_or_counts_a_vote() -> None:
 
     voice_client.stop.assert_called_once()
     assert sent_messages(adder) == [EN.skipped]
+
+
+def member_song(name: str, member_id: int) -> Track:
+    return Track(
+        f"https://youtu.be/{name}",
+        f"Member {member_id}",
+        MagicMock(),
+        name,
+        requested_by_id=member_id,
+    )
+
+
+async def test_the_queue_takes_turns_between_members() -> None:
+    _, cog = await media_cog()
+    player = busy_player(cog, now_playing=240, waiting=[])
+    player.current = member_song("Ada 1", 1)
+    album = [member_song(f"Ada {n}", 1) for n in range(2, 6)]
+    assert player.enqueue(album, turns=True) == 1
+
+    # Bo's first song waits only for the song that plays, then the songs take turns.
+    assert (
+        player.enqueue([member_song("Bo 1", 2), member_song("Bo 2", 2)], turns=True)
+        == 1
+    )
+    # Cy has had no turn yet, so Cy's song goes ahead of everyone's second turn.
+    assert player.enqueue([member_song("Cy 1", 3)], turns=True) == 2
+    # Ada's next song waits for every turn before hers.
+    assert player.enqueue([member_song("Ada 6", 1)], turns=True) == 8
+
+    assert titles(player) == [
+        "Bo 1",
+        "Cy 1",
+        "Ada 2",
+        "Bo 2",
+        "Ada 3",
+        "Ada 4",
+        "Ada 5",
+        "Ada 6",
+    ]
+
+
+async def test_without_turns_the_queue_keeps_the_order_of_adding() -> None:
+    _, cog = await media_cog()
+    player = busy_player(cog, now_playing=240, waiting=[])
+    player.current = member_song("Ada 1", 1)
+    player.enqueue([member_song("Ada 2", 1), member_song("Ada 3", 1)])
+
+    assert player.enqueue([member_song("Bo 1", 2)]) == 3
+    assert titles(player) == ["Ada 2", "Ada 3", "Bo 1"]
+
+
+async def test_play_says_when_a_song_went_ahead_by_taking_turns(db: None) -> None:
+    _, cog = await media_cog()
+    await database.upsert_settings(GUILD_ID, fair_queue=True)
+    player = busy_player(cog, now_playing=None, waiting=[])
+    # The panel moves after the reply, so the playing song needs a channel to post in.
+    player.current = replace(member_song("Bo 1", 2), channel=panel_channel())
+    player.enqueue([member_song("Bo 2", 2), member_song("Bo 3", 2)])
+    cog.client.get_info = AsyncMock(
+        return_value={"webpage_url": "https://youtu.be/c", "title": "C"}
+    )
+
+    _, messages = await run_play(cog, "https://youtu.be/c")
+
+    # The member in voice has had no turn, so the song goes ahead of Bo's second one.
+    assert titles(player)[0] == "C"
+    assert messages == [
+        EN.queued_one.format(
+            title="[C](<https://youtu.be/c>)", source="YouTube", position=1, user="Ada"
+        )
+        + "\n"
+        + EN.queue_turns
+    ]

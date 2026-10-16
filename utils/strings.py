@@ -49,6 +49,7 @@ class CoreStrings:
     # The queue's limit. Placeholders are {limit} and {left}, the tracks that did not fit.
     queue_full: str = ""
     queue_cut: str = ""
+    queue_turns: str = ""
     # A Spotify playlist whose songs Spotify does not share with the bot.
     playlist_unavailable: str = ""
     # The DJ role and vote skipping. Placeholders are {votes} and {needed}.
@@ -199,19 +200,27 @@ class CoreStrings:
 
     # Admin. Placeholders are {channel}, {role}, {count}, {action}, {autorole}, and {threshold}.
     # admin_timeout_set uses {minutes}.
-    # admin_status also uses {timeout}, {escalation}, {alert}, {keywords}, and {presets}.
+    # admin_status also uses {dj}, {fair}, {goodbye}, {timeout}, {escalation}, {alert}, {keywords}, and {presets}.
+    # status_on and status_off fill {fair} and {goodbye}.
     admin_channel_set: str = ""
     admin_channel_cleared: str = ""
     admin_autorole_set: str = ""
     admin_autorole_cleared: str = ""
     admin_dj_set: str = ""
     admin_dj_cleared: str = ""
+    admin_fair_on: str = ""
+    admin_fair_off: str = ""
+    admin_goodbye_on: str = ""
+    admin_goodbye_no_channel: str = ""
+    admin_goodbye_off: str = ""
     admin_threshold_set: str = ""
     admin_action_set: str = ""
     admin_timeout_set: str = ""
     admin_status: str = ""
     status_any_channel: str = ""
     status_none: str = ""
+    status_on: str = ""
+    status_off: str = ""
     status_unavailable: str = ""
     action_kick: str = ""
     action_ban: str = ""
@@ -284,6 +293,7 @@ class CoreStrings:
 
     # Events. The placeholder is {member}.
     member_join_welcome: str = ""
+    member_leave_goodbye: str = ""
 
 
 CORE_TEXT: dict[str, dict[str, str]] = {
@@ -309,6 +319,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queued_many_next": "Added {count} tracks from {source}. **{title}** plays next, and the rest start at #{position}.",
         "queue_full": "The queue is full, because it holds at most {limit} songs. /queue clear or /queue remove makes room.",
         "queue_cut": "{left} tracks were left out, because the queue holds at most {limit} songs.",
+        "queue_turns": "The queue takes turns between the members who add songs, so it plays songs from each in turn.",
         "playlist_unavailable": "Spotify does not let the bot read this playlist. Albums, single songs, and YouTube playlists still work.",
         "dj_only": "Only members with the DJ role can do that while others listen.",
         "skip_voted": "Your vote to skip counts: {votes} of {needed} needed.",
@@ -397,10 +408,10 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "help_intro": "Each part below explains one of the bot's features and the commands that belong to it. Discord's / menu shows every command with its options.",
         "help_commands": "Commands: {commands}",
         "help_bot_channel": "In this server, the bot takes commands only in {channel}.",
-        "guide_media": "Join a voice channel, then use `/play` with a YouTube, SoundCloud, or Spotify link, or with words to search for. Each song shows on a panel whose buttons pause, skip, go back, and repeat, and `/queue show` lists what waits. `/music` and `/queue` hold the other controls. Spotify albums and songs work, but Spotify keeps most playlists from bots. When the server has a DJ role, some controls belong to DJs while others listen, and skips go by vote.",
+        "guide_media": "Join a voice channel, then use `/play` with a YouTube, SoundCloud, or Spotify link, or with words to search for. Each song shows on a panel whose buttons pause, skip, go back, and repeat, and `/queue show` lists what waits. `/music` and `/queue` hold the other controls. Spotify albums and songs work, but Spotify keeps most playlists from bots. When the server has a DJ role, some controls belong to DJs while others listen, and skips go by vote. When the queue takes turns, each member's songs play in rotation with the others'.",
         "guide_voice": "The bot joins your voice channel when a feature needs it, and leaves on its own when everyone else has left or nothing has played for a while. `/voice join` brings it to your channel, `/voice leave` sends it out, and `/voice stop` stops the sound that plays now.",
         "guide_moderation": "`/warn` gives a member a warning, and at the server's limit the bot kicks, bans, or times them out. `/warnings` lists and removes warnings, and `/timeout`, `/kick`, and `/ban` act at once. `/purge` deletes recent messages. Right-click a member and choose Apps, then Warn, to warn them quickly. Anyone can right-click a message and choose Report to moderators, which sends it to the AutoMod alert channel.",
-        "guide_admin": "`/admin` sets the bot up for this server. `/admin channel` limits commands to one channel, `/admin autorole` gives new members a role and welcomes them, `/admin djrole` picks who controls the music, and `/admin automod` manages Discord's AutoMod filters. `/admin status` shows every setting.",
+        "guide_admin": "`/admin` sets the bot up for this server. `/admin channel` limits commands to one channel, `/admin autorole` gives new members a role and welcomes them, `/admin djrole` picks who controls the music, `/admin fairqueue` makes the queue take turns between members, `/admin goodbye` says goodbye to members who leave, and `/admin automod` manages Discord's AutoMod filters. `/admin status` shows every setting.",
         "guide_template": "`/example hello` shows how a command of a new feature works. A new feature starts as a copy of cogs/template.py.",
         "guide_help": "`/help` shows this guide, and `/about` shows the bot's version, how long it has been online, and its response time.",
         "guide_info": "`/info server` shows the server's age, size, and boosts, `/info member` shows when a member joined and their roles, and `/info avatar` shows an avatar in full size. Only you see the answers.",
@@ -433,11 +444,17 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "admin_autorole_cleared": "Auto-role cleared.",
         "admin_dj_set": "DJ role set to {role}. While others listen, only it, admins, and a lone listener control the music, and other skips go by vote.",
         "admin_dj_cleared": "DJ role cleared. Everyone controls the music again.",
+        "admin_fair_on": "The music queue now takes turns between the members who add songs. The songs that wait already keep their order.",
+        "admin_fair_off": "The music queue plays songs in the order they were added again.",
+        "admin_goodbye_on": "The bot now says goodbye in {channel} when a member leaves.",
+        "admin_goodbye_no_channel": "Goodbyes are on, but they need a bot channel. Set one with `/admin channel`.",
+        "admin_goodbye_off": "The bot no longer says goodbye when a member leaves.",
         "admin_threshold_set": "Warning threshold set to {count}.",
         "admin_action_set": "Warning action set to **{action}**.",
         "admin_timeout_set": "Timeout length set to {minutes} minutes.",
         "admin_status": (
             "**Bot settings**\nChannel: {channel}\nAuto-role: {autorole}\nDJ role: {dj}\n"
+            "Fair queue: {fair}\nGoodbye message: {goodbye}\n"
             "Warning threshold: {threshold}\nWarning action: {action}\n"
             "Timeout length: {timeout} minutes\nAutoMod escalation: {escalation}\n"
             "AutoMod alerts: {alert}\nAutoMod keywords: {keywords}\n"
@@ -445,6 +462,8 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         ),
         "status_any_channel": "any channel",
         "status_none": "none",
+        "status_on": "on",
+        "status_off": "off",
         "status_unavailable": "unavailable",
         "action_kick": "kick",
         "action_ban": "ban",
@@ -516,6 +535,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "mod_target_higher": "**{user}** has a role equal to or higher than yours.",
         "mod_bot_too_low": "My highest role must be above the highest role of **{user}**.",
         "member_join_welcome": "Welcome, {member}! 👋",
+        "member_leave_goodbye": "**{member}** left the server. 👋",
     },
     "fi": {
         "bot_channel_only": "Tätä komentoa voi käyttää vain bottikanavalla.",
@@ -539,6 +559,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queued_many_next": "Lisätty {count} kappaletta ({source}). **{title}** soi seuraavaksi, ja loput alkavat sijalta {position}.",
         "queue_full": "Jono on täynnä, koska siihen mahtuu enintään {limit} kappaletta. /queue clear tai /queue remove tekee tilaa.",
         "queue_cut": "{left} kappaletta jäi pois, koska jonoon mahtuu enintään {limit} kappaletta.",
+        "queue_turns": "Jono vuorottelee kappaleita lisäävien jäsenten kesken, joten se soittaa kultakin vuorollaan.",
         "playlist_unavailable": "Spotify ei anna botin lukea tätä soittolistaa. Albumit, yksittäiset kappaleet ja YouTube-soittolistat toimivat yhä.",
         "dj_only": "Vain DJ-roolin jäsenet voivat tehdä tämän, kun muut kuuntelevat.",
         "skip_voted": "Äänesi ohittamisen puolesta laskettiin: {votes}/{needed} tarvitaan.",
@@ -627,10 +648,10 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "help_intro": "Jokainen alla oleva osa kertoo yhdestä botin ominaisuudesta ja sen komennoista. Discordin /-valikko näyttää kaikki komennot vaihtoehtoineen.",
         "help_commands": "Komennot: {commands}",
         "help_bot_channel": "Tällä palvelimella botti ottaa komentoja vastaan vain kanavalla {channel}.",
-        "guide_media": "Liity äänikanavalle ja käytä `/play`-komentoa YouTube-, SoundCloud- tai Spotify-linkin tai hakusanojen kanssa. Jokainen kappale näkyy paneelissa, jonka painikkeilla voi tauottaa, ohittaa, palata ja toistaa, ja `/queue show` näyttää jonon. `/music` ja `/queue` sisältävät muut säätimet. Spotifyn albumit ja kappaleet toimivat, mutta useimpia soittolistoja Spotify ei jaa boteille. Jos palvelimella on DJ-rooli, osa säätimistä kuuluu DJ:lle muiden kuunnellessa, ja ohitukset äänestetään.",
+        "guide_media": "Liity äänikanavalle ja käytä `/play`-komentoa YouTube-, SoundCloud- tai Spotify-linkin tai hakusanojen kanssa. Jokainen kappale näkyy paneelissa, jonka painikkeilla voi tauottaa, ohittaa, palata ja toistaa, ja `/queue show` näyttää jonon. `/music` ja `/queue` sisältävät muut säätimet. Spotifyn albumit ja kappaleet toimivat, mutta useimpia soittolistoja Spotify ei jaa boteille. Jos palvelimella on DJ-rooli, osa säätimistä kuuluu DJ:lle muiden kuunnellessa, ja ohitukset äänestetään. Kun jono vuorottelee, kunkin jäsenen kappaleet soivat vuorotellen muiden kanssa.",
         "guide_voice": "Botti liittyy äänikanavallesi, kun jokin ominaisuus tarvitsee sitä, ja poistuu itse, kun muut ovat lähteneet tai mitään ei ole soinut hetkeen. `/voice join` tuo sen kanavallesi, `/voice leave` lähettää sen pois, ja `/voice stop` pysäyttää nyt soivan äänen.",
         "guide_moderation": "`/warn` antaa jäsenelle varoituksen, ja palvelimen rajalla botti potkaisee jäsenen, antaa porttikiellon tai aikalisän. `/warnings` näyttää ja poistaa varoituksia, ja `/timeout`, `/kick` ja `/ban` toimivat heti. `/purge` poistaa viimeisimmät viestit. Napsauta jäsentä hiiren oikealla ja valitse Sovellukset ja Varoita, niin varoitat nopeasti. Kuka tahansa voi napsauttaa viestiä hiiren oikealla ja valita Ilmoita moderaattoreille, jolloin viesti menee AutoMod-hälytyskanavalle.",
-        "guide_admin": "`/admin` määrittää botin tälle palvelimelle. `/admin channel` rajaa komennot yhdelle kanavalle, `/admin autorole` antaa uusille jäsenille roolin ja toivottaa heidät tervetulleiksi, `/admin djrole` valitsee, kuka ohjaa musiikkia, ja `/admin automod` hallitsee Discordin AutoMod-suodattimia. `/admin status` näyttää kaikki asetukset.",
+        "guide_admin": "`/admin` määrittää botin tälle palvelimelle. `/admin channel` rajaa komennot yhdelle kanavalle, `/admin autorole` antaa uusille jäsenille roolin ja toivottaa heidät tervetulleiksi, `/admin djrole` valitsee, kuka ohjaa musiikkia, `/admin fairqueue` saa jonon vuorottelemaan jäsenten kesken, `/admin goodbye` hyvästelee lähtevät jäsenet, ja `/admin automod` hallitsee Discordin AutoMod-suodattimia. `/admin status` näyttää kaikki asetukset.",
         "guide_template": "`/example hello` näyttää, miten uuden ominaisuuden komento toimii. Uusi ominaisuus alkaa kopiona tiedostosta cogs/template.py.",
         "guide_help": "`/help` näyttää tämän ohjeen, ja `/about` näyttää botin version, kuinka kauan se on ollut päällä ja sen vasteajan.",
         "guide_info": "`/info server` näyttää palvelimen iän, koon ja tehostukset, `/info member` näyttää, milloin jäsen liittyi ja hänen roolinsa, ja `/info avatar` näyttää profiilikuvan täysikokoisena. Vain sinä näet vastaukset.",
@@ -662,12 +683,18 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "admin_autorole_set": "Automaattiseksi rooliksi asetettiin {role}.",
         "admin_dj_set": "DJ-rooliksi asetettiin {role}. Kun muut kuuntelevat, vain se, ylläpitäjät ja yksin kuunteleva ohjaavat musiikkia, ja muut ohitukset äänestetään.",
         "admin_dj_cleared": "DJ-rooli poistettiin. Kaikki ohjaavat musiikkia taas.",
+        "admin_fair_on": "Musiikkijono vuorottelee nyt kappaleita lisäävien jäsenten kesken. Jo odottavat kappaleet pysyvät järjestyksessään.",
+        "admin_fair_off": "Musiikkijono soittaa kappaleet taas lisäysjärjestyksessä.",
+        "admin_goodbye_on": "Botti hyvästelee nyt lähtevät jäsenet kanavalla {channel}.",
+        "admin_goodbye_no_channel": "Hyvästit ovat päällä, mutta ne tarvitsevat bottikanavan. Aseta se komennolla `/admin channel`.",
+        "admin_goodbye_off": "Botti ei enää hyvästele lähteviä jäseniä.",
         "admin_autorole_cleared": "Automaattinen rooli poistettiin.",
         "admin_threshold_set": "Varoitusrajaksi asetettiin {count}.",
         "admin_action_set": "Varoitusrajan seuraukseksi asetettiin **{action}**.",
         "admin_timeout_set": "Aikalisän pituudeksi asetettiin {minutes} minuuttia.",
         "admin_status": (
             "**Botin asetukset**\nKanava: {channel}\nAutomaattinen rooli: {autorole}\nDJ-rooli: {dj}\n"
+            "Vuorotteleva jono: {fair}\nHyvästit: {goodbye}\n"
             "Varoitusraja: {threshold}\nSeuraus: {action}\n"
             "Aikalisän pituus: {timeout} minuuttia\nAutoMod-seuraus: {escalation}\n"
             "AutoMod-hälytykset: {alert}\nAutoMod-avainsanat: {keywords}\n"
@@ -675,6 +702,8 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         ),
         "status_any_channel": "mikä tahansa kanava",
         "status_none": "ei asetettu",
+        "status_on": "päällä",
+        "status_off": "pois",
         "status_unavailable": "ei saatavilla",
         "action_kick": "potku",
         "action_ban": "porttikielto",
@@ -751,6 +780,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
             "Korkeimman roolini täytyy olla käyttäjän **{user}** korkeinta roolia ylempänä."
         ),
         "member_join_welcome": "Tervetuloa, {member}! 👋",
+        "member_leave_goodbye": "**{member}** lähti palvelimelta. 👋",
     },
 }
 
@@ -764,6 +794,10 @@ CORE_COMMAND_TEXT: dict[str, dict[str, str]] = {
         "The channel to allow. Leave it empty to allow every channel.": "Sallittu kanava. Jätä tyhjäksi salliaksesi kaikki kanavat.",
         "Set or clear the DJ role, which controls the music while others listen.": "Aseta tai poista DJ-rooli, joka ohjaa musiikkia muiden kuunnellessa.",
         "The DJ role. Leave it empty to let everyone control the music.": "DJ-rooli. Jätä tyhjäksi, niin kaikki ohjaavat musiikkia.",
+        "Turn on or off taking turns between members in the music queue.": "Ota käyttöön tai poista musiikkijonon vuorottelu jäsenten kesken.",
+        "Whether the queue takes turns between the members who add songs.": "Vuorotteleeko jono kappaleita lisäävien jäsenten kesken.",
+        "Turn on or off a goodbye in the bot channel when a member leaves.": "Ota käyttöön tai poista hyvästit bottikanavalla, kun jäsen lähtee.",
+        "Whether the bot says goodbye when a member leaves.": "Hyvästeleekö botti lähtevät jäsenet.",
         "Set or clear the role that new members get automatically.": "Aseta tai poista rooli, jonka uudet jäsenet saavat automaattisesti.",
         "The role to give. Leave it empty to give no role.": "Annettava rooli. Jätä tyhjäksi, jos roolia ei anneta.",
         "Set how many warnings trigger the warning action.": "Aseta, montako varoitusta johtaa seuraukseen.",

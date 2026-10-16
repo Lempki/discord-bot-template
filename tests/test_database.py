@@ -222,6 +222,8 @@ async def test_version_2_database_gains_the_music_volume(tmp_path: Path) -> None
     with sqlite3.connect(path) as conn:
         conn.executescript(
             """
+            ALTER TABLE guild_settings DROP COLUMN goodbye_message;
+            ALTER TABLE guild_settings DROP COLUMN fair_queue;
             ALTER TABLE guild_settings DROP COLUMN dj_role_id;
             ALTER TABLE guild_settings DROP COLUMN music_volume;
             DROP TABLE music_sessions;
@@ -263,6 +265,8 @@ async def test_version_3_database_gains_an_empty_dj_role(tmp_path: Path) -> None
     with sqlite3.connect(path) as conn:
         conn.executescript(
             """
+            ALTER TABLE guild_settings DROP COLUMN goodbye_message;
+            ALTER TABLE guild_settings DROP COLUMN fair_queue;
             ALTER TABLE guild_settings DROP COLUMN dj_role_id;
             DROP TABLE music_sessions;
             DROP TABLE music_panels;
@@ -299,3 +303,34 @@ async def test_a_guild_keeps_one_recorded_music_panel(db: None) -> None:
     assert (GUILD, 11, 101) in await database.list_panels()
     await database.forget_panel(GUILD, 101)
     assert await database.list_panels() == [(GUILD + 1, 20, 200)]
+
+
+async def test_version_6_database_gains_the_fair_queue_and_goodbye_off(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "bot.db"
+    await database.init(path)
+    await database.upsert_settings(GUILD, dj_role_id=42)
+    await database.close()
+    with sqlite3.connect(path) as conn:
+        conn.executescript(
+            """
+            ALTER TABLE guild_settings DROP COLUMN goodbye_message;
+            ALTER TABLE guild_settings DROP COLUMN fair_queue;
+            PRAGMA user_version = 6;
+            """
+        )
+
+    await database.init(path)
+    try:
+        settings = await database.get_settings(GUILD)
+        await database.upsert_settings(GUILD, fair_queue=True)
+        updated = await database.get_settings(GUILD)
+    finally:
+        await database.close()
+
+    # Both start off, so an upgrade changes nothing that members notice.
+    assert (settings.fair_queue, settings.goodbye_message) == (False, False)
+    assert settings.dj_role_id == 42
+    assert updated.fair_queue is True
+    assert _user_version(path) == len(database._MIGRATIONS)
