@@ -114,7 +114,10 @@ WHEN_CHOICES = [
 NEXT_LOOP_MODE = {"off": "queue", "queue": "track", "track": "off"}
 
 # The panel's buttons that only show something to the presser, so anyone may press them.
-PRIVATE_PANEL_BUTTONS = {"media:queue", "media:lyrics"}
+PRIVATE_PANEL_BUTTONS = {"media:queue", "media:lyrics", "media:grab"}
+
+# A member who leaves voice keeps their waiting songs for this long, in case they come back.
+LEAVER_GRACE_SECONDS = 120
 
 # /music previous can go back this many songs.
 HISTORY_SIZE = 20
@@ -227,6 +230,65 @@ def cut_lyrics(lyrics: str, limit: int = LYRICS_LIMIT) -> str:
     cut = lyrics[: limit - 2]
     end = cut.rfind("\n")
     return (cut[:end] if end > 0 else cut).rstrip() + "\n…"
+
+
+def skips_of(info: dict[str, Any]) -> tuple[tuple[float, float], ...]:
+    """Reads the parts of a track to leave out from api-media's answer."""
+    skips: list[tuple[float, float]] = []
+    for part in info.get("skip_segments") or ():
+        with contextlib.suppress(TypeError, ValueError):
+            start, end = (float(value) for value in part)
+            if end > start:
+                skips.append((start, end))
+    return tuple(skips)
+
+
+def played_length(
+    duration: int | None, skips: tuple[tuple[float, float], ...]
+) -> int | None:
+    """The length of a track once its skipped parts are left out, in whole seconds."""
+    if duration is None:
+        return None
+    return max(1, round(duration - sum(end - start for start, end in skips)))
+
+
+def song_lines(track: "Track", s: CoreStrings) -> list[str]:
+    """The lines that name a song's artist and album, and where it came from and who added it."""
+    lines: list[str] = []
+    credits: list[str] = []
+    if track.song and track.artist:
+        credits.append(f"**{escape(track.artist)}**")
+    if track.album and track.album != track.collection:
+        # A track queued from its own album names the album in the line below.
+        credits.append(f"*{escape(track.album)}*")
+    if credits:
+        lines.append(" · ".join(credits))
+    source = track.source or source_name(track.query)
+    if track.collection:
+        collection = escape(collection_label(track))
+        if track.collection_url:
+            collection = f"[{collection}]({track.collection_url})"
+        source = s.collection_on.format(collection=collection, source=source)
+    lines.append(s.panel_details.format(source=source, user=escape(track.requested_by)))
+    return lines
+
+
+def song_card(track: "Track", s: CoreStrings, server: str) -> discord.Embed:
+    """The card that the panel's grab button sends: the song, its credits, and its length."""
+    named_song = bool(track.song and track.artist)
+    embed = discord.Embed(
+        title=shorten(track.song if named_song else track.label, EMBED_TITLE_LIMIT),
+        url=track.query if is_url(track.query) else None,
+    )
+    embed.set_author(name=shorten(s.grab_heading.format(server=server), 256))
+    if track.thumbnail:
+        embed.set_thumbnail(url=track.thumbnail)
+    lines = song_lines(track, s)
+    if track.duration:
+        lines.append(s.grab_length.format(length=clock(track.duration)))
+    embed.description = "\n".join(lines)
+    embed.timestamp = discord.utils.utcnow()
+    return embed
 
 
 def owner(track: "Track") -> int | str:
@@ -676,13 +738,38 @@ class GuildPlayer:
                 or duration - self.elapsed() > PREPARE_AUDIO_SECONDS
             ):
                 continue
-            volume = await self._cog.volume(self._guild.id) / 100
+            source = await self._audio(prepared.info)
             if prepared is self._prepared:
-                prepared.source = self._cog.client.audio_source(
-                    prepared.info["webpage_url"],
-                    self._cog.bot.config.ffmpeg_path,
-                    volume=volume,
-                )
+                prepared.source = source
+            else:
+                # The queue changed while the settings were read, so this audio has no song.
+                with contextlib.suppress(Exception):
+                    source.cleanup()
+
+    async def _audio(self, info: dict[str, Any]) -> discord.AudioSource:
+        """Starts a track's audio with the server's volume and loudness, minus its skips."""
+        volume = await self._cog.volume(self._guild.id) / 100
+        even = await self._cog.evens_loudness(self._guild.id)
+        return self._cog.client.audio_source(
+            info["webpage_url"],
+            self._cog.bot.config.ffmpeg_path,
+            volume=volume,
+            skips=skips_of(info),
+            even_loudness=even,
+        )
+
+    def remove_member(self, member_id: int) -> int:
+        """Takes a member's waiting songs out of the queue, leaving the playing one.
+
+        Returns:
+            How many songs left the queue.
+        """
+        kept = [track for track in self.queue if track.requested_by_id != member_id]
+        removed = len(self.queue) - len(kept)
+        if removed:
+            self.queue.clear()
+            self.queue.extend(kept)
+        return removed
 
     async def _run(self) -> None:
         channel: discord.abc.Connectable | None = None
@@ -765,7 +852,10 @@ class GuildPlayer:
         title = track.title or info.get("title") or track.query
         names = track if track.artist else None
         log.info(f"Playing '{title}' in {self._guild}.")
-        duration = info.get("duration_seconds") or track.duration
+        # The skipped parts never play, so the panel counts the length without them.
+        duration = played_length(
+            info.get("duration_seconds") or track.duration, skips_of(info)
+        )
         played = replace(
             track,
             query=page_url,
@@ -789,16 +879,13 @@ class GuildPlayer:
             self.last_action = None
         await self._cog.show_playing(voice_client.channel, title)
         await self._cog.refresh_panel(self._guild, new_track=True)
-        volume = await self._cog.volume(self._guild.id) / 100
         if prepared is not None and prepared.source is not None:
             # The audio has been buffering since shortly before the previous song ended.
             source = prepared.source
             if isinstance(source, discord.PCMVolumeTransformer):
-                source.volume = volume
+                source.volume = await self._cog.volume(self._guild.id) / 100
         else:
-            source = self._cog.client.audio_source(
-                page_url, bot.config.ffmpeg_path, volume=volume
-            )
+            source = await self._audio(info)
         # The player's clock starts when audio waits, or the song's start plays too fast.
         await prime(source)
         ticker = asyncio.create_task(self._tick(), name=f"media-panel-{self._guild.id}")
@@ -849,6 +936,8 @@ class MediaCog(commands.Cog, name="Media"):
         self._played_buttons = PlayedView(self)
         # Closes the panels that the previous run left behind, once the bot is connected.
         self._old_panels: asyncio.Task[None] | None = None
+        # The members who left voice and whose waiting songs leave the queue unless they return.
+        self._leavers: dict[tuple[int, int], asyncio.Task[None]] = {}
 
     def player(self, guild: discord.Guild) -> GuildPlayer:
         """Returns the guild's player, creating it on first use."""
@@ -950,6 +1039,84 @@ class MediaCog(commands.Cog, name="Media"):
             player.note("skipvote", member.display_name, votes=votes, needed=needed)
             await self.refresh_panel(guild)
         return SkipOutcome(False, votes, needed, repeated)
+
+    async def evens_loudness(self, guild_id: int) -> bool:
+        """Whether a guild's songs play at an even loudness, which is on when unreadable."""
+        try:
+            settings = await database.get_settings(guild_id)
+        except Exception as error:
+            log.warning(
+                f"Could not read the loudness setting of guild {guild_id}: {error}"
+            )
+            return True
+        return settings.even_loudness
+
+    async def drops_leavers(self, guild_id: int) -> bool:
+        """Whether a guild drops the waiting songs of members who leave voice."""
+        try:
+            settings = await database.get_settings(guild_id)
+        except Exception as error:
+            log.warning(
+                f"Could not read the leaver setting of guild {guild_id}: {error}"
+            )
+            return False
+        return settings.leave_cleanup
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(
+        self,
+        member: discord.Member,
+        before: discord.VoiceState,
+        after: discord.VoiceState,
+    ) -> None:
+        """Gives a member who left the bot's voice channel time to return before their songs go."""
+        if member.bot:
+            return
+        voice_client = member.guild.voice_client
+        if not isinstance(voice_client, discord.VoiceClient):
+            return
+        key = (member.guild.id, member.id)
+        if after.channel == voice_client.channel:
+            # Back in time, so their songs stay.
+            if (pending := self._leavers.pop(key, None)) is not None:
+                pending.cancel()
+            return
+        if before.channel != voice_client.channel or key in self._leavers:
+            return
+        player = self._players.get(member.guild.id)
+        if player is None or not any(
+            track.requested_by_id == member.id for track in player.queue
+        ):
+            return
+        if not await self.drops_leavers(member.guild.id):
+            return
+        self._leavers[key] = asyncio.create_task(
+            self._drop_leaver(member),
+            name=f"media-leaver-{member.guild.id}-{member.id}",
+        )
+
+    async def _drop_leaver(self, member: discord.Member) -> None:
+        """Takes a member's waiting songs out of the queue, unless they came back to listen."""
+        key = (member.guild.id, member.id)
+        try:
+            await asyncio.sleep(LEAVER_GRACE_SECONDS)
+        finally:
+            if self._leavers.get(key) is asyncio.current_task():
+                del self._leavers[key]
+        voice_client = member.guild.voice_client
+        voice = member.voice
+        if not isinstance(voice_client, discord.VoiceClient) or (
+            voice is not None and voice.channel == voice_client.channel
+        ):
+            return
+        player = self._players.get(member.guild.id)
+        removed = player.remove_member(member.id) if player is not None else 0
+        if player is None or not removed:
+            return
+        action = "left_one" if removed == 1 else "left"
+        player.note(action, member.display_name, count=removed)
+        log.info(f"Removed {removed} waiting song(s) of {member}, who left voice.")
+        await self.refresh_panel(member.guild)
 
     async def takes_turns(self, guild_id: int) -> bool:
         """Whether a guild's queue takes turns between members, which is off when unreadable."""
@@ -1571,6 +1738,28 @@ class MediaCog(commands.Cog, name="Media"):
         """Show the lyrics of the playing song, or of a song you name."""
         await self.send_lyrics(interaction, song)
 
+    async def send_song(self, interaction: discord.Interaction) -> None:
+        """Sends the playing song to the presser's direct messages, or privately if closed."""
+        # Thinking makes the press answer with a new private message after the direct message.
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        s = self.bot.strings_for(interaction, private=True)
+        guild = guild_of(interaction)
+        player = self._players.get(guild.id)
+        track = player.current if player is not None else None
+        if track is None:
+            await interaction.followup.send(s.grab_nothing, ephemeral=True)
+            mark_replied(interaction)
+            return
+        card = song_card(track, s, guild.name)
+        try:
+            await interaction.user.send(embed=card)
+        except discord.HTTPException:
+            # A member who closed direct messages from server members gets the card here.
+            await interaction.followup.send(s.grab_closed, embed=card, ephemeral=True)
+        else:
+            await interaction.followup.send(s.grab_sent, ephemeral=True)
+        mark_replied(interaction)
+
     async def send_lyrics(
         self, interaction: discord.Interaction, song: str | None
     ) -> None:
@@ -1629,6 +1818,8 @@ class MediaCog(commands.Cog, name="Media"):
             self._old_panels.cancel()
         for player in self._players.values():
             player.cancel()
+        for pending in self._leavers.values():
+            pending.cancel()
         with contextlib.suppress(Exception):
             await self._set_bot_status(playing=False)
         with contextlib.suppress(Exception):
@@ -1666,24 +1857,7 @@ class MediaCog(commands.Cog, name="Media"):
         embed.set_author(name=heading)
         if track.thumbnail:
             embed.set_thumbnail(url=track.thumbnail)
-        lines: list[str] = []
-        credits: list[str] = []
-        if named_song and track.artist:
-            credits.append(f"**{escape(track.artist)}**")
-        if track.album and track.album != track.collection:
-            # A track queued from its own album names the album in the line below.
-            credits.append(f"*{escape(track.album)}*")
-        if credits:
-            lines.append(" · ".join(credits))
-        source = track.source or source_name(track.query)
-        if track.collection:
-            collection = escape(collection_label(track))
-            if track.collection_url:
-                collection = f"[{collection}]({track.collection_url})"
-            source = s.collection_on.format(collection=collection, source=source)
-        lines.append(
-            s.panel_details.format(source=source, user=escape(track.requested_by))
-        )
+        lines = song_lines(track, s)
         if state != "ended":
             lines.append(progress_line(player.elapsed(), track.duration))
         if action := self._action_line(player, s, state):
@@ -2091,6 +2265,7 @@ class PanelView(discord.ui.View):
             self.stop_button.label = s.panel_stop or None
             self.queue_button.label = s.panel_queue or None
             self.lyrics_button.label = s.panel_lyrics or None
+            self.grab_button.label = s.panel_grab or None
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Lets a member press within the cooldown, and steer the music only from its channel."""
@@ -2268,6 +2443,13 @@ class PanelView(discord.ui.View):
     ) -> None:
         """Shows the playing song's lyrics to the presser."""
         await self.cog.send_lyrics(interaction, None)
+
+    @discord.ui.button(emoji="📩", custom_id="media:grab", row=1)
+    async def grab_button(
+        self, interaction: discord.Interaction, _: discord.ui.Button["PanelView"]
+    ) -> None:
+        """Sends the playing song to the presser."""
+        await self.cog.send_song(interaction)
 
 
 class StopConfirmView(discord.ui.View):

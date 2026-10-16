@@ -47,11 +47,13 @@ _SETTINGS_COLUMNS = frozenset(
         "dj_role_id",
         "fair_queue",
         "goodbye_message",
+        "even_loudness",
+        "leave_cleanup",
     }
 )
 
 # Settings that SQLite stores as 0 or 1, which get_settings turns into booleans.
-_BOOL_COLUMNS = ("fair_queue", "goodbye_message")
+_BOOL_COLUMNS = ("fair_queue", "goodbye_message", "even_loudness", "leave_cleanup")
 
 
 @dataclass(frozen=True)
@@ -74,6 +76,8 @@ class GuildSettings:
         dj_role_id: The role that controls the music while others listen, or None for everyone.
         fair_queue: Whether the music queue takes turns between the members who add songs.
         goodbye_message: Whether the bot says goodbye in the bot channel when a member leaves.
+        even_loudness: Whether songs play at an even loudness instead of each at its own.
+        leave_cleanup: Whether a member's waiting songs leave the queue when they leave voice.
     """
 
     guild_id: int
@@ -89,6 +93,8 @@ class GuildSettings:
     dj_role_id: int | None = None
     fair_queue: bool = False
     goodbye_message: bool = False
+    even_loudness: bool = True
+    leave_cleanup: bool = False
 
 
 @dataclass(frozen=True)
@@ -252,6 +258,16 @@ async def _migrate_to_7(db: aiosqlite.Connection) -> None:
     )
 
 
+async def _migrate_to_8(db: aiosqlite.Connection) -> None:
+    """Adds the even loudness, which starts on, and the cleanup after leavers, which starts off."""
+    await db.execute(
+        "ALTER TABLE guild_settings ADD COLUMN even_loudness INTEGER NOT NULL DEFAULT 1"
+    )
+    await db.execute(
+        "ALTER TABLE guild_settings ADD COLUMN leave_cleanup INTEGER NOT NULL DEFAULT 0"
+    )
+
+
 # Each entry upgrades the schema by one version. Append new migrations and never edit old ones.
 _MIGRATIONS: list[Callable[[aiosqlite.Connection], Awaitable[None]]] = [
     _migrate_to_1,
@@ -261,6 +277,7 @@ _MIGRATIONS: list[Callable[[aiosqlite.Connection], Awaitable[None]]] = [
     _migrate_to_5,
     _migrate_to_6,
     _migrate_to_7,
+    _migrate_to_8,
 ]
 
 

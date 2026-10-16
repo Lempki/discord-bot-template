@@ -4,6 +4,7 @@ import asyncio
 import io
 import logging
 import queue
+import shlex
 import threading
 import time
 from pathlib import Path
@@ -77,7 +78,13 @@ class MediaAPIClient:
         )
 
     def audio_source(
-        self, track_url: str, ffmpeg: str, volume: float = 0.5
+        self,
+        track_url: str,
+        ffmpeg: str,
+        volume: float = 0.5,
+        *,
+        skips: tuple[tuple[float, float], ...] = (),
+        even_loudness: bool = False,
     ) -> discord.AudioSource:
         """Returns an audio source that plays a track through api-media's /media/stream.
 
@@ -90,18 +97,23 @@ class MediaAPIClient:
             track_url: The track's page URL, the webpage_url that get_info() returns.
             ffmpeg: The FFmpeg executable.
             volume: The playback volume, where 1.0 is unchanged.
+            skips: The parts to leave out, as start and end in seconds, such as a video's skit.
+            even_loudness: Whether to bring the track to the same loudness as other tracks.
 
         Returns:
             A volume-adjusted audio source.
         """
         url = f"{self._base_url}/media/stream?{urlencode({'url': track_url})}"
+        options = "-vn"
+        if filters := audio_filters(skips, even_loudness=even_loudness):
+            options += f" -af {shlex.quote(filters)}"
         # FFmpeg takes extra request headers as one string in which each line ends in CRLF.
         headers = f"Authorization: Bearer {self._secret}\r\n"
         source = discord.FFmpegPCMAudio(
             url,
             executable=ffmpeg,
             before_options=f'-headers "{headers}"',
-            options="-vn",
+            options=options,
         )
         # The volume wraps the buffer, so a volume change is heard at once.
         return discord.PCMVolumeTransformer(BufferedSource(source), volume=volume)
@@ -191,6 +203,35 @@ class MediaAPIClient:
     async def aclose(self) -> None:
         """Closes the underlying HTTP connection pool."""
         await self._http.aclose()
+
+
+# EBU R128 loudness normalization to -14 LUFS, the level that streaming services play music at.
+# Each song then sounds about as loud as the one before it.
+LOUDNESS_FILTER = "loudnorm=I=-14:TP=-1.5:LRA=11"
+
+
+def audio_filters(
+    skips: tuple[tuple[float, float], ...], *, even_loudness: bool
+) -> str | None:
+    """Builds the FFmpeg audio filters that cut parts out and even the loudness, or None.
+
+    The cut comes first, so a skit before the song does not count toward its loudness.
+
+    Args:
+        skips: The parts to leave out, as start and end in seconds.
+        even_loudness: Whether to bring the track to LOUDNESS_FILTER's loudness.
+
+    Returns:
+        A filter chain for FFmpeg's -af option, or None when the audio needs no filter.
+    """
+    filters: list[str] = []
+    if skips:
+        # The quotes keep the commas inside the expression from separating filters.
+        parts = "+".join(f"between(t,{start:g},{end:g})" for start, end in skips)
+        filters.append(f"aselect='not({parts})',asetpts=N/SR/TB")
+    if even_loudness:
+        filters.append(LOUDNESS_FILTER)
+    return ",".join(filters) or None
 
 
 def is_url(text: str) -> bool:

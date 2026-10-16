@@ -95,6 +95,8 @@ def status_text(**overrides: object) -> str:
         "autorole": EN.status_none,
         "dj": EN.status_none,
         "fair": EN.status_off,
+        "loudness": EN.status_on,
+        "leavers": EN.status_off,
         "goodbye": EN.status_off,
         "threshold": 3,
         "action": EN.action_kick,
@@ -237,4 +239,25 @@ async def test_status_shows_the_fair_queue_and_goodbye(db: None, bot: BotApp) ->
 
     assert sent_messages(interaction) == [
         status_text(fair=EN.status_on, goodbye=EN.status_on)
+    ]
+
+
+async def test_loudness_and_leave_cleanup_turn_on_and_off(
+    db: None, bot: BotApp
+) -> None:
+    cog = AdminCog(bot)
+    quiet = make_interaction()
+    await cog.set_loudness.callback(cog, quiet, False)  # type: ignore[arg-type]
+    leavers = make_interaction()
+    await cog.set_leave_cleanup.callback(cog, leavers, True)  # type: ignore[arg-type]
+
+    settings = await database.get_settings(GUILD_ID)
+    assert (settings.even_loudness, settings.leave_cleanup) == (False, True)
+    assert sent_messages(quiet) == [EN.admin_loudness_off]
+    assert sent_messages(leavers) == [EN.admin_leavers_on]
+
+    status = make_interaction()
+    await cog.status.callback(cog, status)  # type: ignore[arg-type]
+    assert sent_messages(status) == [
+        status_text(loudness=EN.status_off, leavers=EN.status_on)
     ]

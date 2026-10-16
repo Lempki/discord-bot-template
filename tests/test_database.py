@@ -222,6 +222,8 @@ async def test_version_2_database_gains_the_music_volume(tmp_path: Path) -> None
     with sqlite3.connect(path) as conn:
         conn.executescript(
             """
+            ALTER TABLE guild_settings DROP COLUMN leave_cleanup;
+            ALTER TABLE guild_settings DROP COLUMN even_loudness;
             ALTER TABLE guild_settings DROP COLUMN goodbye_message;
             ALTER TABLE guild_settings DROP COLUMN fair_queue;
             ALTER TABLE guild_settings DROP COLUMN dj_role_id;
@@ -265,6 +267,8 @@ async def test_version_3_database_gains_an_empty_dj_role(tmp_path: Path) -> None
     with sqlite3.connect(path) as conn:
         conn.executescript(
             """
+            ALTER TABLE guild_settings DROP COLUMN leave_cleanup;
+            ALTER TABLE guild_settings DROP COLUMN even_loudness;
             ALTER TABLE guild_settings DROP COLUMN goodbye_message;
             ALTER TABLE guild_settings DROP COLUMN fair_queue;
             ALTER TABLE guild_settings DROP COLUMN dj_role_id;
@@ -315,6 +319,8 @@ async def test_version_6_database_gains_the_fair_queue_and_goodbye_off(
     with sqlite3.connect(path) as conn:
         conn.executescript(
             """
+            ALTER TABLE guild_settings DROP COLUMN leave_cleanup;
+            ALTER TABLE guild_settings DROP COLUMN even_loudness;
             ALTER TABLE guild_settings DROP COLUMN goodbye_message;
             ALTER TABLE guild_settings DROP COLUMN fair_queue;
             PRAGMA user_version = 6;
@@ -333,4 +339,32 @@ async def test_version_6_database_gains_the_fair_queue_and_goodbye_off(
     assert (settings.fair_queue, settings.goodbye_message) == (False, False)
     assert settings.dj_role_id == 42
     assert updated.fair_queue is True
+    assert _user_version(path) == len(database._MIGRATIONS)
+
+
+async def test_version_7_database_gains_even_loudness_on_and_cleanup_off(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "bot.db"
+    await database.init(path)
+    await database.upsert_settings(GUILD, fair_queue=True)
+    await database.close()
+    with sqlite3.connect(path) as conn:
+        conn.executescript(
+            """
+            ALTER TABLE guild_settings DROP COLUMN leave_cleanup;
+            ALTER TABLE guild_settings DROP COLUMN even_loudness;
+            PRAGMA user_version = 7;
+            """
+        )
+
+    await database.init(path)
+    try:
+        settings = await database.get_settings(GUILD)
+    finally:
+        await database.close()
+
+    # Even loudness helps every server, so it starts on, while dropping songs waits for an admin.
+    assert (settings.even_loudness, settings.leave_cleanup) == (True, False)
+    assert settings.fair_queue is True
     assert _user_version(path) == len(database._MIGRATIONS)

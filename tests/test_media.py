@@ -1,6 +1,7 @@
 """Tests for the media cog's per-guild player, with the service and voice faked out."""
 
 import asyncio
+import shlex
 import threading
 import time
 from dataclasses import replace
@@ -16,6 +17,7 @@ from discord import app_commands
 from bot import BotApp
 from cogs.media import (
     DEFAULT_VOLUME,
+    LEAVER_GRACE_SECONDS,
     QUEUE_PAGE_SIZE,
     GuildPlayer,
     MediaCog,
@@ -30,15 +32,25 @@ from cogs.media import (
     ended_card,
     join_names,
     link,
+    played_length,
     progress_line,
     session_length,
+    skips_of,
     suggestion_name,
 )
 from config import Config, ServiceConfig
 from localization import LOCALES
 from tests.conftest import GUILD_ID, make_interaction, sent_messages
 from utils import database
-from utils.audio import SILENCE, BufferedSource, MediaAPIClient, prime, source_name
+from utils.audio import (
+    LOUDNESS_FILTER,
+    SILENCE,
+    BufferedSource,
+    MediaAPIClient,
+    audio_filters,
+    prime,
+    source_name,
+)
 
 EN = LOCALES["en"]
 
@@ -1243,7 +1255,7 @@ async def test_the_panel_buttons_show_the_state() -> None:
     ]  # type: ignore[attr-defined]
     assert rows == [
         ["media:shuffle", "media:previous", "media:pause", "media:skip", "media:loop"],
-        ["media:stop", "media:queue", "media:lyrics"],
+        ["media:stop", "media:queue", "media:lyrics", "media:grab"],
     ]
     assert all(item.custom_id.startswith("media:") for item in view.children)  # type: ignore[attr-defined]
 
@@ -2196,3 +2208,220 @@ async def test_play_says_when_a_song_went_ahead_by_taking_turns(db: None) -> Non
         + "\n"
         + EN.queue_turns
     ]
+
+
+def test_audio_filters_cut_first_and_then_even_the_loudness() -> None:
+    assert audio_filters((), even_loudness=False) is None
+    assert audio_filters((), even_loudness=True) == LOUDNESS_FILTER
+    cut = audio_filters(((0.0, 9.5), (200.0, 212.0)), even_loudness=True)
+    assert cut == (
+        "aselect='not(between(t,0,9.5)+between(t,200,212))',asetpts=N/SR/TB,"
+        + LOUDNESS_FILTER
+    )
+
+
+async def test_audio_source_passes_the_filters_to_ffmpeg_as_one_argument(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ffmpeg = MagicMock()
+    monkeypatch.setattr("utils.audio.discord.FFmpegPCMAudio", ffmpeg)
+    monkeypatch.setattr("utils.audio.discord.PCMVolumeTransformer", MagicMock())
+    monkeypatch.setattr("utils.audio.BufferedSource", MagicMock())
+    client = MediaAPIClient("http://media:8000/", "s3cret")
+
+    client.audio_source(
+        "https://youtu.be/x", "ffmpeg", skips=((0.0, 9.5),), even_loudness=True
+    )
+    await client.aclose()
+
+    # discord.py splits the options like a shell, so the filter chain must stay whole.
+    options = shlex.split(ffmpeg.call_args.kwargs["options"])
+    assert options[:2] == ["-vn", "-af"]
+    assert options[2] == audio_filters(((0.0, 9.5),), even_loudness=True)
+
+
+def test_skips_of_reads_only_usable_parts() -> None:
+    info = {"skip_segments": [[0, 9.5], [30, 20], ["x", 1], [100.0, 110.0]]}
+
+    assert skips_of(info) == ((0.0, 9.5), (100.0, 110.0))
+    assert skips_of({}) == ()
+
+
+def test_played_length_leaves_out_the_skipped_parts() -> None:
+    assert played_length(212, ((0.0, 9.5), (200.0, 212.0))) == 190
+    assert played_length(None, ((0.0, 9.5),)) is None
+    assert played_length(212, ()) == 212
+
+
+async def test_the_player_cuts_the_skipped_parts_and_evens_the_loudness() -> None:
+    bot, cog = await media_cog()
+    cog.client.get_info = AsyncMock(
+        return_value={
+            "webpage_url": "https://youtu.be/x",
+            "title": "Song",
+            "duration_seconds": 200,
+            "skip_segments": [[0, 10]],
+        }
+    )
+    lengths: list[int | None] = []
+    player = GuildPlayer(cog, connected_guild())
+    bot.voice_presence.play = AsyncMock(
+        side_effect=lambda vc, source: lengths.append(player.now_playing_duration)
+    )  # type: ignore[method-assign]
+
+    player.enqueue([Track("song name", "Ada", MagicMock(send=AsyncMock()))])
+    await asyncio.wait_for(player._task, timeout=1)  # type: ignore[arg-type]
+
+    kwargs = cog.client.audio_source.call_args.kwargs
+    assert kwargs["skips"] == ((0.0, 10.0),)
+    # The setting cannot be read without a database, so the loudness stays even.
+    assert kwargs["even_loudness"] is True
+    # The panel counts the song's length without the skipped part.
+    assert lengths == [190]
+
+
+async def test_remove_member_takes_only_that_members_waiting_songs() -> None:
+    _, cog = await media_cog()
+    player = busy_player(cog, now_playing=240, waiting=[])
+    player.current = member_song("Ada 1", 1)
+    player.enqueue(
+        [member_song("Ada 2", 1), member_song("Bo 1", 2), member_song("Ada 3", 1)]
+    )
+
+    assert player.remove_member(1) == 2
+    assert titles(player) == ["Bo 1"]
+    assert player.remove_member(1) == 0
+
+
+def grab_press(player: GuildPlayer, *, dm_open: bool = True) -> MagicMock:
+    press = make_interaction()
+    press.guild.name = "Lähettämö"
+    press.user.send = AsyncMock(
+        side_effect=None
+        if dm_open
+        else discord.Forbidden(
+            MagicMock(status=403), "Cannot send messages to this user"
+        )
+    )
+    return press
+
+
+async def test_the_grab_button_sends_the_song_to_the_presser() -> None:
+    _, cog = await media_cog()
+    player = cog.player(MagicMock(id=GUILD_ID))
+    player.current = replace(panel_track(), artist="Eagles", song="Hotel California")
+    press = grab_press(player)
+
+    await PanelView(cog).grab_button.callback(press)  # type: ignore[call-arg]
+
+    card = press.user.send.call_args.kwargs["embed"]
+    assert card.title == "Hotel California"
+    assert card.author.name == EN.grab_heading.format(server="Lähettämö")
+    assert card.description.splitlines()[0] == "**Eagles**"
+    assert card.description.splitlines()[-1] == EN.grab_length.format(length="6:31")
+    press.followup.send.assert_awaited_once_with(EN.grab_sent, ephemeral=True)
+
+
+async def test_the_grab_button_shows_the_song_privately_when_dms_are_closed() -> None:
+    _, cog = await media_cog()
+    player = cog.player(MagicMock(id=GUILD_ID))
+    player.current = panel_track()
+    press = grab_press(player, dm_open=False)
+
+    await PanelView(cog).grab_button.callback(press)  # type: ignore[call-arg]
+
+    call = press.followup.send.call_args
+    assert call.args == (EN.grab_closed,)
+    assert call.kwargs["embed"].title == "Hotel California"
+    assert call.kwargs["ephemeral"] is True
+
+
+async def test_the_grab_button_says_when_nothing_plays() -> None:
+    _, cog = await media_cog()
+    press = grab_press(cog.player(MagicMock(id=GUILD_ID)))
+
+    await PanelView(cog).grab_button.callback(press)  # type: ignore[call-arg]
+
+    press.user.send.assert_not_awaited()
+    press.followup.send.assert_awaited_once_with(EN.grab_nothing, ephemeral=True)
+
+
+def voice_member(member_id: int, guild: MagicMock, channel: object | None) -> MagicMock:
+    member = MagicMock(spec=discord.Member)
+    member.id = member_id
+    member.bot = False
+    member.display_name = f"Member {member_id}"
+    member.guild = guild
+    member.voice = SimpleNamespace(channel=channel) if channel is not None else None
+    return member
+
+
+def leaver_guild() -> tuple[MagicMock, MagicMock]:
+    guild = MagicMock(id=GUILD_ID)
+    voice_client = MagicMock(spec=discord.VoiceClient)
+    voice_client.channel = MagicMock(name="voice")
+    guild.voice_client = voice_client
+    return guild, voice_client.channel
+
+
+async def test_a_leavers_waiting_songs_go_after_the_grace_period(
+    db: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("cogs.media.LEAVER_GRACE_SECONDS", 0)
+    await database.upsert_settings(GUILD_ID, leave_cleanup=True)
+    _, cog = await media_cog()
+    guild, channel = leaver_guild()
+    player = cog.player(guild)
+    player._task = asyncio.get_running_loop().create_future()  # type: ignore[assignment]
+    player.enqueue([member_song("Ada 2", 1), member_song("Bo 1", 2)])
+    member = voice_member(1, guild, None)
+
+    await cog.on_voice_state_update(
+        member,
+        SimpleNamespace(channel=channel),
+        SimpleNamespace(channel=None),  # type: ignore[arg-type]
+    )
+    await asyncio.wait_for(cog._leavers[(GUILD_ID, 1)], timeout=1)
+
+    assert titles(player) == ["Bo 1"]
+    assert player.last_action == ("left_one", "Member 1", {"count": 1})
+    assert not cog._leavers
+
+
+async def test_a_leaver_who_returns_in_time_keeps_their_songs(
+    db: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await database.upsert_settings(GUILD_ID, leave_cleanup=True)
+    _, cog = await media_cog()
+    guild, channel = leaver_guild()
+    player = cog.player(guild)
+    player._task = asyncio.get_running_loop().create_future()  # type: ignore[assignment]
+    player.enqueue([member_song("Ada 2", 1)])
+    member = voice_member(1, guild, channel)
+    left = SimpleNamespace(channel=None)
+    there = SimpleNamespace(channel=channel)
+
+    await cog.on_voice_state_update(member, there, left)  # type: ignore[arg-type]
+    pending = cog._leavers[(GUILD_ID, 1)]
+    await cog.on_voice_state_update(member, left, there)  # type: ignore[arg-type]
+    await asyncio.sleep(0)
+
+    assert pending.cancelled()
+    assert titles(player) == ["Ada 2"]
+
+
+async def test_leavers_keep_their_songs_when_the_setting_is_off(db: None) -> None:
+    _, cog = await media_cog()
+    guild, channel = leaver_guild()
+    player = cog.player(guild)
+    player._task = asyncio.get_running_loop().create_future()  # type: ignore[assignment]
+    player.enqueue([member_song("Ada 2", 1)])
+
+    await cog.on_voice_state_update(
+        voice_member(1, guild, None),
+        SimpleNamespace(channel=channel),
+        SimpleNamespace(channel=None),  # type: ignore[arg-type]
+    )
+
+    assert not cog._leavers
+    assert LEAVER_GRACE_SECONDS == 120

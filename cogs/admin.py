@@ -122,6 +122,36 @@ class AdminCog(commands.Cog, name="Admin"):
             ephemeral=True,
         )
 
+    @admin.command(name="loudness")
+    @app_commands.describe(enabled="Whether songs play at an even loudness.")
+    async def set_loudness(
+        self, interaction: discord.Interaction, enabled: bool
+    ) -> None:
+        """Turn on or off evening out the loudness between songs."""
+        s = self.bot.strings_for(interaction, private=True)
+        await database.upsert_settings(guild_of(interaction).id, even_loudness=enabled)
+        await respond(
+            interaction,
+            s.admin_loudness_on if enabled else s.admin_loudness_off,
+            ephemeral=True,
+        )
+
+    @admin.command(name="leavecleanup")
+    @app_commands.describe(
+        enabled="Whether a leaver's waiting songs leave the queue after two minutes."
+    )
+    async def set_leave_cleanup(
+        self, interaction: discord.Interaction, enabled: bool
+    ) -> None:
+        """Turn on or off dropping the waiting songs of members who leave voice."""
+        s = self.bot.strings_for(interaction, private=True)
+        await database.upsert_settings(guild_of(interaction).id, leave_cleanup=enabled)
+        await respond(
+            interaction,
+            s.admin_leavers_on if enabled else s.admin_leavers_off,
+            ephemeral=True,
+        )
+
     @admin.command(name="goodbye")
     @app_commands.describe(enabled="Whether the bot says goodbye when a member leaves.")
     async def set_goodbye(
@@ -238,6 +268,8 @@ class AdminCog(commands.Cog, name="Admin"):
             autorole=autorole,
             dj=f"<@&{settings.dj_role_id}>" if settings.dj_role_id else s.status_none,
             fair=s.status_on if settings.fair_queue else s.status_off,
+            loudness=s.status_on if settings.even_loudness else s.status_off,
+            leavers=s.status_on if settings.leave_cleanup else s.status_off,
             goodbye=s.status_on if settings.goodbye_message else s.status_off,
             threshold=settings.warn_threshold,
             action=_action_name(s, settings.warn_action),
