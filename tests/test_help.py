@@ -1,8 +1,10 @@
 """Tests for cogs/help.py."""
 
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
 
 import discord
+import pytest
 from discord import app_commands
 from discord.ext import commands
 
@@ -12,6 +14,8 @@ from cogs.help import (
     EMBED_LIMIT,
     FIELD_LIMIT,
     FIELDS_PER_EMBED,
+    MENTION_REPLY_SECONDS,
+    GuideButton,
     HelpCog,
     Section,
     build_embeds,
@@ -60,6 +64,14 @@ async def _sections(
     return await bot.cogs["Help"]._sections(interaction)  # type: ignore[attr-defined, no-any-return]
 
 
+class GuideLessCog(commands.Cog, name="Gadgets"):
+    """A bot's own feature that has no guide text yet."""
+
+    @app_commands.command(name="gizmo")
+    async def gizmo(self, interaction: discord.Interaction) -> None:
+        """Do a gizmo thing."""
+
+
 async def test_an_admin_reads_the_setup_and_moderation_guides(bot: BotApp) -> None:
     sections = await _sections(bot, discord.Permissions.all())
     by_title = {section.title: section.lines for section in sections}
@@ -72,30 +84,17 @@ async def test_an_admin_reads_the_setup_and_moderation_guides(bot: BotApp) -> No
     assert by_title[EN.section_moderation][1] == EN.help_commands.format(
         commands="`/ban`, `/kick`, `/purge`, `/timeout`, `/untimeout`, `/warn`, `/warnings`"
     )
+    # The guide is what /help shows, so the help cog has no section of its own.
     assert [section.title for section in sections] == [
         EN.section_moderation,
         EN.section_admin,
-        EN.section_help,
     ]
 
 
 async def test_a_member_reads_only_the_guides_they_can_use(bot: BotApp) -> None:
-    sections = await _sections(bot, discord.Permissions.none())
+    sections = await _sections(bot, discord.Permissions.none(), GuideLessCog())
 
-    assert [(s.title, s.lines) for s in sections] == [
-        (
-            EN.section_help,
-            [EN.guide_help, EN.help_commands.format(commands="`/about`, `/help`")],
-        )
-    ]
-
-
-class GuideLessCog(commands.Cog, name="Gadgets"):
-    """A bot's own feature that has no guide text yet."""
-
-    @app_commands.command(name="gizmo")
-    async def gizmo(self, interaction: discord.Interaction) -> None:
-        """Do a gizmo thing."""
+    assert [section.title for section in sections] == ["Gadgets"]
 
 
 async def test_a_feature_without_a_guide_lists_its_commands_first(bot: BotApp) -> None:
@@ -163,3 +162,101 @@ Repository = "https://github.com/x/y"
         "discord-bot-x", "1.2.3", "https://github.com/x/y"
     )
     assert read_project_info(tmp_path / "missing.toml").version == "unknown"
+
+
+def mention(
+    bot: BotApp, content: str, *, author_id: int = 7, is_bot: bool = False
+) -> MagicMock:
+    """A message in a guild that says content, from a member or another bot."""
+    message = MagicMock(spec=discord.Message)
+    message.content = content
+    message.author = MagicMock(id=author_id, bot=is_bot)
+    message.guild = MagicMock(
+        id=GUILD_ID, preferred_locale=discord.Locale.american_english
+    )
+    message.reply = AsyncMock()
+    message.channel.send = AsyncMock()
+    return message
+
+
+def bot_user(bot: BotApp, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(type(bot), "user", property(lambda _: MagicMock(id=999)))
+
+
+async def test_a_bare_mention_gets_a_reply_with_the_guide_button(
+    bot: BotApp, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bot_user(bot, monkeypatch)
+    cog = HelpCog(bot)
+    message = mention(bot, " <@999> ")
+
+    await cog.on_message(message)
+
+    message.reply.assert_awaited_once()
+    call = message.reply.call_args
+    assert call.args == (EN.mention_reply,)
+    assert call.kwargs["mention_author"] is False
+    assert call.kwargs["delete_after"] == MENTION_REPLY_SECONDS
+    assert isinstance(call.kwargs["view"], GuideButton)
+    assert call.kwargs["view"].show.label == EN.mention_button
+
+
+async def test_a_mention_with_words_or_from_a_bot_gets_no_reply(
+    bot: BotApp, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bot_user(bot, monkeypatch)
+    cog = HelpCog(bot)
+    talk = mention(bot, "<@999> what do you think?")
+    other_bot = mention(bot, "<@999>", is_bot=True)
+
+    await cog.on_message(talk)
+    await cog.on_message(other_bot)
+
+    talk.reply.assert_not_awaited()
+    other_bot.reply.assert_not_awaited()
+
+
+async def test_a_member_who_mentions_again_soon_gets_one_reply(
+    bot: BotApp, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bot_user(bot, monkeypatch)
+    cog = HelpCog(bot)
+    first, second = mention(bot, "<@!999>"), mention(bot, "<@999>")
+
+    await cog.on_message(first)
+    await cog.on_message(second)
+
+    first.reply.assert_awaited_once()
+    second.reply.assert_not_awaited()
+
+
+async def test_without_read_message_history_the_reply_goes_to_the_channel(
+    bot: BotApp, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bot_user(bot, monkeypatch)
+    cog = HelpCog(bot)
+    message = mention(bot, "<@999>")
+    message.reply.side_effect = discord.Forbidden(
+        MagicMock(status=403), "Missing Permissions"
+    )
+
+    await cog.on_message(message)
+
+    message.channel.send.assert_awaited_once()
+    assert message.channel.send.call_args.args == (EN.mention_reply,)
+
+
+async def test_the_guide_button_shows_the_guide_privately(bot: BotApp) -> None:
+    await bot.add_cog(HelpCog(bot))
+    await bot.add_cog(AdminCog(bot))
+    cog = bot.cogs["Help"]
+    press = make_interaction()
+    press.permissions = discord.Permissions.all()
+    press.translate.return_value = None
+
+    await GuideButton(cog, EN).show.callback(press)  # type: ignore[arg-type, call-arg]
+
+    kwargs = press.response.send_message.call_args.kwargs
+    assert kwargs["ephemeral"] is True
+    assert kwargs["embeds"][0].title == EN.help_title
+    assert kwargs["embeds"][-1].footer.text == EN.help_footer

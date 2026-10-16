@@ -174,7 +174,6 @@ class CoreStrings:
     guide_moderation: str = ""
     guide_admin: str = ""
     guide_template: str = ""
-    guide_help: str = ""
     guide_info: str = ""
     section_info: str = ""
     # /info. info_channel_counts uses {text} and {voice}, info_boost_level {level} and {count}.
@@ -197,12 +196,14 @@ class CoreStrings:
     about_text: str = ""
     about_link: str = ""
     help_footer: str = ""
+    # The reply to a message that only mentions the bot, and its button that opens the guide.
+    mention_reply: str = ""
+    mention_button: str = ""
     # The bot's status, which is the same in every server and so names no song.
     status_idle: str = ""
     status_playing: str = ""
     help_empty: str = ""
     section_admin: str = ""
-    section_help: str = ""
     section_media: str = ""
     section_moderation: str = ""
     section_template: str = ""
@@ -428,6 +429,9 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "action_skipvote": "🗳️ {user} voted to skip: {votes} of {needed} votes",
         "action_skipped_vote": "⏭️ The listeners voted to skip **{title}**",
         "help_title": "How to use the bot",
+        "help_footer": "/about shows the bot's version, how long it has been online, and its response time.",
+        "mention_reply": "Here is what I can do. The guide opens only for you.",
+        "mention_button": "Show the guide",
         "help_intro": "Each part below explains one of the bot's features and the commands that belong to it. Discord's / menu shows every command with its options.",
         "help_commands": "Commands: {commands}",
         "help_bot_channel": "In this server, the bot takes commands only in {channel}.",
@@ -436,7 +440,6 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "guide_moderation": "`/warn` gives a member a warning, and at the server's limit the bot kicks, bans, or times them out. `/warnings` lists and removes warnings, and `/timeout`, `/kick`, and `/ban` act at once. `/purge` deletes recent messages. Right-click a member and choose Apps, then Warn, to warn them quickly. Anyone can right-click a message and choose Report to moderators, which sends it to the AutoMod alert channel.",
         "guide_admin": "`/admin` sets the bot up for this server. `/admin channel` limits commands to one channel, `/admin autorole` gives new members a role and welcomes them, `/admin djrole` picks who controls the music, `/admin fairqueue` makes the queue take turns between members, `/admin loudness` evens out how loud songs are, `/admin leavecleanup` drops the waiting songs of members who leave voice, `/admin goodbye` says goodbye to members who leave, and `/admin automod` manages Discord's AutoMod filters. `/admin status` shows every setting.",
         "guide_template": "`/example hello` shows how a command of a new feature works. A new feature starts as a copy of cogs/template.py.",
-        "guide_help": "`/help` shows this guide, and `/about` shows the bot's version, how long it has been online, and its response time.",
         "guide_info": "`/info server` shows the server's age, size, and boosts, `/info member` shows when a member joined and their roles, and `/info avatar` shows an avatar in full size. Only you see the answers.",
         "section_info": "Info",
         "info_created": "Created",
@@ -456,7 +459,6 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "about_link": "Source code: <{url}>",
         "help_empty": "No commands are available to you here.",
         "section_admin": "Admin",
-        "section_help": "Help",
         "section_media": "Media",
         "section_moderation": "Moderation",
         "section_template": "Template",
@@ -622,7 +624,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "lyrics_none": "Kappaleelle **{title}** ei löytynyt sanoja.",
         "lyrics_unavailable": "Sanapalveluun ei saatu yhteyttä. Yritä myöhemmin uudelleen.",
         "lyrics_footer": "Sanat: LRCLIB",
-        "status_idle": "/help kertoo, mitä osaan",
+        "status_idle": "/help näyttää, mitä osaan",
         "status_playing": "🎵 Soittaa musiikkia",
         "panel_playing": "Nyt soi",
         "panel_paused": "Tauolla",
@@ -681,6 +683,9 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "action_skipvote": "🗳️ {user} äänesti ohittamisen puolesta: {votes}/{needed} ääntä",
         "action_skipped_vote": "⏭️ Kuuntelijat äänestivät kappaleen **{title}** ohitetuksi",
         "help_title": "Botin käyttöohje",
+        "help_footer": "/about näyttää botin version, kuinka kauan se on ollut päällä ja sen vasteajan.",
+        "mention_reply": "Tässä, mitä osaan. Ohje aukeaa vain sinulle.",
+        "mention_button": "Näytä ohje",
         "help_intro": "Jokainen alla oleva osa kertoo yhdestä botin ominaisuudesta ja sen komennoista. Discordin /-valikko näyttää kaikki komennot vaihtoehtoineen.",
         "help_commands": "Komennot: {commands}",
         "help_bot_channel": "Tällä palvelimella botti ottaa komentoja vastaan vain kanavalla {channel}.",
@@ -689,7 +694,6 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "guide_moderation": "`/warn` antaa jäsenelle varoituksen, ja palvelimen rajalla botti potkaisee jäsenen, antaa porttikiellon tai aikalisän. `/warnings` näyttää ja poistaa varoituksia, ja `/timeout`, `/kick` ja `/ban` toimivat heti. `/purge` poistaa viimeisimmät viestit. Napsauta jäsentä hiiren oikealla ja valitse Sovellukset ja Varoita, niin varoitat nopeasti. Kuka tahansa voi napsauttaa viestiä hiiren oikealla ja valita Ilmoita moderaattoreille, jolloin viesti menee AutoMod-hälytyskanavalle.",
         "guide_admin": "`/admin` määrittää botin tälle palvelimelle. `/admin channel` rajaa komennot yhdelle kanavalle, `/admin autorole` antaa uusille jäsenille roolin ja toivottaa heidät tervetulleiksi, `/admin djrole` valitsee, kuka ohjaa musiikkia, `/admin fairqueue` saa jonon vuorottelemaan jäsenten kesken, `/admin loudness` tasaa kappaleiden äänenvoimakkuuden, `/admin leavecleanup` poistaa äänikanavalta lähtevien jäsenten odottavat kappaleet, `/admin goodbye` hyvästelee lähtevät jäsenet, ja `/admin automod` hallitsee Discordin AutoMod-suodattimia. `/admin status` näyttää kaikki asetukset.",
         "guide_template": "`/example hello` näyttää, miten uuden ominaisuuden komento toimii. Uusi ominaisuus alkaa kopiona tiedostosta cogs/template.py.",
-        "guide_help": "`/help` näyttää tämän ohjeen, ja `/about` näyttää botin version, kuinka kauan se on ollut päällä ja sen vasteajan.",
         "guide_info": "`/info server` näyttää palvelimen iän, koon ja tehostukset, `/info member` näyttää, milloin jäsen liittyi ja hänen roolinsa, ja `/info avatar` näyttää profiilikuvan täysikokoisena. Vain sinä näet vastaukset.",
         "section_info": "Tiedot",
         "info_created": "Luotu",
@@ -709,7 +713,6 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "about_link": "Lähdekoodi: <{url}>",
         "help_empty": "Sinulla ei ole täällä käytettävissä komentoja.",
         "section_admin": "Ylläpito",
-        "section_help": "Ohje",
         "section_media": "Media",
         "section_moderation": "Moderointi",
         "section_template": "Malli",

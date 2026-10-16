@@ -14,8 +14,8 @@ This is a clean and modular Python Discord bot template built with [discord.py](
 * A `Strings` dataclass defines all user-facing messages as named format strings, in English and Finnish. Replies follow each user's Discord language, and `LOCALE` picks the fallback language. The default, `LOCALE=silent`, mutes public replies but still sends private ones such as `/help` and admin replies.
 * The `events` cog gives new members the role set with `/admin autorole`, and welcomes them in the bot channel set with `/admin channel`. With `/admin goodbye`, it also says goodbye there when a member leaves, but not when a member was banned.
 * Moderation builds on Discord's own AutoMod. `/admin automod` manages keyword and preset rules, and blocked messages can count as warnings.
-* The `/help` command is a short guide to the bot, in a reply that only you see. It says what the bot is for, and explains each loaded feature that you may use, with its commands and a tip or two. Members see only the features they can use, so only admins see how to set the bot up. The guide reflects whichever cogs are active at runtime, and a feature without a guide text lists its commands instead.
-* The `/about` command shows the bot's version, how long it has been online, its response time, and a link to its source code. The bot's status reads "/help shows what I can do", or "🎵 Playing music" while music plays in any server, in the bot's own language.
+* The `/help` command is a short guide to the bot, in a reply that only you see. It says what the bot is for, and explains each loaded feature that you may use, with its commands and a tip or two. Members see only the features they can use, so only admins see how to set the bot up. The guide reflects whichever cogs are active at runtime, and a feature without a guide text lists its commands instead. A message that only mentions the bot, such as `@Bot`, gets a short reply with a button that opens the same guide for whoever presses it. The reply deletes itself after a minute, and a mention with other words gets no answer. `/about` is named at the bottom of the guide.
+* The `/about` command shows the bot's version, how long it has been online, its response time, and a link to its source code. The bot's status reads "/help shows what I can do", or "🎵 Playing music" while music plays in any server, in the bot's own language. A bot made from the template gives itself a status of its own with `status_idle` in its `localization.py`.
 * Dependencies are managed with [uv](https://docs.astral.sh/uv/) and pinned in `uv.lock`, so every machine and container installs the same versions.
 * Setup scripts for Windows and Unix are included. Running `setup.bat` or `setup.sh` installs the dependencies and creates the initial `.env` file in a single step.
 * Tests, linting, and formatting run in CI on every push through the shared [dev-standards](https://github.com/Lempki/dev-standards) workflow.
@@ -78,6 +78,7 @@ Without `events`, leave it disabled. A verified bot needs Discord's approval for
 Turn the intent off in the portal only after the bot runs a version that no longer asks for it, or the bot cannot connect until you turn it back on.
 
 The **Presence Intent** and the **Message Content Intent** are not used and should stay disabled.
+Discord gives a bot the text of a message that mentions it without the Message Content Intent, which is all that the reply to a mention needs.
 AutoMod reads messages on Discord's side, so the bot never needs message content.
 The bot also uses the Auto Moderation Execution intent, which is not privileged and needs no portal setting.
 
@@ -100,7 +101,7 @@ The **Requires OAuth2 Code Grant** toggle in the Bot page is not applicable to s
 | Ban Members | `/ban` and the `ban` warning action. It also tells a ban from leaving, so that a banned member gets no goodbye. |
 | Moderate Members | `/timeout`, `/untimeout`, and the `timeout` warning action. |
 | Manage Messages | Deleting messages with `/purge`. |
-| Read Message History | `/purge`, which reads the channel's recent messages to find the ones to delete. |
+| Read Message History | `/purge`, which reads the channel's recent messages to find the ones to delete, and replying to a mention. Without it, the bot answers a mention in the channel instead. |
 | Manage Server | Managing AutoMod rules and receiving AutoMod executions. |
 
 None of the core cogs send files. Add **Attach Files** if one of your own cogs does.

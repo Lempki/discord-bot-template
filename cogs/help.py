@@ -1,7 +1,12 @@
-"""The /help command, a short guide to the bot's features, and /about."""
+"""The /help command, a short guide to the bot's features, and /about.
 
+A message that only mentions the bot gets a short reply with a button that opens the same guide.
+"""
+
+import contextlib
 import logging
 import math
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -14,6 +19,7 @@ from utils.replies import respond
 
 if TYPE_CHECKING:
     from bot import BotApp
+    from localization import Strings
 
 log = logging.getLogger(__name__)
 
@@ -26,7 +32,14 @@ EMBEDS_PER_MESSAGE = 10
 AnyCommand = app_commands.Command[commands.Cog, ..., object]
 
 # The guide shows the core features in this order, after the bot's own features.
-CORE_ORDER = ("media", "voice", "info", "moderation", "admin", "template", "help")
+# The help cog itself has no section, because the guide is what /help shows.
+CORE_ORDER = ("media", "voice", "info", "moderation", "admin", "template")
+
+# The reply to a mention deletes itself after this long, so it does not stay in the chat.
+MENTION_REPLY_SECONDS = 60
+
+# A member who mentions the bot again within this long gets no second reply.
+MENTION_COOLDOWN_SECONDS = 30
 
 
 @dataclass(frozen=True)
@@ -127,12 +140,17 @@ class HelpCog(commands.Cog, name="Help"):
 
     def __init__(self, bot: "BotApp") -> None:
         self.bot = bot
+        # When each member last got a reply to a mention.
+        self._mentioned: dict[int, float] = {}
 
     async def _sections(self, interaction: discord.Interaction) -> list[Section]:
         s = self.bot.strings_for(interaction, private=True)
         in_guild = interaction.guild is not None
         sections: list[Section] = []
         for cog in sorted(self.bot.cogs.values(), key=_feature_order):
+            if cog is self:
+                # /help would explain itself, and the footer names /about instead.
+                continue
             visible: list[AnyCommand] = []
             for command in _leaf_commands(cog):
                 required = _required_permissions(command)
@@ -189,6 +207,10 @@ class HelpCog(commands.Cog, name="Help"):
     @app_commands.command(name="help")
     async def help_command(self, interaction: discord.Interaction) -> None:
         """Show a short guide to the bot and the commands you can use here."""
+        await self.send_guide(interaction)
+
+    async def send_guide(self, interaction: discord.Interaction) -> None:
+        """Shows the guide privately, for /help and the button under a reply to a mention."""
         s = self.bot.strings_for(interaction, private=True)
         sections = await self._sections(interaction)
         if not sections:
@@ -223,9 +245,63 @@ class HelpCog(commands.Cog, name="Help"):
             ephemeral=True,
         )
 
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message) -> None:
+        """Answers a message that only mentions the bot with a button that opens the guide.
+
+        Discord gives a bot the text of a message that mentions it, without Message Content.
+        A mention with other words gets no answer, because it may be meant for people.
+        """
+        user = self.bot.user
+        if user is None or message.author.bot or message.guild is None:
+            return
+        if message.content.strip() not in (f"<@{user.id}>", f"<@!{user.id}>"):
+            return
+        now = time.monotonic()
+        last = self._mentioned.get(message.author.id)
+        if last is not None and now - last < MENTION_COOLDOWN_SECONDS:
+            return
+        self._mentioned[message.author.id] = now
+        # The member asked, and the reply deletes itself, so it is sent even under LOCALE=silent.
+        s = self.bot.strings_for(message.guild, private=True)
+        if not s.mention_reply:
+            return
+        view = GuideButton(self, s)
+        try:
+            await message.reply(
+                s.mention_reply,
+                view=view,
+                mention_author=False,
+                delete_after=MENTION_REPLY_SECONDS,
+            )
+        except discord.Forbidden:
+            # A reply needs Read Message History, so a bot without it answers in the channel.
+            with contextlib.suppress(discord.HTTPException):
+                await message.channel.send(
+                    s.mention_reply, view=view, delete_after=MENTION_REPLY_SECONDS
+                )
+        except discord.HTTPException as error:
+            log.info(f"Could not answer a mention in {message.guild.id}: {error!r}")
+
     async def cog_load(self) -> None:
         """Logs that the cog is ready."""
         log.info(f"{self.qualified_name} cog loaded.")
+
+
+class GuideButton(discord.ui.View):
+    """The button under a reply to a mention, which opens the guide for whoever presses it."""
+
+    def __init__(self, cog: HelpCog, s: "Strings") -> None:
+        super().__init__(timeout=MENTION_REPLY_SECONDS)
+        self.cog = cog
+        self.show.label = s.mention_button or None
+
+    @discord.ui.button(emoji="📖", style=discord.ButtonStyle.primary)
+    async def show(
+        self, interaction: discord.Interaction, _: discord.ui.Button["GuideButton"]
+    ) -> None:
+        """Shows the guide privately, in the presser's own language."""
+        await self.cog.send_guide(interaction)
 
 
 async def setup(bot: "BotApp") -> None:
