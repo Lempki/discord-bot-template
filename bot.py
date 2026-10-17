@@ -32,7 +32,7 @@ class LogFormatter(logging.Formatter):
         )
 
 
-# The cogs that need the privileged Server Members intent, for member join events.
+# The cogs that need the privileged Server Members intent, for member join and leave events.
 MEMBERS_INTENT_COGS = frozenset({"events"})
 
 
@@ -53,6 +53,9 @@ class BotApp(commands.Bot):
         intents.members = any(cog in MEMBERS_INTENT_COGS for cog in config.cogs_to_load)
         # Not privileged. It delivers AutoMod executions for the warning escalation.
         intents.auto_moderation_execution = True
+        # Discord sends a bot the text of every direct message, and no feature reads them.
+        # Slash commands and buttons in direct messages still work, because they are interactions.
+        intents.dm_messages = False
         super().__init__(
             command_prefix=commands.when_mentioned,
             intents=intents,
@@ -85,12 +88,13 @@ class BotApp(commands.Bot):
 
         Args:
             where: An interaction uses the user's language. A guild uses its preferred language.
-            private: Whether the reply is ephemeral.
-                Private replies are sent even when LOCALE=silent.
-                Only the moderator or admin who ran the command sees them.
+            private: Whether the message is sent even when LOCALE=silent.
+                That is every message except a public reply to a command.
+                It covers ephemeral replies and posts to the moderators' alert channel.
+                It also covers messages that someone turned on, such as the music panel.
 
         Returns:
-            The matching Strings. The silent locale when LOCALE=silent and the reply is public.
+            The matching Strings. The silent locale when LOCALE=silent and the message is public.
         """
         if self.config.locale == SILENT and not private:
             return LOCALES[SILENT]

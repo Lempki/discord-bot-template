@@ -11,7 +11,7 @@ This is a clean and modular Python Discord bot template built with [discord.py](
 * Commands that start work, such as `/play` and the queue commands, have per-member cooldowns, so one member cannot flood a channel. A member who is too fast gets a private message that says when to try again.
 * Local development is supported through a `.env` file using `python-dotenv`.
 * Audio, image, and video assets are stored as regular files that Git marks as binary.
-* A `Strings` dataclass defines all user-facing messages as named format strings, in English and Finnish. Replies follow each user's Discord language, and `LOCALE` picks the fallback language. The default, `LOCALE=silent`, mutes public replies but still sends private ones such as `/help` and admin replies.
+* A `Strings` dataclass defines all user-facing messages as named format strings, in English and Finnish. Replies follow each user's Discord language, and `LOCALE` picks the fallback language. The default, `LOCALE=silent`, mutes public replies to commands but still sends private ones such as `/help` and admin replies. The music panel, the welcome, and the goodbye post under every setting, because someone turned them on.
 * The `events` cog gives new members the role set with `/admin autorole`, and welcomes them in the bot channel set with `/admin channel`. With `/admin goodbye`, it also says goodbye there when a member leaves, but not when a member was banned.
 * Moderation builds on Discord's own AutoMod. `/admin automod` manages keyword and preset rules, and blocked messages can count as warnings.
 * The `/help` command is a short guide to the bot, in a reply that only you see. It says what the bot is for, and explains each loaded feature that you may use, with its commands and a tip or two. Members see only the features they can use, so only admins see how to set the bot up. The guide reflects whichever cogs are active at runtime, and a feature without a guide text lists its commands instead. A message that only mentions the bot, such as `@Bot`, gets a short reply with a button that opens the same guide for whoever presses it. The reply deletes itself after a minute, and a mention with other words gets no answer. `/about` is named at the bottom of the guide.
@@ -79,6 +79,7 @@ Turn the intent off in the portal only after the bot runs a version that no long
 
 The **Presence Intent** and the **Message Content Intent** are not used and should stay disabled.
 Discord gives a bot the text of a message that mentions it without the Message Content Intent, which is all that the reply to a mention needs.
+The bot turns off the direct messages intent, so Discord never sends it the text of a direct message. Slash commands and buttons still work in direct messages, because they are interactions.
 AutoMod reads messages on Discord's side, so the bot never needs message content.
 The bot also uses the Auto Moderation Execution intent, which is not privileged and needs no portal setting.
 
@@ -292,7 +293,7 @@ All configuration is read from environment variables or from a `.env` file locat
 |---|---|---|---|
 | `DISCORD_TOKEN` | Yes | None | The Discord bot token used to authenticate with the API. |
 | `COGS_TO_LOAD` | No | `help` | A comma-separated list of cog module names to load at startup. Set it to `help,template,voice,media,info,admin,moderation,events` for the full feature set. |
-| `LOCALE` | No | `silent` | The fallback language for users whose Discord language the bot does not speak. Built-in values are `en` and `fi`. `silent` mutes public replies. Private replies, such as `/help`, admin and moderator replies, and error messages, are still sent because only the person who ran the command sees them. |
+| `LOCALE` | No | `silent` | The fallback language for users whose Discord language the bot does not speak. Built-in values are `en` and `fi`. `silent` mutes public replies to commands. Private replies, such as `/help`, admin and moderator replies, and error messages, are still sent because only the person who ran the command sees them. The music panel, the welcome, and the goodbye are not replies, so they post as well. |
 | `DATABASE_PATH` | No | `data/bot.db` | The SQLite file for per-guild settings and moderation data. The directory is created if needed. The Docker image uses `/app/data/bot.db`. |
 | `FFMPEG_PATH` | No | `ffmpeg` | The FFmpeg executable. Leave it unset to use FFmpeg from the system PATH. |
 | `DEV_GUILD_ID` | No | None | A server ID for development. Commands sync to that server instantly instead of globally. |
@@ -369,7 +370,8 @@ discord-bot-template/
 
 Replies follow the Discord language of the user who ran the command.
 A user whose language the bot does not speak gets the `LOCALE` language, and English after that.
-With the default `LOCALE=silent`, public replies stay muted for everyone, so set `LOCALE` to turn them on.
+With the default `LOCALE=silent`, public replies to commands stay muted for everyone, so set `LOCALE` to turn them on.
+The music panel, the welcome, and the goodbye post in the server's preferred language either way.
 Messages without an interaction, such as the join welcome and the goodbye, use the server's preferred language.
 
 Command descriptions, option descriptions, and choice names are localized natively, so each user's Discord client shows them in their own language.

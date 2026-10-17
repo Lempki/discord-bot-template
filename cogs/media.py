@@ -829,7 +829,8 @@ class GuildPlayer:
 
     async def _play(self, track: Track, voice_client: discord.VoiceClient) -> None:
         bot = self._cog.bot
-        s = bot.strings_for(self._guild)
+        # The player's messages belong to the music that a member started, so silence keeps them.
+        s = bot.strings_for(self._guild, private=True)
         prepared = self._take_prepared(track)
         try:
             if prepared is not None and prepared.info is not None:
@@ -1914,10 +1915,8 @@ class MediaCog(commands.Cog, name="Media"):
         player = self._players.get(guild.id)
         if player is None or player.current is None:
             return
-        s = self.bot.strings_for(guild)
-        if not s.panel_playing:
-            # The silent locale posts no panel.
-            return
+        # The panel is the music's controls, so LOCALE=silent posts it too.
+        s = self.bot.strings_for(guild, private=True)
         track = player.current
         voice_client = guild.voice_client
         paused = (
@@ -1976,12 +1975,12 @@ class MediaCog(commands.Cog, name="Media"):
             if panel is None:
                 return
             await self._forget_panel(panel)
-            s = self.bot.strings_for(panel.guild)
+            s = self.bot.strings_for(panel.guild, private=True)
             last = player.history[-1] if player.history else None
             songs = list(player.session)
             view: PlayedView | None = None
             try:
-                if last is None or not s.panel_ended:
+                if last is None:
                     await panel.edit(view=None)
                     return
                 if len(songs) > 1:
@@ -2161,7 +2160,7 @@ class MediaCog(commands.Cog, name="Media"):
             if not isinstance(channel, discord.abc.Messageable):
                 return
             message = await channel.fetch_message(message_id)
-            s = self.bot.strings_for(message.guild)
+            s = self.bot.strings_for(message.guild, private=True)
             embeds = [ended_card(embed, s) for embed in message.embeds[:1]]
             await message.edit(embeds=embeds, view=None)
             log.info(f"Closed a music panel that the last run left in {message.guild}.")

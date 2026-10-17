@@ -65,7 +65,8 @@ class EventsCog(commands.Cog, name="Events"):
             return
         channel = member.guild.get_channel(settings.bot_channel_id)
         # There is no interaction on a member join, so the guild's preferred language is used.
-        strings = self.bot.strings_for(member.guild)
+        # An admin turned this message on, so LOCALE=silent sends it too.
+        strings = self.bot.strings_for(member.guild, private=True)
         if isinstance(channel, discord.TextChannel) and (
             msg := strings.member_join_welcome.format(member=member.mention)
         ):
@@ -81,7 +82,8 @@ class EventsCog(commands.Cog, name="Events"):
         channel = member.guild.get_channel(settings.bot_channel_id)
         if not isinstance(channel, discord.TextChannel) or await _banned(member):
             return
-        strings = self.bot.strings_for(member.guild)
+        # An admin turned this message on, so LOCALE=silent sends it too.
+        strings = self.bot.strings_for(member.guild, private=True)
         name = discord.utils.escape_markdown(member.display_name)
         if msg := strings.member_leave_goodbye.format(member=name):
             # The member has left, so their name is plain text that pings nobody.

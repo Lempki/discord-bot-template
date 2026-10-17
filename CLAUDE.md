@@ -36,7 +36,7 @@ Read it before changing code. When the repositories are cloned side by side, the
 * A reply to a command never names the member who ran it, because Discord shows that above the reply.
   Name a member only in a message that is not a reply, such as the player's now-playing line, and never ping for it.
 * Never hard-code user-facing text in a cog. Add a field to `CoreStrings` in `utils/strings.py` for a core cog, or to `Strings` in `localization.py` for the bot's own cog. Give it text in every language, and send it with `respond()`.
-* Pick the language with `self.bot.strings_for(interaction)`. Pass `private=True` for ephemeral replies such as admin and moderator replies, which stay on even when `LOCALE=silent`. Public replies are muted under `LOCALE=silent`, which is the default.
+* Pick the language with `self.bot.strings_for(interaction)`. Pass `private=True` for ephemeral replies such as admin and moderator replies, which stay on even when `LOCALE=silent`. Public replies to commands are muted under `LOCALE=silent`, which is the default. A message that someone turned on, such as the music panel or the welcome, also passes `private=True`, so silence never hides it.
 * A command that starts work, such as a download or a generation, gets a per-member `app_commands.checks.cooldown`.
   The bot answers a member who is too fast with the private `cooldown` text.
 * A command that defers must end with `finish(interaction)`, so it never keeps showing "is thinking...".

@@ -54,6 +54,14 @@ def test_the_members_intent_is_asked_for_only_with_the_events_cog(
     assert bot.intents.members is members
 
 
+def test_the_bot_receives_no_direct_message_texts() -> None:
+    bot = BotApp(Config(discord_token="t"))
+
+    assert bot.intents.dm_messages is False
+    # Mentions in servers still arrive, for the reply that opens the guide.
+    assert bot.intents.guild_messages is True
+
+
 def test_log_format_uses_single_spaces() -> None:
     formatter = LogFormatter()
     lines = [

@@ -6,6 +6,7 @@ import discord
 
 from bot import BotApp
 from cogs.events import EventsCog
+from config import Config
 from localization import LOCALES
 from tests.conftest import GUILD_ID
 from utils import database
@@ -138,3 +139,18 @@ async def test_no_goodbye_without_a_bot_channel(db: None, bot: BotApp) -> None:
     await EventsCog(bot).on_member_remove(member)
 
     member.guild.get_channel.assert_not_called()
+
+
+async def test_a_silent_bot_still_welcomes_and_says_goodbye(db: None) -> None:
+    silent = BotApp(Config(discord_token="t", locale="silent"))
+    await database.upsert_settings(GUILD_ID, bot_channel_id=30, goodbye_message=True)
+    joining = joining_member()
+    leaving = leaving_member()
+
+    await EventsCog(silent).on_member_join(joining)
+    await EventsCog(silent).on_member_remove(leaving)
+
+    joining.guild.get_channel.return_value.send.assert_awaited_once_with(
+        EN.member_join_welcome.format(member="<@5>")
+    )
+    leaving.guild.get_channel.return_value.send.assert_awaited_once()

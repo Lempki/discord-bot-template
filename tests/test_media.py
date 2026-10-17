@@ -1161,7 +1161,7 @@ async def test_the_panel_moves_to_the_bottom_when_a_new_song_starts_after_chat()
     assert player.panel is channel.sent[1]
 
 
-async def test_the_silent_locale_posts_no_panel() -> None:
+async def test_the_silent_locale_still_posts_the_panel() -> None:
     bot, cog = await media_cog()
     bot.config = replace(bot.config, locale="silent")
     player = cog.player(MagicMock(id=GUILD_ID))
@@ -1169,7 +1169,9 @@ async def test_the_silent_locale_posts_no_panel() -> None:
 
     await cog.refresh_panel(MagicMock(id=GUILD_ID))
 
-    player.current.channel.send.assert_not_awaited()
+    # The panel is the music's controls, so muting command replies must not hide it.
+    (panel,) = player.current.channel.sent
+    assert panel.embeds[0].author.name == EN.panel_playing
 
 
 def listener(voice_channel: Any) -> MagicMock:
