@@ -20,6 +20,7 @@ class CoreStrings:
     # The placeholder of cooldown is {seconds}, the wait before the command works again.
     cooldown: str = ""
     command_unavailable: str = ""
+    command_not_allowed: str = ""
     # The template cog's example command.
     example_hello: str = ""
 
@@ -318,6 +319,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "command_failed": "Something went wrong. Try again later.",
         "cooldown": "Slow down a little. Try again in {seconds} s.",
         "command_unavailable": "This command is no longer available. Discord removes it from the menu shortly.",
+        "command_not_allowed": "You can't use this command here.",
         "example_hello": "Hello! This command comes from the template cog, the starting point for new features.",
         "not_in_voice": "You are not in a voice channel.",
         "bot_not_in_voice": "I am not in a voice channel.",
@@ -572,6 +574,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "command_failed": "Jokin meni pieleen. Yritä myöhemmin uudelleen.",
         "cooldown": "Hiljennä hieman tahtia. Yritä uudelleen {seconds} s päästä.",
         "command_unavailable": "Tätä komentoa ei ole enää käytössä. Discord poistaa sen valikosta pian.",
+        "command_not_allowed": "Et voi käyttää tätä komentoa täällä.",
         "example_hello": "Hei! Tämä komento tulee mallipohjan esimerkkiosasta, josta uudet ominaisuudet alkavat.",
         "not_in_voice": "Et ole äänikanavalla.",
         "bot_not_in_voice": "En ole äänikanavalla.",

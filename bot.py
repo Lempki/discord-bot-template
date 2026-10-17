@@ -15,6 +15,7 @@ from config import Config, ConfigError
 from localization import COMMAND_TEXT, LOCALES, Strings
 from utils import database
 from utils.about import custom_status, read_project_info
+from utils.checks import NotInBotChannel
 from utils.heartbeat import Heartbeat
 from utils.i18n import SILENT, LocaleTranslator, pick_locale
 from utils.replies import finish, respond
@@ -113,8 +114,11 @@ class BotApp(commands.Bot):
         # A cooldown counts as a failed check too, so it comes first.
         if isinstance(error, app_commands.CommandOnCooldown):
             text = s.cooldown.format(seconds=max(1, math.ceil(error.retry_after)))
-        elif isinstance(error, app_commands.CheckFailure):
+        elif isinstance(error, NotInBotChannel):
             text = s.bot_channel_only
+        elif isinstance(error, app_commands.CheckFailure):
+            # Another check, such as one that a bot adds for its own commands.
+            text = s.command_not_allowed
         elif isinstance(error, app_commands.CommandNotFound):
             # Discord can still offer a command from a cog that this run did not load.
             log.info(f"Answered /{error.name}, which this run does not have.")

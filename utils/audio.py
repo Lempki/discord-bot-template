@@ -9,7 +9,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import SplitResult, parse_qs, urlencode, urlsplit
 
 import discord
 import httpx
@@ -108,6 +108,8 @@ class MediaAPIClient:
         if filters := audio_filters(skips, even_loudness=even_loudness):
             options += f" -af {shlex.quote(filters)}"
         # FFmpeg takes extra request headers as one string in which each line ends in CRLF.
+        # The secret is then part of FFmpeg's command line, which discord.py logs at DEBUG level.
+        # The bot logs at INFO, so keep it there, or the log would hold the secret.
         headers = f"Authorization: Bearer {self._secret}\r\n"
         source = discord.FFmpegPCMAudio(
             url,
@@ -177,12 +179,13 @@ class MediaAPIClient:
         Raises:
             httpx.HTTPStatusError: With status 404 when no lyrics were found.
         """
-        params: dict[str, str | int] = {"title": title}
+        # api-media refuses a longer field, such as a long list of artists, with 422.
+        params: dict[str, str | int] = {"title": title[:LYRICS_FIELD_LIMIT]}
         if duration:
             params["duration"] = duration
         if artist and track:
-            params["artist"] = artist
-            params["track"] = track
+            params["artist"] = artist[:LYRICS_FIELD_LIMIT]
+            params["track"] = track[:LYRICS_FIELD_LIMIT]
         response = await self._http.get("/media/lyrics", params=params)
         response.raise_for_status()
         data: dict[str, Any] = response.json()
@@ -204,6 +207,15 @@ class MediaAPIClient:
         """Closes the underlying HTTP connection pool."""
         await self._http.aclose()
 
+
+# The YouTube and Spotify hosts that api-media accepts, so the bot and the service agree on links.
+YOUTUBE_HOSTS = frozenset(
+    {"youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"}
+)
+SPOTIFY_HOST = "open.spotify.com"
+
+# api-media accepts at most this many characters in each field of a lyrics lookup.
+LYRICS_FIELD_LIMIT = 300
 
 # EBU R128 loudness normalization to -14 LUFS, the level that streaming services play music at.
 # Each song then sounds about as loud as the one before it.
@@ -250,14 +262,37 @@ def source_name(query: str) -> str:
     return host
 
 
+def _parts(url: str) -> SplitResult | None:
+    try:
+        return urlsplit(url)
+    except ValueError:
+        return None
+
+
 def is_spotify_collection(url: str) -> bool:
-    """Returns whether a URL points to a Spotify album or playlist."""
-    return "spotify.com" in url and ("/album/" in url or "/playlist/" in url)
+    """Returns whether a URL points to a Spotify album or playlist.
+
+    It reads the URL as api-media does, so the two agree on which links are collections.
+    """
+    parts = _parts(url)
+    if parts is None or parts.hostname != SPOTIFY_HOST:
+        return False
+    segments = [segment for segment in parts.path.split("/") if segment]
+    # A market prefix such as /intl-fi/ can come before the type.
+    if segments and segments[0].startswith("intl-"):
+        segments = segments[1:]
+    return len(segments) >= 2 and segments[0] in ("album", "playlist")
 
 
 def is_youtube_playlist(url: str) -> bool:
-    """Returns whether a URL points to a YouTube playlist."""
-    return ("youtube.com" in url or "youtu.be" in url) and "list=" in url
+    """Returns whether a URL names a YouTube playlist with a non-empty list parameter.
+
+    It reads the URL as api-media does, so a link such as watch?v=x&list= plays as a video.
+    """
+    parts = _parts(url)
+    if parts is None or parts.hostname not in YOUTUBE_HOSTS:
+        return False
+    return bool(parse_qs(parts.query).get("list"))
 
 
 def file_source(path: Path | str, ffmpeg: str) -> discord.AudioSource:

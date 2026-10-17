@@ -44,10 +44,13 @@ from tests.conftest import GUILD_ID, make_interaction, sent_messages
 from utils import database
 from utils.audio import (
     LOUDNESS_FILTER,
+    LYRICS_FIELD_LIMIT,
     SILENCE,
     BufferedSource,
     MediaAPIClient,
     audio_filters,
+    is_spotify_collection,
+    is_youtube_playlist,
     prime,
     source_name,
 )
@@ -2427,3 +2430,53 @@ async def test_leavers_keep_their_songs_when_the_setting_is_off(db: None) -> Non
 
     assert not cog._leavers
     assert LEAVER_GRACE_SECONDS == 120
+
+
+@pytest.mark.parametrize(
+    ("url", "playlist"),
+    [
+        ("https://www.youtube.com/playlist?list=PL123", True),
+        ("https://music.youtube.com/watch?v=x&list=OLAK5", True),
+        ("https://youtu.be/x?list=PL123", True),
+        # An empty list parameter plays the video, as api-media sees it.
+        ("https://www.youtube.com/watch?v=x&list=", False),
+        ("https://www.youtube.com/watch?v=x", False),
+        ("https://example.com/watch?list=PL123", False),
+        ("https://notyoutube.com/playlist?list=PL123", False),
+    ],
+)
+def test_youtube_playlists_are_read_as_api_media_reads_them(
+    url: str, playlist: bool
+) -> None:
+    assert is_youtube_playlist(url) is playlist
+
+
+@pytest.mark.parametrize(
+    ("url", "collection"),
+    [
+        ("https://open.spotify.com/album/abc", True),
+        ("https://open.spotify.com/intl-fi/playlist/abc?si=x", True),
+        ("https://open.spotify.com/track/abc", False),
+        ("https://example.com/open.spotify.com/album/abc", False),
+        ("https://open.spotify.com/album/", False),
+    ],
+)
+def test_spotify_collections_are_read_as_api_media_reads_them(
+    url: str, collection: bool
+) -> None:
+    assert is_spotify_collection(url) is collection
+
+
+async def test_lyrics_lookups_stay_within_api_medias_limits() -> None:
+    client = MediaAPIClient("http://media:8000", "s3cret")
+    client._http = MagicMock()  # type: ignore[assignment]
+    response = MagicMock()
+    response.json.return_value = {"lyrics": "la"}
+    client._http.get = AsyncMock(return_value=response)
+
+    await client.get_lyrics("t" * 400, 200, artist="a" * 400, track="s" * 400)
+
+    params = client._http.get.call_args.kwargs["params"]
+    assert {len(params[key]) for key in ("title", "artist", "track")} == {
+        LYRICS_FIELD_LIMIT
+    }

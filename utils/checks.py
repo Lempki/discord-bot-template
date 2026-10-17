@@ -8,7 +8,11 @@ from discord import app_commands
 
 from utils import database
 
-__all__ = ["guild_of", "in_bot_channel"]
+__all__ = ["NotInBotChannel", "guild_of", "in_bot_channel"]
+
+
+class NotInBotChannel(app_commands.CheckFailure):
+    """Raised when a command runs outside the server's bot channel."""
 
 
 def guild_of(interaction: discord.Interaction) -> discord.Guild:
@@ -30,6 +34,9 @@ def in_bot_channel() -> Callable[[Any], Any]:
 
     The check passes when no channel is configured, and outside guilds.
     Guild admins configure the channel with /admin channel.
+
+    Raises:
+        NotInBotChannel: If the command runs in another channel, so the member hears why.
     """
 
     async def predicate(interaction: discord.Interaction) -> bool:
@@ -38,6 +45,8 @@ def in_bot_channel() -> Callable[[Any], Any]:
         settings = await database.get_settings(interaction.guild_id)
         if settings.bot_channel_id is None:
             return True
-        return interaction.channel_id == settings.bot_channel_id
+        if interaction.channel_id != settings.bot_channel_id:
+            raise NotInBotChannel()
+        return True
 
     return app_commands.check(predicate)

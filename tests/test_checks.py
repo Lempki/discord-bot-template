@@ -4,9 +4,10 @@ from collections.abc import Awaitable, Callable
 from unittest.mock import MagicMock
 
 import discord
+import pytest
 
 from utils import database
-from utils.checks import in_bot_channel
+from utils.checks import NotInBotChannel, in_bot_channel
 
 GUILD_ID = 111111111111111111
 CHANNEL_ID = 777777777777777777
@@ -60,11 +61,12 @@ async def test_in_bot_channel_matching_channel_returns_true(db: None) -> None:
     assert result is True
 
 
-async def test_in_bot_channel_wrong_channel_returns_false(db: None) -> None:
+async def test_in_bot_channel_wrong_channel_names_the_reason(db: None) -> None:
     await database.upsert_settings(GUILD_ID, bot_channel_id=CHANNEL_ID)
     interaction = _make_interaction(GUILD_ID, OTHER_CHANNEL_ID)
-    result = await _get_predicate()(interaction)
-    assert result is False
+    # Its own exception tells the bot to name the bot channel, unlike other checks.
+    with pytest.raises(NotInBotChannel):
+        await _get_predicate()(interaction)
 
 
 async def test_in_bot_channel_channel_cleared_returns_true(db: None) -> None:
