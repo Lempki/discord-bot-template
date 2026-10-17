@@ -141,14 +141,14 @@ def test_tools_from_dockerfile(
 
 def test_required_stack_secrets_skips_optional_ones() -> None:
     compose = """
-      API_SECRET: ${API_MORSHU_SECRET:?Set API_MORSHU_SECRET in .env}
+      API_SECRET: ${API_SPEECH_SECRET:?Set API_SPEECH_SECRET in .env}
       API_SECRET: ${API_MEDIA_SECRET:-}
       API_SECRET: ${API_TEXT_TO_SPEECH_SECRET:?Set it}
-      API_SECRET: ${API_MORSHU_SECRET:?Again}
+      API_SECRET: ${API_SPEECH_SECRET:?Again}
     """
 
     assert bootstrap.required_stack_secrets(compose) == [
-        ("API_MORSHU_SECRET", "api-morshu"),
+        ("API_SPEECH_SECRET", "api-speech"),
         ("API_TEXT_TO_SPEECH_SECRET", "api-text-to-speech"),
     ]
 
@@ -157,15 +157,15 @@ def test_stack_siblings_lists_each_repository_once() -> None:
     compose = """
   bot:
     build: .
-  morshu:
-    build: ../api-morshu
+  speech:
+    build: ../api-speech
   media:
     build: ../api-media
   again:
     build: ../api-media
 """
 
-    assert bootstrap.stack_siblings(compose) == ["api-media", "api-morshu"]
+    assert bootstrap.stack_siblings(compose) == ["api-media", "api-speech"]
 
 
 def test_stack_siblings_skips_services_behind_a_profile() -> None:
@@ -173,8 +173,8 @@ def test_stack_siblings_skips_services_behind_a_profile() -> None:
 services:
   bot:
     build: .
-  morshu:
-    build: ../api-morshu
+  speech:
+    build: ../api-speech
   media:
     build: ../api-media
     profiles: ["media"]
@@ -183,7 +183,7 @@ volumes:
   bot-data:
 """
 
-    assert bootstrap.stack_siblings(compose) == ["api-morshu"]
+    assert bootstrap.stack_siblings(compose) == ["api-speech"]
 
 
 @pytest.mark.parametrize(
@@ -309,7 +309,7 @@ def test_unrelated_folders_are_never_moved(repo: Path) -> None:
         ("api-media-v2.1", (2, 1)),
         ("api-media-main", None),
         ("api-mediaserver", None),
-        ("api-morshu-2.1.0", None),
+        ("api-speech-2.1.0", None),
     ],
 )
 def test_release_version(folder_name: str, version: tuple[int, ...] | None) -> None:

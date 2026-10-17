@@ -52,7 +52,7 @@ class AdminCog(commands.Cog, name="Admin"):
         interaction: discord.Interaction,
         channel: discord.TextChannel | None = None,
     ) -> None:
-        """Set or clear the only channel where the bot accepts commands."""
+        """Set or clear the channel for music, voice commands, and welcomes."""
         s = self.bot.strings_for(interaction, private=True)
         guild = guild_of(interaction)
         await database.upsert_settings(

@@ -187,7 +187,7 @@ The script also takes an action, such as `run.bat stop` on Windows or `./run.sh 
 | `update` | Installs the newest release. In a Git clone, it pulls the latest code, rebuilds on fresh base images, and restarts, then deletes the build cache that no build used for a week. |
 | `schedule` | Installs new releases automatically every night at 04:00. |
 | `unschedule` | Stops installing new releases automatically. |
-| `backup` | Copies the bot's database into the `backups` folder. Every update does it too. |
+| `backup` | Copies the bot's database into the `backups` folder. The update of a downloaded release does it too. |
 | `restore` | Puts a backup of the bot's database back. It asks which one and backs up the current database first. |
 | `local` | Runs the project in the terminal without Docker. Press Ctrl+C to stop it. |
 
@@ -220,7 +220,7 @@ The first download asks for a [token with the `read:packages` scope](https://git
 ### Backups
 
 The bot keeps its settings and moderation warnings in a SQLite database on a Docker volume.
-Every update copies it into the `backups` folder first, and the `backup` action does the same at any time.
+The update of a downloaded release copies it into the `backups` folder first, and the `backup` action does the same at any time.
 The folder keeps the last 7 copies, named after the time they were taken, such as `bot-2026-10-11-040000.db`.
 
 The `restore` action lists the copies and asks which one to put back.
@@ -369,8 +369,11 @@ discord-bot-template/
 ## Adding a new cog
 
 1. Copy `cogs/template.py` to a new file such as `cogs/my_feature.py`.
-2. Rename the class and implement your commands or event listeners.
-3. Add the module name to the `COGS_TO_LOAD` variable in your `.env` file.
+2. Rename the class, the cog's name, and the command group, such as `/example`, so the copy does not clash with the template cog.
+3. Implement your commands or event listeners. Add every message to `Strings` in `localization.py` with text in every language, and a `guide_<cog>` text that `/help` shows.
+4. Add each command and option description, exactly as written in English, to `BOT_COMMAND_TEXT` in `localization.py`, with its translation in every other language.
+5. Add the module name to the `COGS_TO_LOAD` variable in your `.env` file.
+6. Run `uv run pytest`, which fails while a language misses a message or a translation.
 
 ## Localization
 
@@ -390,18 +393,11 @@ The core texts exist only in English and Finnish, so a new language also needs e
 
 The tests list every message or command text a language is missing, and they fail on command texts longer than Discord's 100-character limit.
 
-## Related services
+## API services
 
-The following services work alongside bots built from this template and handle functionality that is managed centrally rather than bundled in each bot repository.
-They are private.
-A service of your own can implement the same HTTP endpoints, starting from [api-template](https://github.com/Lempki/api-template), and the media cog's client in `utils/audio.py` shows the endpoints it calls.
-
-| Service | Description |
-|---|---|
-| api-media | Resolves YouTube, SoundCloud, and Spotify track metadata, and streams their audio for playback. Supports Spotify tracks, albums, and playlists. |
-| api-scraper | Scrapes structured data from external websites using configurable CSS or XPath selectors. |
-| api-scheduler | Schedules persistent reminders that survive bot restarts and are delivered via Discord webhooks. |
-| api-morshu | Generates Morshu TTS audio and video from text. |
+The media cog plays music through a separate HTTP API service, which `API_MEDIA_URL` and `API_MEDIA_SECRET` point to.
+Its client, `MediaAPIClient` in `utils/audio.py`, shows the endpoints that the cog calls, so a service of your own can implement them, starting from [api-template](https://github.com/Lempki/api-template).
+A cog of your own reads any such service the same way, with `bot.config.service("<name>")`.
 
 ## Forking this template
 
@@ -413,7 +409,7 @@ The template includes generic English-language cogs that can be modified or repl
 * Connect a new api-* service by setting `API_<NAME>_URL` and `API_<NAME>_SECRET`, then read it in a cog with `bot.config.service("<name>")`. No change to `config.py` is needed.
 * Add the bot's own messages to `Strings` and `BOT_TEXT` in `localization.py`, and set the fallback `LOCALE` in your `.env` file.
 * Add audio files to `assets/audio/`, images to `assets/images/`, and videos to `assets/videos/`. Keep each file under 1 MB, because a pre-commit hook rejects larger ones.
-* Send images and videos to Discord as `discord.File` attachments. `audio.py` and `play_file()` are audio-only and are not used for other asset types.
+* Send images and videos to Discord as `discord.File` attachments. `utils/audio.py` and `VoicePresence.play()` are audio-only and are not used for other asset types.
 * Replace or remove `cogs/template.py` once it is no longer needed.
 
 A forked repository does not maintain a git link to this template.
@@ -421,7 +417,7 @@ Instead, `.template-manifest.toml` lists the core files that every bot keeps ide
 With both repositories cloned side by side, run this from the bot's directory to see which core files have drifted:
 
 ```bash
-uvx --from git+https://github.com/Lempki/dev-standards@v0.3.0 dev-standards template-check --template ../discord-bot-template --diff
+uvx --from git+https://github.com/Lempki/dev-standards@v0.5.0 dev-standards template-check --template ../discord-bot-template --diff
 ```
 
 Add `--apply` to copy the template's version over every drifted file, then review the result with `git diff` before committing.

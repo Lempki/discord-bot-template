@@ -74,8 +74,8 @@ ACTIONS = {
     "status": "Show whether each container runs, its version, and automatic updates.",
     "logs": "Follow the logs. Press Ctrl+C to stop following.",
     "update": "Install the newest release, or pull the latest code in a Git clone.",
-    "backup": "Copy the bot's database into the backups folder. Every update does it too.",
-    "restore": "Put a backup of the bot's database back.",
+    "backup": "Bots only: copy the database into backups. A release's update does it too.",
+    "restore": "Bots only: put a backup of the database back.",
     "schedule": f"Install new releases automatically every night at {UPDATE_HOUR:02d}:00.",
     "unschedule": "Stop installing new releases automatically.",
     "local": "Run the project in this window without Docker. Press Ctrl+C to stop it.",
@@ -778,7 +778,7 @@ def previous_ref(ref: str, project_name: str) -> str:
         project_name: The compose project name.
 
     Returns:
-        The same image name with a tag such as previous-discord-bot-morshu.
+        The same image name with a tag such as previous-my-bot.
     """
     repository, _, tag = ref.rpartition(":")
     # A colon before the last slash belongs to a registry port, such as localhost:5000/name.

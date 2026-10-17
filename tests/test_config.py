@@ -56,12 +56,12 @@ def test_services_are_discovered_by_name() -> None:
             "DISCORD_TOKEN": "t",
             "API_MEDIA_URL": "http://media:8000",
             "API_MEDIA_SECRET": "s1",
-            "API_MORSHU_URL": "http://morshu:8000",
-            "API_MORSHU_SECRET": "s2",
+            "API_SPEECH_URL": "http://speech:8000",
+            "API_SPEECH_SECRET": "s2",
         }
     )
     assert config.service("media") == ServiceConfig("http://media:8000", "s1")
-    assert config.service("MORSHU") == ServiceConfig("http://morshu:8000", "s2")
+    assert config.service("SPEECH") == ServiceConfig("http://speech:8000", "s2")
 
 
 def test_service_without_secret_is_not_configured() -> None:

@@ -1,6 +1,6 @@
 # discord-bot-template
 
-A discord.py bot template. Bots such as discord-bot-alijohtaja and discord-bot-morshu are created from it.
+A discord.py bot template, which Discord bots are created from.
 The shared conventions live in [dev-standards](https://github.com/Lempki/dev-standards), and its README is the rulebook for code, prose, commits, and engineering guidelines.
 Read it before changing code. When the repositories are cloned side by side, the local copy is `../dev-standards/README.md`.
 
@@ -27,7 +27,7 @@ Read it before changing code. When the repositories are cloned side by side, the
 * `.template-manifest.toml` lists the core files that every derived bot keeps identical to this template.
 * `setup.bat` and `setup.sh` only install uv and then run `scripts/bootstrap.py`, which does every other step. Keep it on the standard library, because it runs before the dependencies exist. It is identical in api-template and discord-bot-template, so change it in both.
 * `run.bat` and `run.sh` run `scripts/run.py`, which reuses the helpers in `scripts/bootstrap.py`. The same rules apply to it.
-* Change a core file here first. Derived bots then pick it up with `dev-standards template-check --apply`.
+* Change a core file here first. Derived bots then pick it up with `dev-standards template-check --template ../discord-bot-template --apply`.
 * Bot-specific behavior belongs in files outside the manifest, such as `localization.py`, `compose.stack.yml`, and the bot's own cogs.
 * `config.py` is generic. A cog reads a api-* service with `bot.config.service("<name>")`, which maps to `API_<NAME>_URL` and `API_<NAME>_SECRET`.
 

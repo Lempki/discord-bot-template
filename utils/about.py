@@ -34,7 +34,7 @@ class ProjectInfo:
     """What /about tells about the bot.
 
     Attributes:
-        name: The project name, such as discord-bot-morshu.
+        name: The project name, such as my-discord-bot.
         version: The release version, such as 2.5.0.
         repository: The link to the source code, or None when the project names none.
     """

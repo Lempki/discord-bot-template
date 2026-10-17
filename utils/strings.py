@@ -436,11 +436,11 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "mention_button": "Show the guide",
         "help_intro": "Each part below explains one of the bot's features and the commands that belong to it. Discord's / menu shows every command with its options.",
         "help_commands": "Commands: {commands}",
-        "help_bot_channel": "In this server, the bot takes commands only in {channel}.",
+        "help_bot_channel": "In this server, the music and voice commands work only in {channel}.",
         "guide_media": "Join a voice channel, then use `/play` with a YouTube, SoundCloud, or Spotify link, or with words to search for. Each song shows on a panel whose buttons pause, skip, go back, and repeat, and `/queue show` lists what waits. `/music` and `/queue` hold the other controls. Spotify albums and songs work, but Spotify keeps most playlists from bots. When the server has a DJ role, some controls belong to DJs while others listen, and skips go by vote. When the queue takes turns, each member's songs play in rotation with the others'. The panel's 📩 button sends you the playing song.",
         "guide_voice": "The bot joins your voice channel when a feature needs it, and leaves on its own when everyone else has left or nothing has played for a while. `/voice join` brings it to your channel, `/voice leave` sends it out, and `/voice stop` stops the sound that plays now.",
         "guide_moderation": "`/warn` gives a member a warning, and at the server's limit the bot kicks, bans, or times them out. `/warnings` lists and removes warnings, and `/timeout`, `/kick`, and `/ban` act at once. `/purge` deletes recent messages. Right-click a member and choose Apps, then Warn, to warn them quickly. Anyone can right-click a message and choose Report to moderators, which sends it to the AutoMod alert channel.",
-        "guide_admin": "`/admin` sets the bot up for this server. `/admin channel` limits commands to one channel, `/admin autorole` gives new members a role and welcomes them, `/admin djrole` picks who controls the music, `/admin fairqueue` makes the queue take turns between members, `/admin loudness` evens out how loud songs are, `/admin leavecleanup` drops the waiting songs of members who leave voice, `/admin goodbye` says goodbye to members who leave, and `/admin automod` manages Discord's AutoMod filters. `/admin status` shows every setting.",
+        "guide_admin": "`/admin` sets the bot up for this server. `/admin channel` picks the channel for the music and voice commands and for the welcome, `/admin autorole` gives new members a role, `/admin djrole` picks who controls the music, `/admin fairqueue` makes the queue take turns between members, `/admin loudness` evens out how loud songs are, `/admin leavecleanup` drops the waiting songs of members who leave voice, `/admin goodbye` says goodbye to members who leave, and `/admin automod` manages Discord's AutoMod filters. `/admin status` shows every setting.",
         "guide_template": "`/example hello` shows how a command of a new feature works. A new feature starts as a copy of cogs/template.py.",
         "guide_info": "`/info server` shows the server's age, size, and boosts, `/info member` shows when a member joined and their roles, and `/info avatar` shows an avatar in full size. Only you see the answers.",
         "section_info": "Info",
@@ -691,11 +691,11 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "mention_button": "Näytä ohje",
         "help_intro": "Jokainen alla oleva osa kertoo yhdestä botin ominaisuudesta ja sen komennoista. Discordin /-valikko näyttää kaikki komennot vaihtoehtoineen.",
         "help_commands": "Komennot: {commands}",
-        "help_bot_channel": "Tällä palvelimella botti ottaa komentoja vastaan vain kanavalla {channel}.",
+        "help_bot_channel": "Tällä palvelimella musiikki- ja äänikomennot toimivat vain kanavalla {channel}.",
         "guide_media": "Liity äänikanavalle ja käytä `/play`-komentoa YouTube-, SoundCloud- tai Spotify-linkin tai hakusanojen kanssa. Jokainen kappale näkyy paneelissa, jonka painikkeilla voi tauottaa, ohittaa, palata ja toistaa, ja `/queue show` näyttää jonon. `/music` ja `/queue` sisältävät muut säätimet. Spotifyn albumit ja kappaleet toimivat, mutta useimpia soittolistoja Spotify ei jaa boteille. Jos palvelimella on DJ-rooli, osa säätimistä kuuluu DJ:lle muiden kuunnellessa, ja ohitukset äänestetään. Kun jono vuorottelee, kunkin jäsenen kappaleet soivat vuorotellen muiden kanssa. Paneelin 📩-painike lähettää sinulle soivan kappaleen.",
         "guide_voice": "Botti liittyy äänikanavallesi, kun jokin ominaisuus tarvitsee sitä, ja poistuu itse, kun muut ovat lähteneet tai mitään ei ole soinut hetkeen. `/voice join` tuo sen kanavallesi, `/voice leave` lähettää sen pois, ja `/voice stop` pysäyttää nyt soivan äänen.",
         "guide_moderation": "`/warn` antaa jäsenelle varoituksen, ja palvelimen rajalla botti potkaisee jäsenen, antaa porttikiellon tai aikalisän. `/warnings` näyttää ja poistaa varoituksia, ja `/timeout`, `/kick` ja `/ban` toimivat heti. `/purge` poistaa viimeisimmät viestit. Napsauta jäsentä hiiren oikealla ja valitse Sovellukset ja Varoita, niin varoitat nopeasti. Kuka tahansa voi napsauttaa viestiä hiiren oikealla ja valita Ilmoita moderaattoreille, jolloin viesti menee AutoMod-hälytyskanavalle.",
-        "guide_admin": "`/admin` määrittää botin tälle palvelimelle. `/admin channel` rajaa komennot yhdelle kanavalle, `/admin autorole` antaa uusille jäsenille roolin ja toivottaa heidät tervetulleiksi, `/admin djrole` valitsee, kuka ohjaa musiikkia, `/admin fairqueue` saa jonon vuorottelemaan jäsenten kesken, `/admin loudness` tasaa kappaleiden äänenvoimakkuuden, `/admin leavecleanup` poistaa äänikanavalta lähtevien jäsenten odottavat kappaleet, `/admin goodbye` hyvästelee lähtevät jäsenet, ja `/admin automod` hallitsee Discordin AutoMod-suodattimia. `/admin status` näyttää kaikki asetukset.",
+        "guide_admin": "`/admin` määrittää botin tälle palvelimelle. `/admin channel` valitsee kanavan musiikki- ja äänikomennoille sekä tervetulotoivotukselle, `/admin autorole` antaa uusille jäsenille roolin, `/admin djrole` valitsee, kuka ohjaa musiikkia, `/admin fairqueue` saa jonon vuorottelemaan jäsenten kesken, `/admin loudness` tasaa kappaleiden äänenvoimakkuuden, `/admin leavecleanup` poistaa äänikanavalta lähtevien jäsenten odottavat kappaleet, `/admin goodbye` hyvästelee lähtevät jäsenet, ja `/admin automod` hallitsee Discordin AutoMod-suodattimia. `/admin status` näyttää kaikki asetukset.",
         "guide_template": "`/example hello` näyttää, miten uuden ominaisuuden komento toimii. Uusi ominaisuus alkaa kopiona tiedostosta cogs/template.py.",
         "guide_info": "`/info server` näyttää palvelimen iän, koon ja tehostukset, `/info member` näyttää, milloin jäsen liittyi ja hänen roolinsa, ja `/info avatar` näyttää profiilikuvan täysikokoisena. Vain sinä näet vastaukset.",
         "section_info": "Tiedot",
@@ -703,7 +703,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "info_owner": "Omistaja",
         "info_members": "Jäseniä",
         "info_channels": "Kanavia",
-        "info_channel_counts": "{text} teksti, {voice} ääni",
+        "info_channel_counts": "{text} tekstikanavaa, {voice} äänikanavaa",
         "info_roles": "Roolit",
         "info_boosts": "Tehostukset",
         "info_boost_level": "Taso {level}, {count} tehostusta",
@@ -742,7 +742,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
             "**Botin asetukset**\nKanava: {channel}\nAutomaattinen rooli: {autorole}\nDJ-rooli: {dj}\n"
             "Vuorotteleva jono: {fair}\nTasainen äänenvoimakkuus: {loudness}\n"
             "Lähtijän kappaleiden poisto: {leavers}\nHyvästit: {goodbye}\n"
-            "Varoitusraja: {threshold}\nSeuraus: {action}\n"
+            "Varoitusraja: {threshold}\nVaroitusrajan seuraus: {action}\n"
             "Aikalisän pituus: {timeout} minuuttia\nAutoMod-seuraus: {escalation}\n"
             "AutoMod-hälytykset: {alert}\nAutoMod-avainsanat: {keywords}\n"
             "AutoMod-esiasetukset: {presets}"
@@ -837,7 +837,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
 CORE_COMMAND_TEXT: dict[str, dict[str, str]] = {
     "fi": {
         "Configure the bot for this server.": "Määritä botin asetukset tälle palvelimelle.",
-        "Set or clear the only channel where the bot accepts commands.": "Aseta tai poista kanava, jolla botti ainoastaan ottaa komentoja vastaan.",
+        "Set or clear the channel for music, voice commands, and welcomes.": "Aseta tai poista kanava musiikille, äänikomennoille ja tervetulotoivotuksille.",
         "The channel to allow. Leave it empty to allow every channel.": "Sallittu kanava. Jätä tyhjäksi salliaksesi kaikki kanavat.",
         "Set or clear the DJ role, which controls the music while others listen.": "Aseta tai poista DJ-rooli, joka ohjaa musiikkia muiden kuunnellessa.",
         "The DJ role. Leave it empty to let everyone control the music.": "DJ-rooli. Jätä tyhjäksi, niin kaikki ohjaavat musiikkia.",
@@ -858,7 +858,7 @@ CORE_COMMAND_TEXT: dict[str, dict[str, str]] = {
         "Kick": "Potku",
         "Ban": "Porttikielto",
         "Timeout": "Aikalisä",
-        "Set how long the timeout warning action lasts.": "Aseta, kuinka kauan aikalisä kestää.",
+        "Set how long the timeout warning action lasts.": "Aseta, kuinka kauan varoitusrajan aikalisä kestää.",
         "How long the timeout lasts, from 1 minute to 28 days (40320 minutes).": "Aikalisän pituus 1 minuutista 28 päivään (40320 minuuttia).",
         "Manage the Discord AutoMod rules that this bot owns.": "Hallitse botin omistamia Discordin AutoMod-sääntöjä.",
         "Add keywords to the bot's AutoMod keyword filter.": "Lisää avainsanoja botin AutoMod-avainsanasuodattimeen.",
@@ -897,7 +897,7 @@ CORE_COMMAND_TEXT: dict[str, dict[str, str]] = {
         "Shuffle the tracks waiting in the queue.": "Sekoita jonossa odottavat kappaleet.",
         "Remove every waiting track. The current track keeps playing.": "Poista kaikki odottavat kappaleet. Nykyinen kappale soi loppuun.",
         "Skip to a track in the queue, dropping the tracks before it.": "Hyppää jonon kappaleeseen ja ohita sitä edeltävät.",
-        "Show or change the music volume, from 0 to 100 percent.": "Näytä tai muuta musiikin äänenvoimakkuutta 0–100 prosenttiin.",
+        "Show or change the music volume, from 0 to 100 percent.": "Näytä tai muuta musiikin äänenvoimakkuutta (0–100 %).",
         "The new volume. Leave it out to see the current one.": "Uusi äänenvoimakkuus. Jätä pois nähdäksesi nykyisen.",
         "Go back to the song that played before.": "Palaa edelliseen kappaleeseen.",
         "Repeat the current song or the whole queue.": "Toista nykyistä kappaletta tai koko jonoa.",
