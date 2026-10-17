@@ -174,7 +174,7 @@ async def test_warn_refuses_higher_ranked_target(
 
 
 # ---------------------------------------------------------------------------
-# The warnings, clearwarning, and clearwarnings commands.
+# /warnings list, remove, and clear.
 # ---------------------------------------------------------------------------
 
 

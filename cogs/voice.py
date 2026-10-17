@@ -1,4 +1,4 @@
-"""Voice channel commands: join, leave, and skip."""
+"""Voice channel commands: /voice join, leave, and stop."""
 
 import logging
 from typing import TYPE_CHECKING
@@ -43,13 +43,13 @@ class VoiceCog(commands.Cog, name="Voice"):
             or member.voice is None
             or member.voice.channel is None
         ):
-            await respond(interaction, s.not_in_voice, user=member.display_name)
+            await respond(interaction, s.not_in_voice)
             await finish(interaction)
             return
         target = member.voice.channel
         current = guild.voice_client
         if isinstance(current, discord.VoiceClient) and current.channel == target:
-            await respond(interaction, s.already_same_channel, user=member.display_name)
+            await respond(interaction, s.already_same_channel)
         else:
             moved = isinstance(current, discord.VoiceClient)
             await self.bot.voice_presence.connect(target)
@@ -80,7 +80,7 @@ class VoiceCog(commands.Cog, name="Voice"):
     @in_bot_channel()
     # One member may skip five times within ten seconds, so nobody can skip a playlist away.
     @app_commands.checks.cooldown(5, 10.0)
-    async def skip(self, interaction: discord.Interaction) -> None:
+    async def stop(self, interaction: discord.Interaction) -> None:
         """Stop the sound that plays now, such as a clip, speech, or the current song."""
         s = self.bot.strings_for(interaction)
         guild = guild_of(interaction)

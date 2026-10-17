@@ -29,12 +29,12 @@ Read it before changing code. When the repositories are cloned side by side, the
 * `run.bat` and `run.sh` run `scripts/run.py`, which reuses the helpers in `scripts/bootstrap.py`. The same rules apply to it.
 * Change a core file here first. Derived bots then pick it up with `dev-standards template-check --template ../discord-bot-template --apply`.
 * Bot-specific behavior belongs in files outside the manifest, such as `localization.py`, `compose.stack.yml`, and the bot's own cogs.
-* `config.py` is generic. A cog reads a api-* service with `bot.config.service("<name>")`, which maps to `API_<NAME>_URL` and `API_<NAME>_SECRET`.
+* `config.py` is generic. A cog reads an api-* service with `bot.config.service("<name>")`, which maps to `API_<NAME>_URL` and `API_<NAME>_SECRET`.
 
 ## Messages and languages
 
 * A reply to a command never names the member who ran it, because Discord shows that above the reply.
-  Name a member only in a message that is not a reply, such as the player's now-playing line, and never ping for it.
+  Name a member only in a message that is not a reply, such as the music panel, and never ping for it.
 * Never hard-code user-facing text in a cog. Add a field to `CoreStrings` in `utils/strings.py` for a core cog, or to `Strings` in `localization.py` for the bot's own cog. Give it text in every language, and send it with `respond()`.
 * Pick the language with `self.bot.strings_for(interaction)`. Pass `private=True` for ephemeral replies such as admin and moderator replies, which stay on even when `LOCALE=silent`. Public replies to commands are muted under `LOCALE=silent`, which is the default. A message that someone turned on, such as the music panel or the welcome, also passes `private=True`, so silence never hides it.
 * A command that starts work, such as a download or a generation, gets a per-member `app_commands.checks.cooldown`.

@@ -7,7 +7,7 @@ This is a clean and modular Python Discord bot template built with [discord.py](
 * The template uses a cog-based architecture. Each feature group is implemented as an isolated and reloadable module.
 * All configuration is handled through environment variables. No tokens or IDs are hardcoded in the source code.
 * FFmpeg is resolved automatically from the system PATH or from a configurable environment variable.
-* Per-guild audio queue support is included. This ensures safe operation across multiple servers. `/play` takes a link or words to search for, on YouTube or, with its `source` option, on SoundCloud, and suggests search results while you type. Its reply links the track it found and names its source and its place in the queue, with an estimate of when it plays, and its `when` option plays it next or now. Now puts the interrupted song right after it, and a playlist sends only its first track ahead, so the waiting songs keep their place. Every song shows on a now-playing panel in the channel where it was requested: one message with the song, its artist and album when the site names them, the playlist or album it came from, who added it, a progress bar that moves every 10 seconds, the next songs, and who last skipped, paused, or otherwise changed the music, by a button or a command. Its buttons shuffle, go back, pause, skip, repeat, and stop, and only members in the bot's voice channel can press those. Stop asks the presser privately before it removes waiting songs. Its other buttons show anyone the queue or the lyrics privately, and its 📩 button sends the presser the playing song with its artist, album, and length in a direct message, or privately in the channel when their direct messages are closed. The panel moves to the bottom of the chat when a new song starts after others wrote, and keeps the last song without buttons when the music ends, or when the bot restarts while music plays. A stopped panel says so, with who stopped the song and where, how many waiting songs the stop removed, and when. After several songs, the finished panel sums the session up instead: how many songs played and for how long, who added them, the album or playlist that most came from, and the last song. Its Played songs button shows anyone the session's songs privately, a page at a time, and each server keeps the lists of its last 20 sessions in the database. An admin can pick a DJ role with `/admin djrole`. While others listen, only members with that role, admins, and a lone listener can then stop, clear, shuffle, repeat, change the volume, skip to a song, play something now, or change other members' songs. Anyone can still add songs, pause, go back, and change their own songs. A skip of someone else's song then needs votes from half of the listeners, unless at most two listen. Without a DJ role, everyone controls the music. With `/admin fairqueue`, the queue takes turns between the members who add songs, so one member's long album no longer holds everyone else's songs back. `/play`'s `when` option still jumps the line, and repeating the whole queue keeps the order it played in. With `/admin leavecleanup`, a member who leaves voice for two minutes takes their waiting songs out of the queue with them. The queue holds at most 500 waiting songs, which `MAX_QUEUE_LENGTH` in `.env` changes, and a playlist that does not fit adds the songs that fit and says how many were left out. Since February 2026, Spotify shares the tracks of a playlist only with its owners and collaborators, so `/play` explains that it cannot read most Spotify playlists, while albums still work. `/queue show` shows you the whole queue a page at a time, and `/queue remove`, `move`, `shuffle`, `clear`, and `skipto` change the queue by the numbers it shows. `/music volume` sets the music volume of the server, which stays after restarts. `/music skip` skips the song, or votes to skip it, `/music previous` goes back to the song before, `/music loop` repeats the current song or the whole queue, `/music pause` and `/music stop` pause and stop, and `/music lyrics` shows you a song's lyrics from LRCLIB. While a song plays, the voice channel's status shows it. The audio streams through api-media, which downloads it with yt-dlp, so YouTube cannot cut a song off partway. Songs play at an even loudness, so the next song is about as loud as the last one, which `/admin loudness` turns off. The parts of a YouTube music video that SponsorBlock's community marks as not music, such as a skit before the song, are left out, and the panel counts the song's length without them.
+* The `media` cog plays music from YouTube, SoundCloud, and Spotify, with a shared queue and a now-playing panel with buttons. [Music](#music) describes it.
 * Commands that start work, such as `/play` and the queue commands, have per-member cooldowns, so one member cannot flood a channel. A member who is too fast gets a private message that says when to try again.
 * Local development is supported through a `.env` file using `python-dotenv`.
 * Audio, image, and video assets are stored as regular files that Git marks as binary.
@@ -18,7 +18,48 @@ This is a clean and modular Python Discord bot template built with [discord.py](
 * The `/about` command shows the bot's version, how long it has been online, its response time, and a link to its source code. The bot's status reads "/help shows what I can do", or "🎵 Playing music" while music plays in any server, in the bot's own language. A bot made from the template gives itself a status of its own with `status_idle` in its `localization.py`.
 * Dependencies are managed with [uv](https://docs.astral.sh/uv/) and pinned in `uv.lock`, so every machine and container installs the same versions.
 * Setup scripts for Windows and Unix are included. Running `setup.bat` or `setup.sh` installs the dependencies and creates the initial `.env` file in a single step.
-* Tests, linting, and formatting run in CI on every push through the shared [dev-standards](https://github.com/Lempki/dev-standards) workflow.
+* Tests, linting, and formatting run in CI on every push to `main` and on every pull request, through the shared [dev-standards](https://github.com/Lempki/dev-standards) workflow.
+
+## Music
+
+The `media` cog plays music in voice channels through api-media, which downloads each song with yt-dlp, so YouTube cannot cut a song off partway.
+
+### Playing
+
+* `/play` takes a link or words to search for, on YouTube or, with its `source` option, on SoundCloud, and suggests search results while you type.
+* Its reply links the track it found and names its source and its place in the queue, with an estimate of when it plays.
+* Its `when` option plays the song next or now. Now puts the interrupted song right after it, and a playlist sends only its first track ahead, so the waiting songs keep their place.
+* Each track of a playlist or album waits in the queue on its own. A Spotify album starts at once, because each track finds its YouTube match when its turn comes.
+* Since February 2026, Spotify shares the tracks of a playlist only with its owners and collaborators, so `/play` explains that it cannot read most Spotify playlists. Albums and songs still work.
+
+### The now-playing panel
+
+* Every song shows on a panel in the channel where it was requested: the song, its artist and album when the site names them, the playlist or album it came from, who added it, a progress bar that moves every 10 seconds, the next songs, and who last changed the music, by a button or a command.
+* Its buttons shuffle, go back, pause, skip, repeat, and stop. Only members in the bot's voice channel can press those, and Stop asks the presser privately before it removes waiting songs.
+* Its other buttons show anyone the queue or the lyrics privately, and 📩 sends the presser the playing song with its artist, album, and length in a direct message, or privately in the channel when their direct messages are closed.
+* The panel moves to the bottom of the chat when a new song starts after others wrote.
+* When the music ends, or when the bot restarts while music plays, the panel keeps the last song without buttons. A stopped panel says so, with who stopped the song and where, how many waiting songs the stop removed, and when.
+* After several songs, the finished panel sums the session up instead: how many songs played and for how long, who added them, the album or playlist that most came from, and the last song. Its Played songs button shows anyone the session's songs privately, a page at a time, and each server keeps the lists of its last 20 sessions.
+* While a song plays, the voice channel's status shows it.
+
+### The queue
+
+* The queue holds at most 500 waiting songs, which `MAX_QUEUE_LENGTH` in `.env` changes. A playlist that does not fit adds the songs that fit and says how many were left out.
+* `/queue show` shows you the whole queue a page at a time, and `/queue remove`, `move`, `shuffle`, `clear`, and `skipto` change it by the numbers it shows.
+* With `/admin fairqueue`, the queue takes turns between the members who add songs, so one member's long album no longer holds everyone else's songs back. `/play`'s `when` option still jumps the line, and repeating the whole queue keeps the order it played in.
+* With `/admin leavecleanup`, a member who leaves voice for two minutes takes their waiting songs out of the queue with them.
+
+### Controls
+
+* `/music skip` skips the song, or votes to skip it, `/music previous` goes back to the song before, `/music loop` repeats the current song or the whole queue, and `/music pause` and `/music stop` pause and stop.
+* `/music volume` sets the server's music volume, which stays after restarts, and `/music lyrics` shows you a song's lyrics from LRCLIB.
+* An admin can pick a DJ role with `/admin djrole`. While others listen, only members with that role, admins, and a lone listener can then stop, clear, shuffle, repeat, change the volume, skip to a song, play something now, or change other members' songs. Anyone can still add songs, pause, go back, and change their own songs.
+* With a DJ role, a skip of someone else's song needs votes from half of the listeners, unless at most two listen. Without a DJ role, everyone controls the music.
+
+### Sound
+
+* Songs play at an even loudness, so the next song is about as loud as the last one, which `/admin loudness` turns off.
+* The parts of a YouTube music video that SponsorBlock's community marks as not music, such as a skit before the song, are left out, and the panel counts the song's length without them.
 
 ## Commands
 
@@ -43,9 +84,12 @@ Commands are grouped by feature, so each name says what it acts on, and Discord'
 
 ## Prerequisites
 
-* You must have Python 3.12 installed on your system.
-* You must install [uv](https://docs.astral.sh/uv/). On Windows, run `winget install --id astral-sh.uv`. On macOS or Linux, follow the uv installation guide.
-* You must install [FFmpeg](https://ffmpeg.org/) and ensure that it is available in your system PATH. You may alternatively define a custom path using the `FFMPEG_PATH` environment variable.
+The setup scripts under [Setup](#setup) install uv and offer Docker and FFmpeg, so these steps are only needed for a manual setup.
+
+* Python 3.12, which uv installs when it is missing.
+* [Docker](https://docs.docker.com/get-started/get-docker/), for running the bot in containers, which is how a downloaded release runs.
+* [uv](https://docs.astral.sh/uv/). On Windows, run `winget install --id astral-sh.uv`. On macOS or Linux, follow the uv installation guide.
+* [FFmpeg](https://ffmpeg.org/) on your system PATH, for running the bot without Docker. You may alternatively define a custom path using the `FFMPEG_PATH` environment variable.
 
   * On Windows, install FFmpeg with the following command:
 
@@ -306,7 +350,7 @@ All configuration is read from environment variables or from a `.env` file locat
 | `MEDIA_COOKIES_DIR` | No | `../api-media/cookies` | The folder that the stack mounts as api-media's `cookies` folder, for a YouTube cookies file. A downloaded release uses `./cookies`. |
 | `MAX_QUEUE_LENGTH` | No | `500` | How many songs may wait in a server's music queue. A playlist that does not fit adds the songs that fit. |
 | `UPDATE_WEBHOOK_URL` | No | None | A Discord webhook that hears when a nightly update installs a new release or fails. See [Updates](#updates). It works like a password. |
-| `API_<NAME>_URL` | No | None | The base URL of a api-* service, for example `API_MEDIA_URL`. |
+| `API_<NAME>_URL` | No | None | The base URL of an api-* service, for example `API_MEDIA_URL`. |
 | `API_<NAME>_SECRET` | No | None | The bearer token of that service. It must match `API_SECRET` in the service's own configuration. |
 
 A cog that needs a service asks for it by name. If the URL or the secret is missing, the bot stops at startup with an error that names both variables.
@@ -348,7 +392,7 @@ discord-bot-template/
 │   ├── audio/              # Audio files.
 │   ├── images/             # Image files.
 │   └── videos/             # Video files.
-├── tests/                  # Pytest suite. Runs in CI on every push.
+├── tests/                  # Pytest suite, including the setup and run scripts' tests.
 ├── .env.template           # Template for environment variables.
 ├── .template-manifest.toml # Core files that derived bots keep identical to this template.
 ├── pyproject.toml          # Project metadata and dependencies.
@@ -356,14 +400,16 @@ discord-bot-template/
 ├── ruff.toml               # Lint and format settings on top of the shared baseline.
 ├── setup.bat               # Windows setup script.
 ├── setup.sh                # macOS and Linux setup script.
-├── scripts/bootstrap.py    # The steps that both setup scripts run.
-├── scripts/run.py          # The actions that both run scripts take.
+├── scripts/
+│   ├── bootstrap.py        # The steps that both setup scripts run.
+│   └── run.py              # The actions that both run scripts take.
 ├── run.bat                 # Windows run script.
 ├── run.sh                  # macOS and Linux run script.
 ├── Dockerfile
 ├── docker-compose.yml      # Runs the bot alone, with its database on a volume.
 ├── compose.stack.yml       # Runs the bot together with the api-* services it uses.
-└── .dockerignore
+├── .dockerignore
+└── .github/                # CI and release workflows, Dependabot, and the Idea issue form.
 ```
 
 ## Adding a new cog
@@ -399,11 +445,11 @@ The media cog plays music through a separate HTTP API service, which `API_MEDIA_
 Its client, `MediaAPIClient` in `utils/audio.py`, shows the endpoints that the cog calls, so a service of your own can implement them, starting from [api-template](https://github.com/Lempki/api-template).
 A cog of your own reads any such service the same way, with `bot.config.service("<name>")`.
 
-## Forking this template
+## Making a bot from this template
 
 Use the GitHub template button to create a new repository based on this project.
 
-The template includes generic English-language cogs that can be modified or replaced. A typical customization workflow includes the following steps:
+The template includes generic cogs, in English and Finnish, that can be modified or replaced. A typical customization workflow includes the following steps:
 
 * Add new bot-specific cogs in the `cogs/` directory.
 * Connect a new api-* service by setting `API_<NAME>_URL` and `API_<NAME>_SECRET`, then read it in a cog with `bot.config.service("<name>")`. No change to `config.py` is needed.
@@ -412,7 +458,7 @@ The template includes generic English-language cogs that can be modified or repl
 * Send images and videos to Discord as `discord.File` attachments. `utils/audio.py` and `VoicePresence.play()` are audio-only and are not used for other asset types.
 * Replace or remove `cogs/template.py` once it is no longer needed.
 
-A forked repository does not maintain a git link to this template.
+A bot made from the template keeps no Git link to it.
 Instead, `.template-manifest.toml` lists the core files that every bot keeps identical to the template.
 With both repositories cloned side by side, run this from the bot's directory to see which core files have drifted:
 

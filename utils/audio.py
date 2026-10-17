@@ -126,7 +126,7 @@ class MediaAPIClient:
         query: str | None = None,
         source: str = "youtube",
     ) -> dict[str, Any]:
-        """Resolves a URL or search query to track metadata, including a fresh stream_url.
+        """Resolves a URL or search query to track metadata, including its webpage_url.
 
         Args:
             url: A track's link.

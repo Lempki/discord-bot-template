@@ -32,7 +32,7 @@ class TemplateCog(commands.Cog, name="Template"):
     )
 
     # The docstring becomes the command description shown in Discord. Keep it under 100 characters.
-    # Translate it by adding the exact English text to COMMAND_TEXT in localization.py.
+    # Translate it by adding the exact English text to BOT_COMMAND_TEXT in localization.py.
     @example.command(name="hello")
     async def hello(self, interaction: discord.Interaction) -> None:
         """Say hello, to show how a command of a new feature works."""

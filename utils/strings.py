@@ -35,7 +35,7 @@ class CoreStrings:
     skipped: str = ""
     nothing_playing: str = ""
 
-    # Media. Placeholders are {user}, {count}, {title}, {channel}, {position}, {source}, {minutes}.
+    # Media. Placeholders are {user}, {count}, {title}, {position}, {source}, and {minutes}.
     # {source} names the site, such as YouTube, and {minutes} is the wait.
     # Replies to /play leave out {user}, as above.
     # The player's own lines name who added the track, without a ping.
@@ -212,9 +212,8 @@ class CoreStrings:
 
     # Admin. Placeholders are {channel}, {role}, {count}, {action}, {autorole}, and {threshold}.
     # admin_timeout_set uses {minutes}.
-    # admin_status also uses {dj}, {fair}, {goodbye}, {timeout}, {escalation}, {alert}, {keywords}, and {presets}.
-    # admin_status also uses {loudness} and {leavers}, which status_on and status_off fill too.
-    # status_on and status_off fill {fair} and {goodbye}.
+    # admin_status also uses {dj}, {fair}, {loudness}, {leavers}, {goodbye}, {timeout}, {escalation}, {alert}, {keywords}, and {presets}.
+    # status_on and status_off fill {fair}, {loudness}, {leavers}, and {goodbye}.
     admin_channel_set: str = ""
     admin_channel_cleared: str = ""
     admin_autorole_set: str = ""

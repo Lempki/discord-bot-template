@@ -1,5 +1,4 @@
 # The form behind "New issue > Idea", which files a feature or expansion for the roadmap.
-# The Roadmap project on the owner's GitHub profile collects these issues from every repository.
 
 name: Idea
 description: Suggest a feature, an expansion, or an improvement for the roadmap.

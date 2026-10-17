@@ -258,6 +258,12 @@ class HelpCog(commands.Cog, name="Help"):
         if message.content.strip() not in (f"<@{user.id}>", f"<@!{user.id}>"):
             return
         now = time.monotonic()
+        # Expired cooldowns go, so the record never grows past the members of the last half minute.
+        self._mentioned = {
+            member: at
+            for member, at in self._mentioned.items()
+            if now - at < MENTION_COOLDOWN_SECONDS
+        }
         last = self._mentioned.get(message.author.id)
         if last is not None and now - last < MENTION_COOLDOWN_SECONDS:
             return

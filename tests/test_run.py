@@ -165,7 +165,9 @@ def test_check_setup_lists_every_missing_piece(tmp_path: Path) -> None:
 
 
 def test_downloaded_bot_needs_no_service_folders(tmp_path: Path) -> None:
-    bot = make_bot(tmp_path, "DISCORD_TOKEN=a.b.c\nAPI_MEDIA_SECRET=generated\n")
+    bot = make_bot(
+        tmp_path, "DISCORD_TOKEN=a.b.c\nAPI_MEDIA_SECRET=generated-0123456789\n"
+    )
     report = run_script.Report()
 
     project = run_script.detect_project(bot)
@@ -176,7 +178,9 @@ def test_downloaded_bot_needs_no_service_folders(tmp_path: Path) -> None:
 
 
 def test_check_setup_passes_when_everything_is_in_place(tmp_path: Path) -> None:
-    bot = make_bot(tmp_path, "DISCORD_TOKEN=a.b.c\nAPI_MEDIA_SECRET=generated\n")
+    bot = make_bot(
+        tmp_path, "DISCORD_TOKEN=a.b.c\nAPI_MEDIA_SECRET=generated-0123456789\n"
+    )
     (tmp_path / "api-media").mkdir()
     report = run_script.Report()
 
@@ -187,7 +191,9 @@ def test_check_setup_passes_when_everything_is_in_place(tmp_path: Path) -> None:
 def test_update_refuses_a_downloaded_copy_before_pulling(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    bot = make_bot(tmp_path, "DISCORD_TOKEN=a.b.c\nAPI_MEDIA_SECRET=generated\n")
+    bot = make_bot(
+        tmp_path, "DISCORD_TOKEN=a.b.c\nAPI_MEDIA_SECRET=generated-0123456789\n"
+    )
     (bot / ".git").mkdir()
     (tmp_path / "api-media").mkdir()
     commands: list[list[str]] = []
@@ -205,7 +211,9 @@ def test_update_refuses_a_downloaded_copy_before_pulling(
 def test_a_git_clone_update_clears_old_build_cache_after_rebuilding(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, started: bool
 ) -> None:
-    bot = make_bot(tmp_path, "DISCORD_TOKEN=a.b.c\nAPI_MEDIA_SECRET=generated\n")
+    bot = make_bot(
+        tmp_path, "DISCORD_TOKEN=a.b.c\nAPI_MEDIA_SECRET=generated-0123456789\n"
+    )
     (bot / ".git").mkdir()
     (tmp_path / "api-media" / ".git").mkdir(parents=True)
     quiet: list[tuple[str, ...]] = []
@@ -380,7 +388,9 @@ class FakeDocker:
 @pytest.fixture
 def released_bot(tmp_path: Path) -> Path:
     """A downloaded bot release with the release files of the running version."""
-    bot = make_bot(tmp_path, "DISCORD_TOKEN=a.b.c\nAPI_MEDIA_SECRET=generated\n")
+    bot = make_bot(
+        tmp_path, "DISCORD_TOKEN=a.b.c\nAPI_MEDIA_SECRET=generated-0123456789\n"
+    )
     write_release(bot)
     return bot
 
@@ -507,7 +517,9 @@ def test_update_counts_a_tag_that_another_project_already_moved(
 def test_start_downloads_only_the_missing_images(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    bot = make_bot(tmp_path, "DISCORD_TOKEN=a.b.c\nAPI_MEDIA_SECRET=generated\n")
+    bot = make_bot(
+        tmp_path, "DISCORD_TOKEN=a.b.c\nAPI_MEDIA_SECRET=generated-0123456789\n"
+    )
     pulls: list[list[str]] = []
     monkeypatch.setattr(run_script, "check_docker", lambda _report: True)
     monkeypatch.setattr(run_script, "missing_images", lambda *_args: ["media"])
@@ -634,7 +646,9 @@ def ready_bot_for_restore(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, answers: list[str]
 ) -> Path:
     """A released bot with three backups, Docker stubbed out, and scripted answers."""
-    bot = make_bot(tmp_path, "DISCORD_TOKEN=a.b.c\nAPI_MEDIA_SECRET=generated\n")
+    bot = make_bot(
+        tmp_path, "DISCORD_TOKEN=a.b.c\nAPI_MEDIA_SECRET=generated-0123456789\n"
+    )
     make_backups(bot, days=3)
     replies = iter(answers)
     monkeypatch.setattr("builtins.input", lambda _prompt: next(replies))
@@ -819,3 +833,15 @@ def test_an_installed_update_reports_its_versions(
 
     # The project's own image needs no name, and an image without a version shows none.
     assert installed == ["`1.7.0` (was `1.6.0`)", "api-media `2.6.0`"]
+
+
+def test_check_setup_refuses_a_secret_that_the_service_would_refuse(
+    tmp_path: Path,
+) -> None:
+    bot = make_bot(tmp_path, "DISCORD_TOKEN=a.b.c\nAPI_MEDIA_SECRET=short\n")
+    report = run_script.Report()
+
+    assert not run_script.check_setup(run_script.detect_project(bot), report)
+    assert report.problems[0].what == (
+        "API_MEDIA_SECRET in .env is shorter than 16 characters."
+    )

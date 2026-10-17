@@ -37,7 +37,7 @@ log = logging.getLogger(__name__)
 # /queue shows this many waiting tracks on each page.
 QUEUE_PAGE_SIZE = 10
 
-# The page buttons of /queue work this long, in seconds, within the 15 minutes of a reply.
+# The page buttons of /queue show work this long, in seconds, within the 15 minutes of a reply.
 QUEUE_VIEW_TIMEOUT = 600
 
 # The panel lists this many waiting tracks and counts the rest.
@@ -74,7 +74,7 @@ LIST_URL_LIMIT = 200
 # An embed's title holds 256 characters.
 EMBED_TITLE_LIMIT = 256
 
-# The volume of a server that never set one, in percent, as before /music volume existed.
+# The volume of a server that never set one, in percent.
 DEFAULT_VOLUME = 50
 
 # Search suggestions while typing in /play.
@@ -320,7 +320,7 @@ class Track:
     """One queued request.
 
     Attributes:
-        query: A URL or search text, resolved to a stream only when the track starts.
+        query: The track's page URL or search text. The player looks it up again before it plays.
         requested_by: The display name of the member who queued it.
         channel: Where to announce the track.
             Interaction tokens expire after 15 minutes.
@@ -416,8 +416,11 @@ class Prepared:
     def close(self) -> None:
         """Stops the buffering audio, such as its FFmpeg process and its stream."""
         if self.source is not None:
-            with contextlib.suppress(Exception):
+            try:
                 self.source.cleanup()
+            except Exception as error:
+                # The song is dropped either way, so a failed cleanup only goes to the log.
+                log.info(f"Could not stop prepared audio: {error!r}")
             self.source = None
 
 
@@ -442,7 +445,7 @@ class GuildPlayer:
         # Set while a track is stopped and put back in the queue, as /music previous and Now do.
         # It then stays out of the history and out of the repeat.
         self.requeued = False
-        # Set while /stop ends the music, so that repeating the queue does not restart it.
+        # Set while a stop ends the music, so that repeating the queue does not restart it.
         self.halted = False
         # Who last changed the music, how, and the values that the panel's line names.
         # A skip's note waits for the song that the skip started, so it shows on that song.
@@ -539,7 +542,7 @@ class GuildPlayer:
         return False
 
     def halt(self, voice_client: discord.VoiceClient) -> None:
-        """Stops the playing track and drops the queue, as /stop does."""
+        """Stops the playing track and drops the queue, as /music stop and the stop button do."""
         self.clear()
         if voice_client.is_playing() or voice_client.is_paused():
             self.halted = True
@@ -743,8 +746,10 @@ class GuildPlayer:
                 prepared.source = source
             else:
                 # The queue changed while the settings were read, so this audio has no song.
-                with contextlib.suppress(Exception):
+                try:
                     source.cleanup()
+                except Exception as error:
+                    log.info(f"Could not stop unused audio: {error!r}")
 
     async def _audio(self, info: dict[str, Any]) -> discord.AudioSource:
         """Starts a track's audio with the server's volume and loudness, minus its skips."""
@@ -917,7 +922,7 @@ class MediaCog(commands.Cog, name="Media"):
     """Audio queue supporting YouTube, SoundCloud, and Spotify, with one queue per guild."""
 
     def __init__(self, bot: "BotApp") -> None:
-        # Raises ConfigError with the missing variable names, which stops the cog from loading.
+        # Raises ConfigError with the missing variable names, which stops the bot at startup.
         service = bot.config.service("media")
         self.bot = bot
         self.client = MediaAPIClient(base_url=service.url, secret=service.secret)
@@ -1190,7 +1195,7 @@ class MediaCog(commands.Cog, name="Media"):
             or member.voice is None
             or member.voice.channel is None
         ):
-            await respond(interaction, s.not_in_voice, user=member.display_name)
+            await respond(interaction, s.not_in_voice)
             await finish(interaction)
             return
         if interaction.channel is None or not isinstance(
@@ -1225,7 +1230,7 @@ class MediaCog(commands.Cog, name="Media"):
             log.warning(f"Could not load '{query}': {error}")
             found = []
         if not found:
-            await respond(interaction, failure, user=member.display_name)
+            await respond(interaction, failure)
             await finish(interaction)
             return
         # Tracks past the limit are left out, and the reply says how many.
@@ -1821,10 +1826,15 @@ class MediaCog(commands.Cog, name="Media"):
             player.cancel()
         for pending in self._leavers.values():
             pending.cancel()
-        with contextlib.suppress(Exception):
+        try:
             await self._set_bot_status(playing=False)
-        with contextlib.suppress(Exception):
+        except Exception as error:
+            # The cog unloads either way, so these steps only report what failed.
+            log.info(f"Could not reset the status while unloading: {error!r}")
+        try:
             await self.client.aclose()
+        except Exception as error:
+            log.info(f"Could not close the media client while unloading: {error!r}")
 
     def panel_embed(
         self,
@@ -2108,7 +2118,7 @@ class MediaCog(commands.Cog, name="Media"):
     def note_skip(self, guild: discord.Guild, user: str) -> None:
         """Records a skip for the panel of the song that the skip starts.
 
-        The voice cog's /voice stop calls it too, so the panel names who skipped either way.
+        request_skip calls it for /music skip, the panel's button, and /voice stop alike.
         """
         player = self._players.get(guild.id)
         if player is None:

@@ -30,7 +30,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 
-# Values that .env templates have used to mean "fill this in".
+# Values that mean "fill this in" in a .env template.
 PLACEHOLDERS = frozenset(
     {"", "your-token-here", "your-secret-here", "changeme", "secret"}
 )

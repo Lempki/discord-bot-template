@@ -1,4 +1,4 @@
-"""Tests for cogs/events.py, which greets new members and gives them the auto-role."""
+"""Tests for cogs/events.py: the auto-role and the welcome on join, and the goodbye on leave."""
 
 from unittest.mock import AsyncMock, MagicMock
 

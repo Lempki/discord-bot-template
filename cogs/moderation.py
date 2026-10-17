@@ -1,6 +1,7 @@
 """Moderation commands and the AutoMod escalation.
 
-The commands are warn, warnings, clearwarning, clearwarnings, kick, and ban.
+The commands are /warn, /warnings, /timeout, /untimeout, /kick, /ban, and /purge.
+The right-click Warn and Report to moderators belong here too.
 When a guild turns escalation on, every message that AutoMod blocks becomes a warning.
 """
 
@@ -126,7 +127,7 @@ class WarnModal(discord.ui.Modal):
 
 
 class ModerationCog(commands.Cog, name="Moderation"):
-    """Member moderation. Requires the Kick Members or Ban Members permission."""
+    """Member moderation. Each command requires the permission that it acts with."""
 
     def __init__(self, bot: "BotApp") -> None:
         self.bot = bot

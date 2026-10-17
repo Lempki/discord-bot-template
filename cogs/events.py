@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 
 
 class EventsCog(commands.Cog, name="Events"):
-    """Server event listeners and moderation hooks."""
+    """The auto-role and the welcome on join, and the goodbye on leave."""
 
     def __init__(self, bot: "BotApp") -> None:
         self.bot = bot

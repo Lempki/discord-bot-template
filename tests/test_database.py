@@ -136,7 +136,7 @@ async def test_fresh_database_is_at_latest_version(tmp_path: Path) -> None:
     assert _user_version(path) == len(database._MIGRATIONS)
 
 
-def _create_phase1_database(path: Path) -> None:
+def _create_unversioned_database(path: Path) -> None:
     """Writes a database with the original schema, where IDs were TEXT and roles were names."""
     with sqlite3.connect(path) as conn:
         conn.executescript(
@@ -159,9 +159,9 @@ def _create_phase1_database(path: Path) -> None:
         )
 
 
-async def test_phase1_database_is_upgraded_in_place(tmp_path: Path) -> None:
+async def test_an_unversioned_database_is_upgraded_in_place(tmp_path: Path) -> None:
     path = tmp_path / "bot.db"
-    _create_phase1_database(path)
+    _create_unversioned_database(path)
 
     await database.init(path)
     try:
@@ -240,7 +240,7 @@ async def test_version_2_database_gains_the_music_volume(tmp_path: Path) -> None
     finally:
         await database.close()
 
-    # A server keeps the volume that the bot played at before /volume existed.
+    # A server that never set a volume keeps the level that the bot always played at.
     assert settings.music_volume == 50
     assert settings.warn_threshold == 5
     assert _user_version(path) == len(database._MIGRATIONS)
@@ -248,7 +248,7 @@ async def test_version_2_database_gains_the_music_volume(tmp_path: Path) -> None
 
 async def test_reopening_an_upgraded_database_changes_nothing(tmp_path: Path) -> None:
     path = tmp_path / "bot.db"
-    _create_phase1_database(path)
+    _create_unversioned_database(path)
     await database.init(path)
     await database.close()
 

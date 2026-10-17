@@ -83,7 +83,7 @@ ACTIONS = {
 
 READY_TIMEOUT_SECONDS = 180
 POLL_SECONDS = 2
-# A bot has no health check, so one that crashes at startup still looks ready at first.
+# A container that crashes right after its first health check still looks ready at first.
 # Watching the restart counts for a while longer catches that.
 SETTLE_SECONDS = 15
 
@@ -119,6 +119,9 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as archive:
 # Backups of a bot's database go into this folder next to the run script.
 BACKUP_FOLDER = "backups"
 BACKUP_PREFIX = "bot-"
+
+# The api-* services refuse a shorter secret, so the start checks it first.
+MIN_SECRET_LENGTH = 16
 
 # Every nightly update makes a backup, so this keeps the last week.
 BACKUPS_KEPT = 7
@@ -308,6 +311,9 @@ def check_setup(project: Project, report: Report) -> bool:
             SETUP_FIX,
         )
         ready = False
+    elif not project.is_bot and not _long_enough(env_value(env, key)):
+        _report_short_secret(report, key)
+        ready = False
     if project.compose_file != "compose.stack.yml":
         return ready
     for variable, _ in required_stack_secrets(project.compose_text):
@@ -317,6 +323,9 @@ def check_setup(project: Project, report: Report) -> bool:
                 "The Docker stack refuses to start without it.",
                 SETUP_FIX,
             )
+            ready = False
+        elif not _long_enough(env_value(env, variable)):
+            _report_short_secret(report, variable)
             ready = False
     # A downloaded release runs the published images, so it builds nothing from the other folders.
     if project.published:
@@ -330,6 +339,20 @@ def check_setup(project: Project, report: Report) -> bool:
             )
             ready = False
     return ready
+
+
+def _long_enough(secret: str | None) -> bool:
+    return len(secret or "") >= MIN_SECRET_LENGTH
+
+
+def _report_short_secret(report: Report, variable: str) -> None:
+    """Records an api-* secret that the service would refuse, which makes it restart endlessly."""
+    report.problem(
+        f"{variable} in .env is shorter than {MIN_SECRET_LENGTH} characters.",
+        "The API refuses to start with it, and its container would keep restarting.",
+        "Set a longer secret, such as the output of "
+        'python -c "import secrets; print(secrets.token_urlsafe(32))".',
+    )
 
 
 def report_missing_docker(report: Report) -> None:

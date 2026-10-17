@@ -20,7 +20,6 @@ dist/
 # <<< dev-standards managed block.
 
 # Repository-specific entries.
-.claude/
 assets/audio/*
 !assets/audio/.gitkeep
 

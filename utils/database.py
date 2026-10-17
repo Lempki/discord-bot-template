@@ -1,4 +1,4 @@
-"""Per-guild persistent storage for bot settings and moderation data.
+"""Per-guild persistent storage for bot settings, warnings, and music panels and sessions.
 
 The schema is versioned with SQLite's user_version pragma.
 init() applies every migration the database has not seen yet, so existing files upgrade in place.
@@ -17,15 +17,21 @@ import aiosqlite
 
 __all__ = [
     "GuildSettings",
+    "SESSIONS_KEPT",
     "WarningRecord",
     "add_warning",
     "close",
     "count_warnings",
     "delete_all_warnings",
     "delete_warning",
+    "forget_panel",
+    "get_session",
     "get_settings",
     "get_warnings",
     "init",
+    "list_panels",
+    "save_panel",
+    "save_session",
     "upsert_settings",
 ]
 
@@ -129,9 +135,9 @@ async def _table_exists(db: aiosqlite.Connection, name: str) -> bool:
 
 
 async def _migrate_to_1(db: aiosqlite.Connection) -> None:
-    """Creates the versioned schema, converting a Phase 1 database if one exists.
+    """Creates the versioned schema, converting a database from before versioning if one exists.
 
-    Phase 1 stored guild and user IDs as TEXT and the auto-role by name.
+    Such a database stored guild and user IDs as TEXT and the auto-role by name.
     The tables are rebuilt with INTEGER IDs.
     The role name is kept until a member join resolves it to an ID.
     """
@@ -207,7 +213,7 @@ async def _migrate_to_2(db: aiosqlite.Connection) -> None:
 
 
 async def _migrate_to_3(db: aiosqlite.Connection) -> None:
-    """Adds the music volume, which keeps the level that the bot played at before /volume."""
+    """Adds the music volume, which starts at the level that the bot always played at."""
     await db.execute(
         "ALTER TABLE guild_settings ADD COLUMN music_volume INTEGER NOT NULL DEFAULT 50"
     )
