@@ -15,3 +15,5 @@ data/
 .update/
 update.log
 backups/
+api-media.env
+cookies/

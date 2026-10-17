@@ -30,3 +30,7 @@ update.log
 
 # Copies of the bot's database that run backup and every update make.
 backups/
+
+# api-media's own settings and YouTube cookies, which hold secrets.
+api-media.env
+cookies/

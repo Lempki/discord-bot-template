@@ -281,6 +281,11 @@ The stack builds each service from its sibling folder and connects them on a pri
 It also names each service's published image, which a downloaded release runs instead of building it.
 It passes `API_MEDIA_SECRET` from this repository's `.env` to the media service, so the two always agree.
 
+api-media reads its own settings, such as `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `SPONSORBLOCK`, and `YDL_COOKIES_FILE`, from an optional `api-media.env` next to the stack file.
+A Git clone can keep them in `../api-media/.env` instead, and `api-media.env` wins where both set the same setting.
+Neither file is needed unless you change one of api-media's defaults, and api-media's README lists every setting.
+For a YouTube cookies file, put it in a `cookies` folder next to the stack file, set `MEDIA_COOKIES_DIR=./cookies` in `.env`, and set `YDL_COOKIES_FILE=cookies/youtube.txt` in `api-media.env`.
+
 Docker keeps at most two log files of 5 MB per container and overwrites the oldest.
 The bot's container may use at most 512 MB of memory, and each api-* service in the stack 1 GB.
 That is several times their normal use, so only a leak reaches it, and the container that leaks restarts on its own.
@@ -298,6 +303,7 @@ All configuration is read from environment variables or from a `.env` file locat
 | `FFMPEG_PATH` | No | `ffmpeg` | The FFmpeg executable. Leave it unset to use FFmpeg from the system PATH. |
 | `DEV_GUILD_ID` | No | None | A server ID for development. Commands sync to that server instantly instead of globally. |
 | `HEARTBEAT_URL` | No | None | The ping URL of a heartbeat service, such as healthchecks.io, which alerts you when the bot stops reporting that it is online. See [Offline alerts](#offline-alerts). |
+| `MEDIA_COOKIES_DIR` | No | `../api-media/cookies` | The folder that the stack mounts as api-media's `cookies` folder, for a YouTube cookies file. A downloaded release uses `./cookies`. |
 | `MAX_QUEUE_LENGTH` | No | `500` | How many songs may wait in a server's music queue. A playlist that does not fit adds the songs that fit. |
 | `UPDATE_WEBHOOK_URL` | No | None | A Discord webhook that hears when a nightly update installs a new release or fails. See [Updates](#updates). It works like a password. |
 | `API_<NAME>_URL` | No | None | The base URL of a api-* service, for example `API_MEDIA_URL`. |

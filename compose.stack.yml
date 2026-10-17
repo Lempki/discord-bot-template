@@ -41,15 +41,20 @@ services:
     image: ghcr.io/lempki/api-media:latest
     build: ../api-media
     env_file:
-      # Optional settings such as Spotify credentials. The file may be absent.
+      # api-media's own settings, such as Spotify credentials. Both files are optional.
+      # A Git clone keeps them in ../api-media/.env, and a downloaded release in api-media.env here.
+      # api-media.env wins where both set the same setting.
       - path: ../api-media/.env
+        required: false
+      - path: api-media.env
         required: false
     environment:
       # One secret, read from this repository's .env, so the bot and the service always agree.
       API_SECRET: ${API_MEDIA_SECRET:?Set API_MEDIA_SECRET in .env}
     volumes:
-      # An optional YouTube cookies file. YDL_COOKIES_FILE in ../api-media/.env names it.
-      - ../api-media/cookies:/app/cookies:ro
+      # An optional YouTube cookies file, which YDL_COOKIES_FILE names as cookies/<file>.
+      # MEDIA_COOKIES_DIR in .env picks the folder, such as ./cookies in a downloaded release.
+      - ${MEDIA_COOKIES_DIR:-../api-media/cookies}:/app/cookies:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
