@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/Lempki/dev-standards
-    rev: v0.6.0
+    rev: v0.6.1
     hooks:
       - id: sync-files
       - id: check-prose

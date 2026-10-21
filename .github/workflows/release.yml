@@ -9,7 +9,7 @@ on:
 
 jobs:
   image:
-    uses: Lempki/dev-standards/.github/workflows/docker-publish.yml@v0.6.0
+    uses: Lempki/dev-standards/.github/workflows/docker-publish.yml@v0.6.1
     permissions:
       contents: read
       packages: write
