@@ -128,7 +128,7 @@ def test_is_placeholder(value: str | None, expected: bool) -> None:
         ("RUN apt-get install -y ffmpeg libopus0", False, ["FFmpeg", "Opus"]),
         ("RUN apt-get install -y ffmpeg libopus0", True, ["FFmpeg"]),
         ("COPY --from=denoland/deno:bin /deno /usr/local/bin/deno", False, ["Deno"]),
-        ("FROM python:3.12-slim", False, []),
+        ("FROM python:3.14-slim", False, []),
     ],
 )
 def test_tools_from_dockerfile(
@@ -236,7 +236,7 @@ STACK_BUILDS_MEDIA = "  media:\n    build: ../api-media\n"
 def release(folder: Path) -> Path:
     """Creates a folder that looks like an extracted api-media release."""
     folder.mkdir(parents=True)
-    (folder / "Dockerfile").write_text("FROM python:3.12-slim\n", encoding="utf-8")
+    (folder / "Dockerfile").write_text("FROM python:3.14-slim\n", encoding="utf-8")
     return folder
 
 

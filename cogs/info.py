@@ -30,7 +30,7 @@ def when(moment: datetime) -> str:
 class InfoCog(commands.Cog, name="Info"):
     """Facts about the server and its members, from what Discord already gives the bot."""
 
-    def __init__(self, bot: "BotApp") -> None:
+    def __init__(self, bot: BotApp) -> None:
         self.bot = bot
 
     info = app_commands.Group(
@@ -123,6 +123,6 @@ class InfoCog(commands.Cog, name="Info"):
         log.info(f"{self.qualified_name} cog loaded.")
 
 
-async def setup(bot: "BotApp") -> None:
+async def setup(bot: BotApp) -> None:
     """Adds the cog. discord.py calls this when the extension loads."""
     await bot.add_cog(InfoCog(bot))

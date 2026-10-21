@@ -35,7 +35,7 @@ class FakeRule:
 
     def __init__(
         self,
-        guild: "FakeGuild",
+        guild: FakeGuild,
         creator_id: int,
         trigger: discord.AutoModTrigger,
         actions: list[discord.AutoModRuleAction],
@@ -46,7 +46,7 @@ class FakeRule:
         self.actions = actions
         self.edits: list[dict[str, Any]] = []
 
-    async def edit(self, **changes: Any) -> "FakeRule":
+    async def edit(self, **changes: Any) -> FakeRule:
         self.edits.append(changes)
         self.trigger = changes.get("trigger", self.trigger)
         self.actions = changes.get("actions", self.actions)

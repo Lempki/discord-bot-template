@@ -27,7 +27,7 @@ log = logging.getLogger(__name__)
 class AdminCog(commands.Cog, name="Admin"):
     """Per-guild bot configuration. Requires the Manage Server permission."""
 
-    def __init__(self, bot: "BotApp") -> None:
+    def __init__(self, bot: BotApp) -> None:
         self.bot = bot
 
     admin = app_commands.Group(
@@ -507,12 +507,12 @@ class AdminCog(commands.Cog, name="Admin"):
         log.info(f"{self.qualified_name} cog loaded.")
 
 
-def _action_name(s: "Strings", action: str) -> str:
+def _action_name(s: Strings, action: str) -> str:
     """Returns the localized name of a warning action."""
     return {"ban": s.action_ban, "timeout": s.action_timeout}.get(action, s.action_kick)
 
 
-def _preset_name(s: "Strings", preset: str) -> str:
+def _preset_name(s: Strings, preset: str) -> str:
     """Returns the localized name of an AutoMod preset category."""
     return {
         "profanity": s.preset_profanity,
@@ -521,6 +521,6 @@ def _preset_name(s: "Strings", preset: str) -> str:
     }.get(preset, preset)
 
 
-async def setup(bot: "BotApp") -> None:
+async def setup(bot: BotApp) -> None:
     """Adds the cog. discord.py calls this when the extension loads."""
     await bot.add_cog(AdminCog(bot))

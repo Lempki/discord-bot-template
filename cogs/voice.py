@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 class VoiceCog(commands.Cog, name="Voice"):
     """Voice channel management. The bot leaves on its own once it is alone or idle."""
 
-    def __init__(self, bot: "BotApp") -> None:
+    def __init__(self, bot: BotApp) -> None:
         self.bot = bot
 
     voice = app_commands.Group(
@@ -114,6 +114,6 @@ class VoiceCog(commands.Cog, name="Voice"):
         log.info(f"{self.qualified_name} cog loaded.")
 
 
-async def setup(bot: "BotApp") -> None:
+async def setup(bot: BotApp) -> None:
     """Adds the cog. discord.py calls this when the extension loads."""
     await bot.add_cog(VoiceCog(bot))

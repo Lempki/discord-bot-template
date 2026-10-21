@@ -32,7 +32,7 @@ AUTOMOD_WARN_COOLDOWN = 10.0
 
 
 def blocked_reason(
-    s: "Strings", actor: discord.Member, target: discord.Member, me: discord.Member
+    s: Strings, actor: discord.Member, target: discord.Member, me: discord.Member
 ) -> str | None:
     """Explains why actor may not moderate target, or returns None when they may.
 
@@ -58,7 +58,7 @@ def blocked_reason(
     return None
 
 
-def outcome_messages(s: "Strings", outcome: WarningOutcome, user: str) -> list[str]:
+def outcome_messages(s: Strings, outcome: WarningOutcome, user: str) -> list[str]:
     """Returns the announcement and any failure for a warning that reached the threshold.
 
     Args:
@@ -108,9 +108,7 @@ REPORT_TEXT_LIMIT = 1000
 class WarnModal(discord.ui.Modal):
     """Asks for the reason of a warning given from the member's right-click menu."""
 
-    def __init__(
-        self, cog: "ModerationCog", member: discord.Member, s: "Strings"
-    ) -> None:
+    def __init__(self, cog: ModerationCog, member: discord.Member, s: Strings) -> None:
         super().__init__(title=s.warn_modal_title[:45] or "Warn")
         self.cog = cog
         self.member = member
@@ -129,7 +127,7 @@ class WarnModal(discord.ui.Modal):
 class ModerationCog(commands.Cog, name="Moderation"):
     """Member moderation. Each command requires the permission that it acts with."""
 
-    def __init__(self, bot: "BotApp") -> None:
+    def __init__(self, bot: BotApp) -> None:
         self.bot = bot
         # When AutoMod last warned each member, as (guild ID, user ID) to a monotonic time.
         self._automod_warned_at: dict[tuple[int, int], float] = {}
@@ -145,7 +143,7 @@ class ModerationCog(commands.Cog, name="Moderation"):
         self._report_menu.guild_only = True
 
     async def _refuse(
-        self, interaction: discord.Interaction, s: "Strings", target: discord.Member
+        self, interaction: discord.Interaction, s: Strings, target: discord.Member
     ) -> bool:
         """Replies with the reason and returns True when the target may not be moderated."""
         guild = guild_of(interaction)
@@ -606,6 +604,6 @@ class ModerationCog(commands.Cog, name="Moderation"):
         )
 
 
-async def setup(bot: "BotApp") -> None:
+async def setup(bot: BotApp) -> None:
     """Adds the cog. discord.py calls this when the extension loads."""
     await bot.add_cog(ModerationCog(bot))

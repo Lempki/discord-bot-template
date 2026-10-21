@@ -138,7 +138,7 @@ def _feature_order(cog: commands.Cog) -> tuple[int, str]:
 class HelpCog(commands.Cog, name="Help"):
     """Explains the loaded features that the user may use, with their commands."""
 
-    def __init__(self, bot: "BotApp") -> None:
+    def __init__(self, bot: BotApp) -> None:
         self.bot = bot
         # When each member last got a reply to a mention.
         self._mentioned: dict[int, float] = {}
@@ -297,19 +297,19 @@ class HelpCog(commands.Cog, name="Help"):
 class GuideButton(discord.ui.View):
     """The button under a reply to a mention, which opens the guide for whoever presses it."""
 
-    def __init__(self, cog: HelpCog, s: "Strings") -> None:
+    def __init__(self, cog: HelpCog, s: Strings) -> None:
         super().__init__(timeout=MENTION_REPLY_SECONDS)
         self.cog = cog
         self.show.label = s.mention_button or None
 
     @discord.ui.button(emoji="📖", style=discord.ButtonStyle.primary)
     async def show(
-        self, interaction: discord.Interaction, _: discord.ui.Button["GuideButton"]
+        self, interaction: discord.Interaction, _: discord.ui.Button[GuideButton]
     ) -> None:
         """Shows the guide privately, in the presser's own language."""
         await self.cog.send_guide(interaction)
 
 
-async def setup(bot: "BotApp") -> None:
+async def setup(bot: BotApp) -> None:
     """Adds the cog. discord.py calls this when the extension loads."""
     await bot.add_cog(HelpCog(bot))

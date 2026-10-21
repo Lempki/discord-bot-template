@@ -62,7 +62,7 @@ class Config:
     max_queue_length: int = DEFAULT_MAX_QUEUE_LENGTH
 
     @classmethod
-    def from_env(cls, environ: Mapping[str, str] | None = None) -> "Config":
+    def from_env(cls, environ: Mapping[str, str] | None = None) -> Config:
         """Builds the configuration from environment variables.
 
         Args:

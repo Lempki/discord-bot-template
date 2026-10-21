@@ -3,7 +3,11 @@
 # Each repository's ruff.toml extends this file and adds only repository-specific settings.
 
 line-length = 88
-target-version = "py312"
+target-version = "py314"
+
+# Scripts run on the host's own Python, which an installed copy may keep at an older version.
+[per-file-target-version]
+"scripts/**" = "py312"
 
 [format]
 quote-style = "double"

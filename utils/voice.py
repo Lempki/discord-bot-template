@@ -32,7 +32,7 @@ class VoicePresence:
         idle_timeout: Seconds of silence before leaving.
     """
 
-    def __init__(self, bot: "commands.Bot", idle_timeout: float = IDLE_TIMEOUT) -> None:
+    def __init__(self, bot: commands.Bot, idle_timeout: float = IDLE_TIMEOUT) -> None:
         self._bot = bot
         self._idle_timeout = idle_timeout
         self._last_activity: dict[int, float] = {}

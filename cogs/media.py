@@ -176,14 +176,14 @@ def loop_name(s: CoreStrings, mode: str) -> str:
     }[mode]
 
 
-def stopped(player: "GuildPlayer") -> bool:
+def stopped(player: GuildPlayer) -> bool:
     """Whether a member stopped the music, rather than the queue running out."""
     return player.last_action is not None and player.last_action[0].startswith(
         "stopped"
     )
 
 
-def ended_heading(player: "GuildPlayer", s: CoreStrings) -> str:
+def ended_heading(player: GuildPlayer, s: CoreStrings) -> str:
     """The heading of an ended panel, which tells a stop from a queue that ran out."""
     return s.panel_stopped if stopped(player) else s.panel_ended
 
@@ -252,7 +252,7 @@ def played_length(
     return max(1, round(duration - sum(end - start for start, end in skips)))
 
 
-def song_lines(track: "Track", s: CoreStrings) -> list[str]:
+def song_lines(track: Track, s: CoreStrings) -> list[str]:
     """The lines that name a song's artist and album, and where it came from and who added it."""
     lines: list[str] = []
     credits: list[str] = []
@@ -273,7 +273,7 @@ def song_lines(track: "Track", s: CoreStrings) -> list[str]:
     return lines
 
 
-def song_card(track: "Track", s: CoreStrings, server: str) -> discord.Embed:
+def song_card(track: Track, s: CoreStrings, server: str) -> discord.Embed:
     """The card that the panel's grab button sends: the song, its credits, and its length."""
     named_song = bool(track.song and track.artist)
     embed = discord.Embed(
@@ -291,14 +291,14 @@ def song_card(track: "Track", s: CoreStrings, server: str) -> discord.Embed:
     return embed
 
 
-def owner(track: "Track") -> int | str:
+def owner(track: Track) -> int | str:
     """Who queued a track, by ID when it is known, so the queue can take turns between members."""
     if track.requested_by_id is not None:
         return track.requested_by_id
     return track.requested_by
 
 
-def collection_label(track: "Track") -> str:
+def collection_label(track: Track) -> str:
     """The track's playlist or album by name, without an artist that the card names already.
 
     YouTube names an artist's album "Artist - Album".
@@ -427,7 +427,7 @@ class Prepared:
 class GuildPlayer:
     """Plays one guild's queue in order until it is empty or the bot leaves voice."""
 
-    def __init__(self, cog: "MediaCog", guild: discord.Guild) -> None:
+    def __init__(self, cog: MediaCog, guild: discord.Guild) -> None:
         self._cog = cog
         self._guild = guild
         # A deque rather than an asyncio.Queue, so that /queue can list the waiting tracks.
@@ -921,7 +921,7 @@ class GuildPlayer:
 class MediaCog(commands.Cog, name="Media"):
     """Audio queue supporting YouTube, SoundCloud, and Spotify, with one queue per guild."""
 
-    def __init__(self, bot: "BotApp") -> None:
+    def __init__(self, bot: BotApp) -> None:
         # Raises ConfigError with the missing variable names, which stops the bot at startup.
         service = bot.config.service("media")
         self.bot = bot
@@ -1446,7 +1446,7 @@ class MediaCog(commands.Cog, name="Media"):
         mark_replied(interaction)
 
     def queue_embed(
-        self, player: "GuildPlayer", s: CoreStrings, page: int
+        self, player: GuildPlayer, s: CoreStrings, page: int
     ) -> tuple[discord.Embed, int]:
         """Builds one page of the queue.
 
@@ -1948,7 +1948,7 @@ class MediaCog(commands.Cog, name="Media"):
         player: GuildPlayer,
         channel: discord.abc.Messageable,
         embed: discord.Embed,
-        view: "PanelView",
+        view: PanelView,
         new_track: bool,
     ) -> None:
         # The cog's own PanelView answers every press, so this copy only draws the buttons.
@@ -2342,7 +2342,7 @@ class PanelView(discord.ui.View):
 
     @discord.ui.button(emoji="🔀", custom_id="media:shuffle", row=0)
     async def shuffle_button(
-        self, interaction: discord.Interaction, _: discord.ui.Button["PanelView"]
+        self, interaction: discord.Interaction, _: discord.ui.Button[PanelView]
     ) -> None:
         """Shuffles the waiting songs."""
         guild, _, player = await self._start(interaction)
@@ -2359,7 +2359,7 @@ class PanelView(discord.ui.View):
 
     @discord.ui.button(emoji="⏮️", custom_id="media:previous", row=0)
     async def previous_button(
-        self, interaction: discord.Interaction, _: discord.ui.Button["PanelView"]
+        self, interaction: discord.Interaction, _: discord.ui.Button[PanelView]
     ) -> None:
         """Goes back to the song before."""
         _, voice_client, player = await self._start(interaction)
@@ -2370,7 +2370,7 @@ class PanelView(discord.ui.View):
 
     @discord.ui.button(emoji="⏸️", custom_id="media:pause", row=0)
     async def pause_button(
-        self, interaction: discord.Interaction, _: discord.ui.Button["PanelView"]
+        self, interaction: discord.Interaction, _: discord.ui.Button[PanelView]
     ) -> None:
         """Pauses or resumes the playing song."""
         guild, voice_client, player = await self._start(interaction)
@@ -2384,7 +2384,7 @@ class PanelView(discord.ui.View):
 
     @discord.ui.button(emoji="⏭️", custom_id="media:skip", row=0)
     async def skip_button(
-        self, interaction: discord.Interaction, _: discord.ui.Button["PanelView"]
+        self, interaction: discord.Interaction, _: discord.ui.Button[PanelView]
     ) -> None:
         """Skips to the next song, or counts a vote to skip it while others listen."""
         guild, voice_client, _ = await self._start(interaction)
@@ -2402,7 +2402,7 @@ class PanelView(discord.ui.View):
 
     @discord.ui.button(emoji="🔁", custom_id="media:loop", row=0)
     async def loop_button(
-        self, interaction: discord.Interaction, _: discord.ui.Button["PanelView"]
+        self, interaction: discord.Interaction, _: discord.ui.Button[PanelView]
     ) -> None:
         """Steps through repeating nothing, the whole queue, and the current song."""
         guild, _, player = await self._start(interaction)
@@ -2418,7 +2418,7 @@ class PanelView(discord.ui.View):
         emoji="⏹️", custom_id="media:stop", style=discord.ButtonStyle.danger, row=1
     )
     async def stop_button(
-        self, interaction: discord.Interaction, _: discord.ui.Button["PanelView"]
+        self, interaction: discord.Interaction, _: discord.ui.Button[PanelView]
     ) -> None:
         """Stops the music, asking first when it would remove waiting songs."""
         guild, voice_client, player = await self._start(interaction)
@@ -2441,21 +2441,21 @@ class PanelView(discord.ui.View):
 
     @discord.ui.button(emoji="📜", custom_id="media:queue", row=1)
     async def queue_button(
-        self, interaction: discord.Interaction, _: discord.ui.Button["PanelView"]
+        self, interaction: discord.Interaction, _: discord.ui.Button[PanelView]
     ) -> None:
         """Shows the whole queue to the presser."""
         await self.cog.send_queue(interaction)
 
     @discord.ui.button(emoji="🎤", custom_id="media:lyrics", row=1)
     async def lyrics_button(
-        self, interaction: discord.Interaction, _: discord.ui.Button["PanelView"]
+        self, interaction: discord.Interaction, _: discord.ui.Button[PanelView]
     ) -> None:
         """Shows the playing song's lyrics to the presser."""
         await self.cog.send_lyrics(interaction, None)
 
     @discord.ui.button(emoji="📩", custom_id="media:grab", row=1)
     async def grab_button(
-        self, interaction: discord.Interaction, _: discord.ui.Button["PanelView"]
+        self, interaction: discord.Interaction, _: discord.ui.Button[PanelView]
     ) -> None:
         """Sends the playing song to the presser."""
         await self.cog.send_song(interaction)
@@ -2477,7 +2477,7 @@ class StopConfirmView(discord.ui.View):
 
     @discord.ui.button(style=discord.ButtonStyle.danger)
     async def confirm(
-        self, interaction: discord.Interaction, _: discord.ui.Button["StopConfirmView"]
+        self, interaction: discord.Interaction, _: discord.ui.Button[StopConfirmView]
     ) -> None:
         """Stops the music and removes the waiting songs."""
         self.stop()
@@ -2486,7 +2486,7 @@ class StopConfirmView(discord.ui.View):
 
     @discord.ui.button(style=discord.ButtonStyle.secondary)
     async def cancel(
-        self, interaction: discord.Interaction, _: discord.ui.Button["StopConfirmView"]
+        self, interaction: discord.Interaction, _: discord.ui.Button[StopConfirmView]
     ) -> None:
         """Leaves the music and the queue as they are."""
         self.stop()
@@ -2525,7 +2525,7 @@ class PlayedView(discord.ui.View):
 
     @discord.ui.button(emoji="📜", custom_id="media:played")
     async def played_button(
-        self, interaction: discord.Interaction, _: discord.ui.Button["PlayedView"]
+        self, interaction: discord.Interaction, _: discord.ui.Button[PlayedView]
     ) -> None:
         """Lists the session's songs to the presser."""
         await self.cog.send_played(interaction)
@@ -2552,7 +2552,7 @@ class PagesView(discord.ui.View):
 
     @discord.ui.button(emoji="◀️")
     async def back(
-        self, interaction: discord.Interaction, _: discord.ui.Button["PagesView"]
+        self, interaction: discord.Interaction, _: discord.ui.Button[PagesView]
     ) -> None:
         """Shows the page before."""
         self.index = max(0, self.index - 1)
@@ -2560,7 +2560,7 @@ class PagesView(discord.ui.View):
 
     @discord.ui.button(emoji="▶️")
     async def forward(
-        self, interaction: discord.Interaction, _: discord.ui.Button["PagesView"]
+        self, interaction: discord.Interaction, _: discord.ui.Button[PagesView]
     ) -> None:
         """Shows the next page."""
         self.index = min(len(self.pages) - 1, self.index + 1)
@@ -2600,7 +2600,7 @@ class QueueView(discord.ui.View):
 
     @discord.ui.button(emoji="◀️")
     async def previous_page(
-        self, interaction: discord.Interaction, _: discord.ui.Button["QueueView"]
+        self, interaction: discord.Interaction, _: discord.ui.Button[QueueView]
     ) -> None:
         """Shows the page before."""
         self.page -= 1
@@ -2608,7 +2608,7 @@ class QueueView(discord.ui.View):
 
     @discord.ui.button(emoji="▶️")
     async def next_page(
-        self, interaction: discord.Interaction, _: discord.ui.Button["QueueView"]
+        self, interaction: discord.Interaction, _: discord.ui.Button[QueueView]
     ) -> None:
         """Shows the next page."""
         self.page += 1
@@ -2631,6 +2631,6 @@ def suggestion_name(result: dict[str, Any]) -> str:
     return title + suffix
 
 
-async def setup(bot: "BotApp") -> None:
+async def setup(bot: BotApp) -> None:
     """Adds the cog. discord.py calls this when the extension loads."""
     await bot.add_cog(MediaCog(bot))

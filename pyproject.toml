@@ -4,7 +4,7 @@ version = "2.2.0"
 license = "MIT"
 license-files = ["LICENSE"]
 description = "A modular discord.py bot template with cogs, per-guild settings, and locale-aware messages."
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = [
     # The voice extra installs PyNaCl and davey, the DAVE end-to-end encryption library.
     # Discord has required DAVE for every voice connection since March 2026.

@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 class TemplateCog(commands.Cog, name="Template"):
     """An example feature group with one command."""
 
-    def __init__(self, bot: "BotApp") -> None:
+    def __init__(self, bot: BotApp) -> None:
         self.bot = bot
 
     # A feature's commands share a group, so their names say what they belong to: /example hello.
@@ -45,6 +45,6 @@ class TemplateCog(commands.Cog, name="Template"):
         log.info(f"{self.qualified_name} cog loaded.")
 
 
-async def setup(bot: "BotApp") -> None:
+async def setup(bot: BotApp) -> None:
     """Adds the cog. discord.py calls this when the extension loads."""
     await bot.add_cog(TemplateCog(bot))

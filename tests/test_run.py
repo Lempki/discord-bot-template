@@ -743,7 +743,7 @@ def test_the_notice_goes_to_the_webhook_in_env(
     sent: list[urllib.request.Request] = []
 
     class Answer:
-        def __enter__(self) -> "Answer":
+        def __enter__(self) -> Answer:
             return self
 
         def __exit__(self, *args: object) -> None:

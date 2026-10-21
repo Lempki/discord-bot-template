@@ -20,6 +20,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # A new Python also needs a new .python-version and lint target, so it is moved by hand.
+    ignore:
+      - dependency-name: python
+        update-types: ["version-update:semver-minor"]
     groups:
       images:
         patterns: ["*"]

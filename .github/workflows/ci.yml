@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   ci:
-    uses: Lempki/dev-standards/.github/workflows/python-ci.yml@v0.5.0
+    uses: Lempki/dev-standards/.github/workflows/python-ci.yml@v0.6.0
     with:
       docker: true
-      forward-python-version: "3.14"
+      forward-python-version: "3.15"

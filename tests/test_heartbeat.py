@@ -20,7 +20,7 @@ class FakeResponse:
     def __init__(self, status: int) -> None:
         self.status = status
 
-    async def __aenter__(self) -> "FakeResponse":
+    async def __aenter__(self) -> FakeResponse:
         return self
 
     async def __aexit__(self, *_exc: object) -> None:
