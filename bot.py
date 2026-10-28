@@ -33,6 +33,35 @@ class LogFormatter(logging.Formatter):
         )
 
 
+class ReconnectLogFilter(logging.Filter):
+    """Shortens discord.py's log of a lost connection to a one-line warning.
+
+    discord.py logs a lost gateway connection at ERROR with a traceback, as when the host sleeps.
+    discord.py reconnects by itself, so the error's type and message are enough.
+    """
+
+    # The message that discord.Client.connect logs before each reconnect attempt.
+    RECONNECT_MESSAGE = "Attempting a reconnect in %.2fs"
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Rewrites a reconnect record in place and lets every record through."""
+        if record.msg != self.RECONNECT_MESSAGE or not record.exc_info:
+            return True
+        error = record.exc_info[1]
+        if error is None or not isinstance(record.args, tuple):
+            return True
+        cause = (
+            f"{type(error).__name__}: {error}" if str(error) else type(error).__name__
+        )
+        record.msg = "Lost the connection to Discord (%s). Reconnecting in %.2f s."
+        record.args = (cause, *record.args)
+        record.levelno = logging.WARNING
+        record.levelname = logging.getLevelName(logging.WARNING)
+        record.exc_info = None
+        record.exc_text = None
+        return True
+
+
 # The cogs that need the privileged Server Members intent, for member join and leave events.
 MEMBERS_INTENT_COGS = frozenset({"events"})
 
@@ -203,6 +232,7 @@ class BotApp(commands.Bot):
 async def main() -> None:
     """Reads the configuration and runs the bot until it is stopped."""
     discord.utils.setup_logging(formatter=LogFormatter())
+    logging.getLogger("discord.client").addFilter(ReconnectLogFilter())
     try:
         config = Config.from_env()
     except ConfigError as error:
