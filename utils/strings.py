@@ -80,6 +80,7 @@ class CoreStrings:
     queue_skipping_to: str = ""
     queue_no_position: str = ""
     queue_nothing_waiting: str = ""
+    queue_restored: str = ""
     # Volume. The placeholder is {volume}, in percent.
     volume_now: str = ""
     volume_set: str = ""
@@ -360,6 +361,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queue_skipping_to": "Skipping to **{title}**...",
         "queue_no_position": "There is no track at #{position}. /queue show shows the numbers.",
         "queue_nothing_waiting": "No tracks are waiting in the queue.",
+        "queue_restored": "I restarted, so the music picks up where it stopped...",
         "volume_now": "The volume is {volume}%.",
         "volume_set": "Volume set to {volume}%.",
         "previous_playing": "Going back to **{title}**...",
@@ -615,6 +617,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queue_skipping_to": "Hypätään kappaleeseen **{title}**...",
         "queue_no_position": "Sijalla {position} ei ole kappaletta. /queue show näyttää numerot.",
         "queue_nothing_waiting": "Jonossa ei odota kappaleita.",
+        "queue_restored": "Käynnistyin uudelleen, joten musiikki jatkuu siitä, mihin se jäi...",
         "volume_now": "Äänenvoimakkuus on {volume} %.",
         "volume_set": "Äänenvoimakkuus on nyt {volume} %.",
         "previous_playing": "Palataan kappaleeseen **{title}**...",

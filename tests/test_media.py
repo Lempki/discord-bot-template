@@ -5,6 +5,7 @@ import shlex
 import threading
 import time
 from dataclasses import replace
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -19,6 +20,7 @@ from cogs.media import (
     DEFAULT_VOLUME,
     LEAVER_GRACE_SECONDS,
     QUEUE_PAGE_SIZE,
+    QUEUE_RESTORE_MAX_AGE,
     GuildPlayer,
     MediaCog,
     PanelView,
@@ -34,6 +36,8 @@ from cogs.media import (
     link,
     played_length,
     progress_line,
+    restored_track,
+    saved_track,
     session_length,
     skips_of,
     suggestion_name,
@@ -2480,3 +2484,162 @@ async def test_lyrics_lookups_stay_within_api_medias_limits() -> None:
     assert {len(params[key]) for key in ("title", "artist", "track")} == {
         LYRICS_FIELD_LIMIT
     }
+
+
+def test_a_saved_track_comes_back_with_its_channel() -> None:
+    bot = media_bot()
+    channel = panel_channel()
+    track = Track(
+        "https://youtu.be/x",
+        "Ada",
+        channel,
+        "Song",
+        210,
+        "YouTube",
+        artist="Band",
+        collection="Mix",
+        requested_by_id=7,
+    )
+    bot.get_channel = MagicMock(return_value=channel)  # type: ignore[method-assign]
+
+    data = saved_track(track)
+
+    assert data["channel_id"] == channel.id
+    assert "channel" not in data
+    assert restored_track(data, bot) == track
+    bot.get_channel.assert_called_with(channel.id)
+
+
+def test_a_track_whose_channel_is_gone_is_left_out() -> None:
+    bot = media_bot()
+    bot.get_channel = MagicMock(return_value=None)  # type: ignore[method-assign]
+
+    assert restored_track(saved_track(song("x")), bot) is None
+
+
+def test_a_track_from_another_version_keeps_its_known_fields() -> None:
+    bot = media_bot()
+    channel = panel_channel()
+    bot.get_channel = MagicMock(return_value=channel)  # type: ignore[method-assign]
+    data = {
+        "query": "https://a/1",
+        "requested_by": "Ada",
+        "channel_id": 50,
+        "mood": "x",
+    }
+
+    assert restored_track(data, bot) == Track("https://a/1", "Ada", channel)
+
+
+async def test_each_song_saves_the_queue_and_the_end_forgets_it(db: None) -> None:
+    bot, cog = await media_cog()
+    cog.client.get_info = AsyncMock(
+        side_effect=lambda **kw: {"webpage_url": kw["url"], "title": kw["url"]}
+    )
+    guild = connected_guild()
+    guild.voice_client.channel.id = 70
+    saved: list[list[database.SavedQueue]] = []
+
+    async def play(vc: Any, source: Any) -> None:
+        saved.append(await database.take_queues())
+
+    bot.voice_presence.play = AsyncMock(side_effect=play)  # type: ignore[method-assign]
+    player = GuildPlayer(cog, guild)
+    cog._players[1] = player
+
+    player.enqueue([Track(f"https://a/{n}", "Ada", panel_channel()) for n in range(2)])
+    await asyncio.wait_for(player._task, timeout=1)  # type: ignore[arg-type]
+
+    # The playing song comes first, then what waits.
+    assert [[t["query"] for t in queue[0].tracks] for queue in saved] == [
+        ["https://a/0", "https://a/1"],
+        ["https://a/1"],
+    ]
+    assert saved[0][0].voice_channel_id == 70
+    # The music ended, so a restart has nothing to pick up.
+    assert await database.take_queues() == []
+
+
+async def test_shutting_down_saves_the_queue(db: None) -> None:
+    _, cog = await media_cog()
+    guild = connected_guild()
+    guild.voice_client.channel.id = 70
+    player = cog._players[1] = GuildPlayer(cog, guild)
+    channel = panel_channel()
+    player.current = replace(song("now"), channel=channel)
+    player.queue.extend(
+        [replace(song(name), channel=channel) for name in ("next", "last")]
+    )
+    player.loop = "queue"
+
+    await cog.cog_unload()
+
+    [queue] = await database.take_queues()
+    assert [track["title"] for track in queue.tracks] == ["now", "next", "last"]
+    assert (queue.voice_channel_id, queue.loop) == (70, "queue")
+
+
+def saved_queue(*, minutes_ago: float = 1) -> database.SavedQueue:
+    return database.SavedQueue(
+        guild_id=GUILD_ID,
+        voice_channel_id=70,
+        loop="track",
+        tracks=[
+            {"query": f"https://a/{n}", "requested_by": "Ada", "channel_id": 50}
+            for n in range(3)
+        ],
+        saved_at=datetime.fromtimestamp(time.time() - minutes_ago * 60, UTC),
+    )
+
+
+async def restore_setup(
+    *, listeners: int = 1
+) -> tuple[BotApp, MediaCog, MagicMock, MagicMock]:
+    """A cog after a restart, with its old voice channel and the channel of its panel."""
+    bot, cog = await media_cog()
+    guild = connected_guild()
+    guild.id = GUILD_ID
+    channel = MagicMock(spec=discord.VoiceChannel)
+    channel.members = [MagicMock(bot=True)] + [
+        MagicMock(bot=False) for _ in range(listeners)
+    ]
+    guild.get_channel = MagicMock(return_value=channel)
+    text_channel = MagicMock(spec=discord.TextChannel)
+    text_channel.send = AsyncMock()
+    bot.get_guild = MagicMock(return_value=guild)  # type: ignore[method-assign]
+    bot.get_channel = MagicMock(return_value=text_channel)  # type: ignore[method-assign]
+    bot.voice_presence.connect = AsyncMock()  # type: ignore[method-assign]
+    return bot, cog, channel, text_channel
+
+
+async def test_a_restart_plays_the_saved_queue_again() -> None:
+    bot, cog, channel, text_channel = await restore_setup()
+
+    assert await cog.restore_queue(saved_queue())
+
+    bot.voice_presence.connect.assert_awaited_once_with(channel)
+    player = cog._players[GUILD_ID]
+    try:
+        assert [track.query for track in player.queue] == [
+            f"https://a/{n}" for n in range(3)
+        ]
+        assert player.loop == "track"
+        text_channel.send.assert_awaited_once_with(EN.queue_restored)
+    finally:
+        player.cancel()
+
+
+@pytest.mark.parametrize(
+    ("minutes_ago", "listeners"),
+    [(QUEUE_RESTORE_MAX_AGE.total_seconds() / 60 + 1, 1), (1, 0)],
+)
+async def test_a_restart_drops_an_old_queue_or_one_without_listeners(
+    minutes_ago: float, listeners: int
+) -> None:
+    bot, cog, _, text_channel = await restore_setup(listeners=listeners)
+
+    assert not await cog.restore_queue(saved_queue(minutes_ago=minutes_ago))
+
+    bot.voice_presence.connect.assert_not_awaited()
+    text_channel.send.assert_not_awaited()
+    assert GUILD_ID not in cog._players

@@ -198,6 +198,7 @@ async def test_version_1_database_gains_automod_settings(tmp_path: Path) -> None
             ALTER TABLE old RENAME TO guild_settings;
             DROP TABLE music_sessions;
             DROP TABLE music_panels;
+            DROP TABLE music_queues;
             PRAGMA user_version = 1;
             """
         )
@@ -230,6 +231,7 @@ async def test_version_2_database_gains_the_music_volume(tmp_path: Path) -> None
             ALTER TABLE guild_settings DROP COLUMN music_volume;
             DROP TABLE music_sessions;
             DROP TABLE music_panels;
+            DROP TABLE music_queues;
             PRAGMA user_version = 2;
             """
         )
@@ -274,6 +276,7 @@ async def test_version_3_database_gains_an_empty_dj_role(tmp_path: Path) -> None
             ALTER TABLE guild_settings DROP COLUMN dj_role_id;
             DROP TABLE music_sessions;
             DROP TABLE music_panels;
+            DROP TABLE music_queues;
             PRAGMA user_version = 3;
             """
         )
@@ -323,6 +326,7 @@ async def test_version_6_database_gains_the_fair_queue_and_goodbye_off(
             ALTER TABLE guild_settings DROP COLUMN even_loudness;
             ALTER TABLE guild_settings DROP COLUMN goodbye_message;
             ALTER TABLE guild_settings DROP COLUMN fair_queue;
+            DROP TABLE music_queues;
             PRAGMA user_version = 6;
             """
         )
@@ -354,6 +358,7 @@ async def test_version_7_database_gains_even_loudness_on_and_cleanup_off(
             """
             ALTER TABLE guild_settings DROP COLUMN leave_cleanup;
             ALTER TABLE guild_settings DROP COLUMN even_loudness;
+            DROP TABLE music_queues;
             PRAGMA user_version = 7;
             """
         )
@@ -368,3 +373,51 @@ async def test_version_7_database_gains_even_loudness_on_and_cleanup_off(
     assert (settings.even_loudness, settings.leave_cleanup) == (True, False)
     assert settings.fair_queue is True
     assert _user_version(path) == len(database._MIGRATIONS)
+
+
+async def test_version_8_database_gains_an_empty_queue_table(tmp_path: Path) -> None:
+    path = tmp_path / "bot.db"
+    await database.init(path)
+    await database.close()
+    with sqlite3.connect(path) as conn:
+        conn.executescript(
+            """
+            DROP TABLE music_queues;
+            PRAGMA user_version = 8;
+            """
+        )
+
+    await database.init(path)
+    try:
+        assert await database.take_queues() == []
+    finally:
+        await database.close()
+
+    assert _user_version(path) == len(database._MIGRATIONS)
+
+
+async def test_a_saved_queue_is_taken_once(db: None) -> None:
+    tracks = [{"query": "https://a/1", "requested_by": "Ada", "channel_id": 50}]
+    await database.save_queue(GUILD, 10, "queue", tracks)
+    # A later save replaces the earlier one.
+    await database.save_queue(GUILD, 11, "off", tracks * 2)
+    await database.save_queue(GUILD_B, 20, "track", tracks)
+
+    taken = sorted(await database.take_queues(), key=lambda queue: queue.guild_id)
+
+    assert [(q.guild_id, q.voice_channel_id, q.loop) for q in taken] == [
+        (GUILD, 11, "off"),
+        (GUILD_B, 20, "track"),
+    ]
+    assert taken[0].tracks == tracks * 2
+    assert taken[0].saved_at.tzinfo == UTC
+    assert await database.take_queues() == []
+
+
+async def test_a_forgotten_queue_is_not_taken(db: None) -> None:
+    await database.save_queue(GUILD, 10, "off", [])
+    await database.save_queue(GUILD_B, 20, "off", [])
+
+    await database.forget_queue(GUILD)
+
+    assert [queue.guild_id for queue in await database.take_queues()] == [GUILD_B]

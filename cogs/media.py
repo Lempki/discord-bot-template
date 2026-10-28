@@ -6,7 +6,8 @@ import logging
 import random
 import time
 from collections import Counter, OrderedDict, deque
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields, replace
+from datetime import UTC, datetime, timedelta
 from math import ceil
 from typing import TYPE_CHECKING, Any, NamedTuple
 
@@ -131,6 +132,10 @@ CHANNEL_STATUS_LIMIT = 500
 
 # An embed's text holds this many characters, so longer lyrics are cut at a line break.
 LYRICS_LIMIT = 4096
+
+# A restart picks a saved queue up only if it is this recent, so old music never comes back.
+# An update or a crash restarts the bot within a minute or two.
+QUEUE_RESTORE_MAX_AGE = timedelta(minutes=30)
 
 
 def escape(text: str) -> str:
@@ -374,6 +379,32 @@ class Track:
             # An embed shows no preview cards, so the link needs no angle brackets.
             title = f"[{title}]({self.query})"
         return f"{title} `{clock(self.duration)}`" if self.duration else title
+
+
+def saved_track(track: Track) -> dict[str, Any]:
+    """Turns a track into data that the database can store, with its channel by ID."""
+    data = {
+        field.name: getattr(track, field.name)
+        for field in fields(Track)
+        if field.name != "channel"
+    }
+    data["channel_id"] = getattr(track.channel, "id", None)
+    return data
+
+
+def restored_track(data: dict[str, Any], bot: BotApp) -> Track | None:
+    """Turns stored track data back into a track, or None when its channel is gone."""
+    channel = bot.get_channel(data.get("channel_id") or 0)
+    if (
+        not isinstance(channel, discord.abc.Messageable)
+        or not data.get("query")
+        or "requested_by" not in data
+    ):
+        return None
+    # A field that a later version dropped is left out, and one it added takes its default.
+    known = {field.name for field in fields(Track)} - {"channel"}
+    values = {name: value for name, value in data.items() if name in known}
+    return Track(channel=channel, **values)
 
 
 class SkipOutcome(NamedTuple):
@@ -763,6 +794,38 @@ class GuildPlayer:
             even_loudness=even,
         )
 
+    async def save(self) -> None:
+        """Stores the playing track and the queue, so a restart can pick them up again.
+
+        A player with nothing to play, or outside voice, forgets what it stored instead.
+        """
+        tracks = [*([self.current] if self.current is not None else []), *self.queue]
+        voice_client = self._guild.voice_client
+        try:
+            if (
+                not tracks
+                or not isinstance(voice_client, discord.VoiceClient)
+                or not voice_client.is_connected()
+            ):
+                await database.forget_queue(self._guild.id)
+                return
+            await database.save_queue(
+                self._guild.id,
+                voice_client.channel.id,
+                self.loop,
+                [saved_track(track) for track in tracks],
+            )
+        except Exception as error:
+            # The music goes on either way, and only a restart would miss the queue.
+            log.warning(f"Could not save the queue of {self._guild}: {error!r}")
+
+    async def forget(self) -> None:
+        """Forgets the stored queue, because the music ended."""
+        try:
+            await database.forget_queue(self._guild.id)
+        except Exception as error:
+            log.warning(f"Could not forget the queue of {self._guild}: {error!r}")
+
     def remove_member(self, member_id: int) -> int:
         """Takes a member's waiting songs out of the queue, leaving the playing one.
 
@@ -796,6 +859,9 @@ class GuildPlayer:
                 await self._play(track, voice_client)
         finally:
             self._drop_prepared()
+            # Shutting down stops the player too, but that music should come back after the restart.
+            if not self._cog.unloading:
+                await self.forget()
             # The statuses and the panel keep the last song between tracks.
             # They change when the music ends.
             await self._cog.end_panel(self)
@@ -883,6 +949,8 @@ class GuildPlayer:
             self.action_carries = False
         else:
             self.last_action = None
+        # A crash runs no shutdown, so each song stores the queue as it stands then.
+        await self.save()
         await self._cog.show_playing(voice_client.channel, title)
         await self._cog.refresh_panel(self._guild, new_track=True)
         if prepared is not None and prepared.source is not None:
@@ -940,8 +1008,10 @@ class MediaCog(commands.Cog, name="Media"):
         # Handles the buttons of every panel, including those posted before a restart.
         self._panel_buttons = PanelView(self)
         self._played_buttons = PlayedView(self)
-        # Closes the panels that the previous run left behind, once the bot is connected.
-        self._old_panels: asyncio.Task[None] | None = None
+        # Closes the panels that the previous run left behind and picks its queues up again.
+        self._after_restart: asyncio.Task[None] | None = None
+        # Set while the cog unloads, as when the bot shuts down, so the players keep their queues.
+        self.unloading = False
         # The members who left voice and whose waiting songs leave the queue unless they return.
         self._leavers: dict[tuple[int, int], asyncio.Task[None]] = {}
 
@@ -1811,18 +1881,23 @@ class MediaCog(commands.Cog, name="Media"):
         """Starts listening to the panel buttons and logs that the cog is ready."""
         self.bot.add_view(self._panel_buttons)
         self.bot.add_view(self._played_buttons)
-        self._old_panels = asyncio.create_task(
-            self._close_old_panels(), name="media-old-panels"
+        self._after_restart = asyncio.create_task(
+            self._pick_up_after_restart(), name="media-after-restart"
         )
         log.info(f"{self.qualified_name} cog loaded.")
 
     async def cog_unload(self) -> None:
-        """Stops every player, restores the bot's status, and closes the media API client."""
+        """Saves and stops every player, restores the bot's status, and closes the media client.
+
+        discord.py unloads the cogs before it leaves voice, so the queues are still whole here.
+        """
+        self.unloading = True
         self._panel_buttons.stop()
         self._played_buttons.stop()
-        if self._old_panels is not None:
-            self._old_panels.cancel()
+        if self._after_restart is not None:
+            self._after_restart.cancel()
         for player in self._players.values():
+            await player.save()
             player.cancel()
         for pending in self._leavers.values():
             pending.cancel()
@@ -2148,9 +2223,69 @@ class MediaCog(commands.Cog, name="Media"):
         except Exception as error:
             log.warning(f"Could not forget the music panel: {error!r}")
 
+    async def _pick_up_after_restart(self) -> None:
+        """Closes the previous run's panels, then plays its queues again where someone listens.
+
+        The panels close first, because a picked-up queue records a new panel in their place.
+        """
+        await self.bot.wait_until_ready()
+        await self._close_old_panels()
+        try:
+            saved = await database.take_queues()
+        except Exception as error:
+            log.warning(f"Could not read the saved queues: {error!r}")
+            return
+        for queue in saved:
+            try:
+                await self.restore_queue(queue)
+            except Exception as error:
+                # One server's failure, such as a voice channel it cannot join, spares the others.
+                log.warning(
+                    f"Could not pick up the queue of guild {queue.guild_id}: {error!r}"
+                )
+
+    async def restore_queue(self, saved: database.SavedQueue) -> bool:
+        """Plays a queue that the previous run saved, from the start of the song that played.
+
+        The queue is dropped when it is too old, or when nobody waits in its voice channel.
+
+        Returns:
+            Whether the music started again.
+        """
+        if datetime.now(UTC) - saved.saved_at > QUEUE_RESTORE_MAX_AGE:
+            log.info(
+                f"Dropped the saved queue of guild {saved.guild_id}, which is old."
+            )
+            return False
+        guild = self.bot.get_guild(saved.guild_id)
+        channel = guild.get_channel(saved.voice_channel_id) if guild else None
+        if guild is None or not isinstance(
+            channel, discord.VoiceChannel | discord.StageChannel
+        ):
+            return False
+        if not any(not member.bot for member in channel.members):
+            log.info(f"Dropped the saved queue of {guild}, where nobody listens now.")
+            return False
+        tracks = [
+            track
+            for data in saved.tracks
+            if (track := restored_track(data, self.bot)) is not None
+        ]
+        if not tracks:
+            return False
+        await self.bot.voice_presence.connect(channel)
+        player = self.player(guild)
+        player.loop = saved.loop
+        # The player's messages belong to the music that a member started, so silence keeps them.
+        s = self.bot.strings_for(guild, private=True)
+        if s.queue_restored:
+            await tracks[0].channel.send(s.queue_restored)
+        player.enqueue(tracks)
+        log.info(f"Picked up {len(tracks)} track(s) in {guild} after a restart.")
+        return True
+
     async def _close_old_panels(self) -> None:
         """Closes the panels that the previous run left playing, which lost their music."""
-        await self.bot.wait_until_ready()
         try:
             panels = await database.list_panels()
         except Exception as error:

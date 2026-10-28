@@ -1,4 +1,4 @@
-"""Per-guild persistent storage for bot settings, warnings, and music panels and sessions.
+"""Per-guild persistent storage for bot settings, warnings, and music panels, sessions, and queues.
 
 The schema is versioned with SQLite's user_version pragma.
 init() applies every migration the database has not seen yet, so existing files upgrade in place.
@@ -18,6 +18,7 @@ import aiosqlite
 __all__ = [
     "GuildSettings",
     "SESSIONS_KEPT",
+    "SavedQueue",
     "WarningRecord",
     "add_warning",
     "close",
@@ -25,13 +26,16 @@ __all__ = [
     "delete_all_warnings",
     "delete_warning",
     "forget_panel",
+    "forget_queue",
     "get_session",
     "get_settings",
     "get_warnings",
     "init",
     "list_panels",
     "save_panel",
+    "save_queue",
     "save_session",
+    "take_queues",
     "upsert_settings",
 ]
 
@@ -101,6 +105,25 @@ class GuildSettings:
     goodbye_message: bool = False
     even_loudness: bool = True
     leave_cleanup: bool = False
+
+
+@dataclass(frozen=True)
+class SavedQueue:
+    """A guild's music as it stood when the bot last saved it, for the next start to pick up.
+
+    Attributes:
+        guild_id: The guild where the music played.
+        voice_channel_id: The voice channel that the bot played in.
+        loop: The repeat mode, "off", "track", or "queue".
+        tracks: The playing track first, then the waiting ones, each as the media cog stored it.
+        saved_at: When the queue was saved, in UTC.
+    """
+
+    guild_id: int
+    voice_channel_id: int
+    loop: str
+    tracks: list[dict[str, Any]]
+    saved_at: datetime
 
 
 @dataclass(frozen=True)
@@ -274,6 +297,21 @@ async def _migrate_to_8(db: aiosqlite.Connection) -> None:
     )
 
 
+async def _migrate_to_9(db: aiosqlite.Connection) -> None:
+    """Adds the saved music queues, which a restart picks up again."""
+    await db.execute(
+        """
+        CREATE TABLE music_queues (
+            guild_id            INTEGER PRIMARY KEY,
+            voice_channel_id    INTEGER NOT NULL,
+            loop                TEXT    NOT NULL,
+            tracks              TEXT    NOT NULL,
+            saved_at            TEXT    NOT NULL
+        )
+        """
+    )
+
+
 # Each entry upgrades the schema by one version. Append new migrations and never edit old ones.
 _MIGRATIONS: list[Callable[[aiosqlite.Connection], Awaitable[None]]] = [
     _migrate_to_1,
@@ -284,6 +322,7 @@ _MIGRATIONS: list[Callable[[aiosqlite.Connection], Awaitable[None]]] = [
     _migrate_to_6,
     _migrate_to_7,
     _migrate_to_8,
+    _migrate_to_9,
 ]
 
 
@@ -514,3 +553,48 @@ async def get_session(message_id: int) -> list[dict[str, Any]] | None:
         return None
     songs: list[dict[str, Any]] = json.loads(row[0])
     return songs
+
+
+# --- Music queues ---
+
+
+async def save_queue(
+    guild_id: int, voice_channel_id: int, loop: str, tracks: list[dict[str, Any]]
+) -> None:
+    """Stores a guild's playing and waiting tracks, replacing what it stored before."""
+    await _conn_or_raise().execute(
+        "INSERT OR REPLACE INTO music_queues "
+        "(guild_id, voice_channel_id, loop, tracks, saved_at) VALUES (?, ?, ?, ?, ?)",
+        (
+            guild_id,
+            voice_channel_id,
+            loop,
+            json.dumps(tracks),
+            datetime.now(UTC).isoformat(),
+        ),
+    )
+
+
+async def forget_queue(guild_id: int) -> None:
+    """Forgets a guild's saved queue, as when its music ends."""
+    await _conn_or_raise().execute(
+        "DELETE FROM music_queues WHERE guild_id = ?", (guild_id,)
+    )
+
+
+async def take_queues() -> list[SavedQueue]:
+    """Returns every saved queue and forgets them, so each is picked up at most once."""
+    db = _conn_or_raise()
+    async with db.execute("SELECT * FROM music_queues") as cur:
+        rows = await cur.fetchall()
+    await db.execute("DELETE FROM music_queues")
+    return [
+        SavedQueue(
+            guild_id=row["guild_id"],
+            voice_channel_id=row["voice_channel_id"],
+            loop=row["loop"],
+            tracks=json.loads(row["tracks"]),
+            saved_at=datetime.fromisoformat(row["saved_at"]),
+        )
+        for row in rows
+    ]

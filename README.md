@@ -48,6 +48,7 @@ The `media` cog plays music in voice channels through api-media, which downloads
 * `/queue show` shows you the whole queue a page at a time, and `/queue remove`, `move`, `shuffle`, `clear`, and `skipto` change it by the numbers it shows.
 * With `/admin fairqueue`, the queue takes turns between the members who add songs, so one member's long album no longer holds everyone else's songs back. `/play`'s `when` option still jumps the line, and repeating the whole queue keeps the order it played in.
 * With `/admin leavecleanup`, a member who leaves voice for two minutes takes their waiting songs out of the queue with them.
+* The queue survives a restart, such as a nightly update. When the bot is back within 30 minutes and someone still waits in the voice channel, it rejoins and plays the song that was playing from its start, then the rest of the queue.
 
 ### Controls
 
