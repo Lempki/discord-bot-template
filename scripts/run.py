@@ -126,6 +126,10 @@ MIN_SECRET_LENGTH = 16
 # Every nightly update makes a backup, so this keeps the last week.
 BACKUPS_KEPT = 7
 
+# A folder in .env that receives a copy of each backup, such as one that syncs to the cloud.
+# The backups folder sits on the same disk as the database, so it cannot outlast that disk.
+BACKUP_COPY_KEY = "BACKUP_COPY_FOLDER"
+
 # A Git clone's update keeps the build cache of the last week, so a rebuild stays fast.
 BUILD_CACHE_KEPT_HOURS = 7 * 24
 
@@ -1049,24 +1053,80 @@ def backup_name(now: time.struct_time) -> str:
     return time.strftime(f"{BACKUP_PREFIX}%Y-%m-%d-%H%M%S.db", now)
 
 
-def list_backups(root: Path) -> list[Path]:
-    """Lists the backups in the project's backups folder, newest first."""
-    folder = root / BACKUP_FOLDER
+def backups_in(folder: Path) -> list[Path]:
+    """Lists the backups in a folder, newest first."""
     if not folder.is_dir():
         return []
     return sorted(folder.glob(f"{BACKUP_PREFIX}*.db"), reverse=True)
 
 
-def prune_backups(root: Path, kept: int = BACKUPS_KEPT) -> list[Path]:
-    """Deletes all but the newest backups.
+def list_backups(root: Path) -> list[Path]:
+    """Lists the backups in the project's backups folder, newest first."""
+    return backups_in(root / BACKUP_FOLDER)
+
+
+def prune_backups(folder: Path, kept: int = BACKUPS_KEPT) -> list[Path]:
+    """Deletes all but the newest backups in a folder.
 
     Returns:
         The deleted files.
     """
-    old = list_backups(root)[kept:]
+    old = backups_in(folder)[kept:]
     for path in old:
         path.unlink(missing_ok=True)
     return old
+
+
+def backup_copy_folder(project: Project) -> Path | None:
+    """Returns the folder that receives a copy of each backup, or None when .env names none.
+
+    Each project gets its own subfolder, so bots that share a copy folder keep their backups apart.
+    A relative folder counts from the project folder.
+    """
+    env = project.root / ".env"
+    text = env.read_text(encoding="utf-8") if env.exists() else ""
+    value = (env_value(text, BACKUP_COPY_KEY) or "").strip("\"'")
+    if not value:
+        return None
+    folder = Path(value).expanduser()
+    if not folder.is_absolute():
+        folder = project.root / folder
+    return folder / project.name
+
+
+def copy_backup(project: Project, backup: Path, report: Report) -> None:
+    """Copies a new backup into the copy folder, which keeps its newest BACKUPS_KEPT too."""
+    folder = backup_copy_folder(project)
+    if folder is None:
+        return
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(backup, folder / backup.name)
+        prune_backups(folder)
+    except OSError as error:
+        # The notice names neither the folder nor the error text, which can hold the user's name.
+        print(f"  {error}")
+        report.problem(
+            f"The backup could not be copied to the {BACKUP_COPY_KEY} folder.",
+            "The backup stays only on this computer, which a broken disk would lose with the bot.",
+            f"Read the error above, and make sure that {BACKUP_COPY_KEY} in .env names a folder "
+            "that exists and can be written to.",
+        )
+        return
+    report.ok(f"Copied the backup to {folder}.")
+
+
+def available_backups(project: Project) -> list[Path]:
+    """Lists the backups in the backups folder and the copy folder, newest first.
+
+    A backup in both folders is listed once, from the backups folder.
+    """
+    found = {path.name: path for path in list_backups(project.root)}
+    copies = backup_copy_folder(project)
+    if copies is not None:
+        for path in backups_in(copies):
+            found.setdefault(path.name, path)
+    return sorted(found.values(), key=lambda path: path.name, reverse=True)
 
 
 def backup_database(project: Project, report: Report) -> Path | None:
@@ -1074,6 +1134,7 @@ def backup_database(project: Project, report: Report) -> Path | None:
 
     SQLite's backup API makes a consistent copy even while the bot writes to the database.
     Only the newest BACKUPS_KEPT copies stay.
+    With BACKUP_COPY_FOLDER set in .env, the new backup is copied there too.
 
     Returns:
         The new backup, or None when there was nothing to back up or the copy failed.
@@ -1097,8 +1158,9 @@ def backup_database(project: Project, report: Report) -> Path | None:
     path = project.root / BACKUP_FOLDER / backup_name(time.localtime())
     path.parent.mkdir(exist_ok=True)
     path.write_bytes(result.stdout)
-    prune_backups(project.root)
+    prune_backups(path.parent)
     report.ok(f"Backed up the bot's database to {BACKUP_FOLDER}/{path.name}.")
+    copy_backup(project, path, report)
     return path
 
 
@@ -1163,10 +1225,10 @@ def restore(project: Project, report: Report) -> bool:
     if not project.is_bot:
         report.ok("This project keeps no database, so there is nothing to restore.")
         return True
-    backups = list_backups(project.root)
+    backups = available_backups(project)
     if not backups:
         report.problem(
-            f"There are no backups in the {BACKUP_FOLDER} folder.",
+            f"There are no backups in the {BACKUP_FOLDER} folder or the {BACKUP_COPY_KEY} folder.",
             "Nothing can be restored.",
             "The update action and the backup action make backups.",
         )
@@ -1193,8 +1255,8 @@ def restore(project: Project, report: Report) -> bool:
     if not (check_setup(project, report) and check_docker(report)):
         return False
     problems = len(report.problems)
-    backup_database(project, report)
-    if len(report.problems) > problems:
+    # A backup that only failed to reach the copy folder still protects the current database.
+    if backup_database(project, report) is None and len(report.problems) > problems:
         # Without a copy of the current database, replacing it could lose data for good.
         return False
     run([*project.compose, "stop", "bot"])
@@ -1263,13 +1325,17 @@ def update_notice(
 ) -> str | None:
     """Words the Discord notice of an update, or returns None when there is nothing to tell.
 
-    A quiet night, when nothing new was released, needs no notice.
+    A quiet night, when nothing new was released and nothing failed, needs no notice.
+    A problem that did not stop the update, such as a backup that failed, is named too.
     """
     if ok and installed:
-        return f"✅ **{project.name}** installed {', '.join(installed)}."
-    if ok or not report.problems:
+        lines = [f"✅ **{project.name}** installed {', '.join(installed)}."]
+        if report.problems:
+            lines.append("⚠️ Something else needs attention.")
+    elif report.problems:
+        lines = [f"⚠️ **{project.name}**: the update needs attention."]
+    else:
         return None
-    lines = [f"⚠️ **{project.name}**: the update needs attention."]
     lines += [f"• {problem.what} {problem.why}" for problem in report.problems]
     return "\n".join(lines)
 

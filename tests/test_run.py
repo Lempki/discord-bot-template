@@ -563,7 +563,7 @@ def test_only_the_newest_backups_stay(tmp_path: Path) -> None:
     paths = make_backups(tmp_path, days=9)
     (tmp_path / run_script.BACKUP_FOLDER / "notes.txt").write_text("", encoding="utf-8")
 
-    deleted = run_script.prune_backups(tmp_path)
+    deleted = run_script.prune_backups(tmp_path / run_script.BACKUP_FOLDER)
 
     assert deleted == [paths[1], paths[0]]
     assert run_script.list_backups(tmp_path) == paths[:1:-1]
@@ -603,6 +603,62 @@ def test_backup_writes_the_database_into_the_backups_folder(
     assert command[:4] == ["docker", "compose", "-f", "compose.stack.yml"]
     assert command[4:8] == ["run", "--rm", "--no-deps", "-T"]
     assert "bot" in command
+
+
+def test_backup_is_copied_into_the_projects_subfolder_of_the_copy_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    copies = tmp_path / "cloud"
+    bot = make_bot(tmp_path, f'BACKUP_COPY_FOLDER="{copies}"\n')
+    project = run_script.detect_project(bot)
+    folder = copies / project.name
+    folder.mkdir(parents=True)
+    old = [folder / f"bot-2026-10-0{day}-040000.db" for day in range(1, 8)]
+    for backup in old:
+        backup.write_bytes(run_script.SQLITE_HEADER)
+    database = run_script.SQLITE_HEADER + b"settings"
+    monkeypatch.setattr(run_script.subprocess, "run", FakeRun(stdout=database))
+    report = run_script.Report()
+
+    path = run_script.backup_database(project, report)
+
+    assert path is not None
+    assert (folder / path.name).read_bytes() == database
+    # The copy folder keeps as many backups as the backups folder, so the oldest went.
+    assert run_script.backups_in(folder) == [folder / path.name, *old[:0:-1]]
+    assert report.problems == []
+
+
+def test_a_relative_copy_folder_counts_from_the_project(tmp_path: Path) -> None:
+    bot = make_bot(tmp_path, "BACKUP_COPY_FOLDER=../cloud\n")
+    project = run_script.detect_project(bot)
+
+    assert run_script.backup_copy_folder(project) == bot / ".." / "cloud" / project.name
+
+
+def test_without_a_copy_folder_backups_stay_local(tmp_path: Path) -> None:
+    bot = make_bot(tmp_path, "# BACKUP_COPY_FOLDER=C:/OneDrive/Bot\n")
+
+    assert run_script.backup_copy_folder(run_script.detect_project(bot)) is None
+
+
+def test_a_failed_copy_is_reported_but_keeps_the_backup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    blocker = tmp_path / "not-a-folder"
+    blocker.write_text("", encoding="utf-8")
+    bot = make_bot(tmp_path, f"BACKUP_COPY_FOLDER={blocker}\n")
+    database = run_script.SQLITE_HEADER + b"settings"
+    monkeypatch.setattr(run_script.subprocess, "run", FakeRun(stdout=database))
+    report = run_script.Report()
+
+    path = run_script.backup_database(run_script.detect_project(bot), report)
+
+    assert path is not None and path.read_bytes() == database
+    [problem] = report.problems
+    assert "could not be copied to the BACKUP_COPY_FOLDER folder" in problem.what
+    # The notice goes to Discord, so it names no folder that could hold the user's name.
+    assert str(blocker) not in problem.what + problem.why
 
 
 def test_bot_without_a_database_needs_no_backup(
@@ -674,6 +730,33 @@ def test_restore_puts_the_chosen_backup_back(
     assert report.problems == []
 
 
+def test_restore_lists_the_copies_that_this_computer_lacks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bot = ready_bot_for_restore(tmp_path, monkeypatch, answers=["1"])
+    project = run_script.detect_project(bot)
+    copies = tmp_path / "cloud"
+    with (bot / ".env").open("a", encoding="utf-8") as env:
+        env.write(f"BACKUP_COPY_FOLDER={copies}\n")
+    folder = copies / project.name
+    folder.mkdir(parents=True)
+    newest = folder / "bot-2026-10-20-040000.db"
+    newest.write_bytes(run_script.SQLITE_HEADER + b"cloud")
+    # A backup in both folders is listed once.
+    (folder / "bot-2026-10-03-040000.db").write_bytes(b"")
+
+    backups = run_script.available_backups(project)
+
+    assert backups[0] == newest
+    assert [path.name for path in backups] == [
+        "bot-2026-10-20-040000.db",
+        "bot-2026-10-03-040000.db",
+        "bot-2026-10-02-040000.db",
+        "bot-2026-10-01-040000.db",
+    ]
+    assert backups[1].parent == bot / run_script.BACKUP_FOLDER
+
+
 def test_restore_stops_when_the_current_database_cannot_be_saved(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -710,6 +793,20 @@ def test_update_notice_lists_what_was_installed(released_bot: Path) -> None:
     assert (
         text == f"✅ **{project.name}** installed 2.0.0 (was 1.7.0), api-media 2.6.0."
     )
+
+
+def test_problems_beside_a_working_update_are_named(released_bot: Path) -> None:
+    project = run_script.detect_project(released_bot)
+    report = run_script.Report()
+    report.problem("The backup could not be copied.", "It stays here.", "Fix it.")
+
+    quiet = run_script.update_notice(project, report, True, [])
+    installed = run_script.update_notice(project, report, True, ["2.0.0"])
+
+    assert quiet is not None and "needs attention" in quiet
+    assert installed is not None
+    assert installed.startswith(f"✅ **{project.name}** installed 2.0.0.")
+    assert installed.endswith("• The backup could not be copied. It stays here.")
 
 
 def test_a_quiet_night_sends_no_notice(released_bot: Path) -> None:

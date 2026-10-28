@@ -232,7 +232,7 @@ The script also takes an action, such as `run.bat stop` on Windows or `./run.sh 
 | `update` | Installs the newest release. In a Git clone, it pulls the latest code, rebuilds on fresh base images, and restarts, then deletes the build cache that no build used for a week. |
 | `schedule` | Installs new releases automatically every night at 04:00. |
 | `unschedule` | Stops installing new releases automatically. |
-| `backup` | Copies the bot's database into the `backups` folder. The update of a downloaded release does it too. |
+| `backup` | Copies the bot's database into the `backups` folder, and into `BACKUP_COPY_FOLDER` when it is set. The update of a downloaded release does it too. |
 | `restore` | Puts a backup of the bot's database back. It asks which one and backs up the current database first. |
 | `local` | Runs the project in the terminal without Docker. Press Ctrl+C to stop it. |
 
@@ -268,9 +268,15 @@ The bot keeps its settings and moderation warnings in a SQLite database on a Doc
 The update of a downloaded release copies it into the `backups` folder first, and the `backup` action does the same at any time.
 The folder keeps the last 7 copies, named after the time they were taken, such as `bot-2026-10-11-040000.db`.
 
-The `restore` action lists the copies and asks which one to put back.
+The `backups` folder sits on the same disk as the database, so a broken disk or a lost computer would take both.
+Set `BACKUP_COPY_FOLDER` in `.env` to a folder that syncs to the cloud, such as one in OneDrive or Google Drive, and each backup is copied there as well, into a subfolder named after the bot.
+That folder keeps the last 7 copies too, so several bots can share it.
+A copy that fails leaves the backup in place, and the update's Discord message names the problem.
+
+The `restore` action lists the copies in both folders and asks which one to put back.
 It backs up the current database before it replaces it, so a restore can be undone with another restore.
 To move the bot to another computer, copy the `backups` folder along with `.env` and run `restore` there.
+With `BACKUP_COPY_FOLDER` set in the copied `.env`, the new computer finds the copies in that folder, so the `backups` folder can stay behind.
 
 ### Offline alerts
 
@@ -350,6 +356,7 @@ All configuration is read from environment variables or from a `.env` file locat
 | `HEARTBEAT_URL` | No | None | The ping URL of a heartbeat service, such as healthchecks.io, which alerts you when the bot stops reporting that it is online. See [Offline alerts](#offline-alerts). |
 | `MEDIA_COOKIES_DIR` | No | `../api-media/cookies` | The folder that the stack mounts as api-media's `cookies` folder, for a YouTube cookies file. A downloaded release uses `./cookies`. |
 | `MAX_QUEUE_LENGTH` | No | `500` | How many songs may wait in a server's music queue. A playlist that does not fit adds the songs that fit. |
+| `BACKUP_COPY_FOLDER` | No | None | A folder that receives a copy of each backup, such as one that syncs to the cloud. See [Backups](#backups). |
 | `UPDATE_WEBHOOK_URL` | No | None | A Discord webhook that hears when a nightly update installs a new release or fails. See [Updates](#updates). It works like a password. |
 | `API_<NAME>_URL` | No | None | The base URL of an api-* service, for example `API_MEDIA_URL`. |
 | `API_<NAME>_SECRET` | No | None | The bearer token of that service. It must match `API_SECRET` in the service's own configuration. |
