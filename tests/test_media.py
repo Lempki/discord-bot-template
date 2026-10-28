@@ -34,12 +34,14 @@ from cogs.media import (
     ended_card,
     join_names,
     link,
+    parse_position,
     played_length,
     progress_line,
     restored_track,
     saved_track,
     session_length,
     skips_of,
+    source_time,
     suggestion_name,
 )
 from config import Config, ServiceConfig
@@ -56,6 +58,7 @@ from utils.audio import (
     is_spotify_collection,
     is_youtube_playlist,
     prime,
+    skips_after,
     source_name,
 )
 
@@ -2643,3 +2646,209 @@ async def test_a_restart_drops_an_old_queue_or_one_without_listeners(
     bot.voice_presence.connect.assert_not_awaited()
     text_channel.send.assert_not_awaited()
     assert GUILD_ID not in cog._players
+
+
+@pytest.mark.parametrize(
+    ("text", "seconds"),
+    [
+        ("90", 90),
+        ("1:30", 90),
+        (" 0:05 ", 5),
+        ("1:02:03", 3723),
+        ("", None),
+        ("1:75", None),
+        ("1:30:00:00", None),
+        ("-5", None),
+        ("1.5", None),
+        ("１:30", None),
+    ],
+)
+def test_parse_position(text: str, seconds: int | None) -> None:
+    assert parse_position(text) == seconds
+
+
+@pytest.mark.parametrize(
+    ("played", "skips", "source"),
+    [
+        (30, (), 30),
+        # A skit of 20 seconds at the start plays before nothing, so every point moves by it.
+        (0, ((0.0, 20.0),), 20),
+        (30, ((0.0, 20.0),), 50),
+        # A part after the point does not move it.
+        (30, ((40.0, 50.0),), 30),
+        (45, ((40.0, 50.0), (10.0, 15.0)), 60),
+    ],
+)
+def test_source_time_counts_the_skipped_parts_before_a_point(
+    played: float, skips: tuple[tuple[float, float], ...], source: float
+) -> None:
+    assert source_time(played, skips) == source
+
+
+def test_skips_after_a_start_move_back_by_it() -> None:
+    skips = ((0.0, 10.0), (25.0, 40.0), (100.0, 110.0))
+
+    assert skips_after(skips, 30) == ((0.0, 10.0), (70.0, 80.0))
+
+
+async def test_audio_source_starts_late_with_its_skips_moved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ffmpeg = MagicMock()
+    monkeypatch.setattr("utils.audio.discord.FFmpegPCMAudio", ffmpeg)
+    monkeypatch.setattr("utils.audio.discord.PCMVolumeTransformer", MagicMock())
+    monkeypatch.setattr("utils.audio.BufferedSource", MagicMock())
+    client = MediaAPIClient("http://media:8000/", "s3cret")
+
+    client.audio_source(
+        "https://youtu.be/x", "ffmpeg", skips=((100.0, 110.0),), start=60
+    )
+    await client.aclose()
+
+    assert ffmpeg.call_args.kwargs["before_options"].endswith(" -ss 60.000")
+    assert "between(t,40,50)" in ffmpeg.call_args.kwargs["options"]
+
+
+def seeking_player(cog: MediaCog) -> tuple[GuildPlayer, MagicMock]:
+    """A player in the middle of a long song, with a voice client that plays it."""
+    guild = connected_guild()
+    voice_client = guild.voice_client
+    voice_client.is_playing.return_value = True
+    voice_client.is_paused.return_value = False
+    voice_client.source = MagicMock()
+    player = GuildPlayer(cog, guild)
+    player.current = song("Mix", duration=3600)
+    player._current_info = {
+        "webpage_url": "https://youtu.be/Mix",
+        "skip_segments": [[0, 20]],
+    }
+    player.started_at = time.monotonic() - 100
+    return player, voice_client
+
+
+async def test_seek_swaps_the_audio_for_audio_from_the_point() -> None:
+    _, cog = await media_cog()
+    player, voice_client = seeking_player(cog)
+    old = voice_client.source
+    new = MagicMock()
+    cog.client.audio_source.return_value = new
+
+    assert await player.seek(600, voice_client)
+
+    # The skit at the start is left out of the panel's count, so the source starts 20 seconds later.
+    assert cog.client.audio_source.call_args.kwargs["start"] == 620
+    assert voice_client.source is new
+    old.cleanup.assert_called_once()
+    assert 599 <= player.elapsed() <= 601
+
+
+async def test_seek_drops_its_audio_when_the_song_ended_meanwhile() -> None:
+    _, cog = await media_cog()
+    player, voice_client = seeking_player(cog)
+    old = voice_client.source
+    new = MagicMock()
+
+    def song_ends(*args: Any, **kwargs: Any) -> MagicMock:
+        player.current = None
+        return new
+
+    cog.client.audio_source.side_effect = song_ends
+
+    assert not await player.seek(600, voice_client)
+
+    assert voice_client.source is old
+    new.cleanup.assert_called_once()
+
+
+async def test_seek_command_jumps_and_names_the_point() -> None:
+    _, cog = await media_cog()
+    interaction, _ = playing_guild()
+    player = cog.player(interaction.guild)
+    player.current = song("Mix", duration=3600)
+    player.seek = AsyncMock(return_value=True)  # type: ignore[method-assign]
+    cog.refresh_panel = AsyncMock()  # type: ignore[method-assign]
+
+    await cog.seek.callback(cog, interaction, "1:30")  # type: ignore[arg-type]
+
+    assert sent_messages(interaction) == [EN.seek_to.format(at="1:30")]
+    assert player.seek.await_args.args[0] == 90
+    assert player.last_action == ("seek", "Ada", {"at": "1:30"})
+    cog.refresh_panel.assert_awaited_once()
+
+
+@pytest.mark.parametrize(
+    ("duration", "position", "expected"),
+    [
+        (3600, "later", EN.seek_invalid),
+        (200, "3:20", EN.seek_past_end.format(length="3:20")),
+        (None, "1:30", EN.seek_live),
+    ],
+    ids=["invalid", "past-the-end", "live"],
+)
+async def test_seek_command_explains_a_point_it_cannot_reach(
+    duration: int | None, position: str, expected: str
+) -> None:
+    _, cog = await media_cog()
+    interaction, _ = playing_guild()
+    player = cog.player(interaction.guild)
+    player.current = song("Mix", duration=duration)
+    player.seek = AsyncMock()  # type: ignore[method-assign]
+
+    await cog.seek.callback(cog, interaction, position)  # type: ignore[arg-type]
+
+    assert sent_messages(interaction) == [expected]
+    player.seek.assert_not_awaited()
+
+
+async def test_seeking_anothers_song_needs_control_of_the_music() -> None:
+    _, cog = await media_cog()
+    interaction, _ = playing_guild()
+    player = cog.player(interaction.guild)
+    player.current = replace(song("Mix", duration=3600), requested_by_id=6)
+    player.seek = AsyncMock()  # type: ignore[method-assign]
+    cog.may_control = AsyncMock(return_value=False)  # type: ignore[method-assign]
+
+    await cog.seek.callback(cog, interaction, "1:30")  # type: ignore[arg-type]
+
+    assert sent_messages(interaction) == [EN.dj_only]
+    player.seek.assert_not_awaited()
+
+
+async def test_a_song_that_a_restart_interrupted_goes_on_where_it_was(
+    db: None,
+) -> None:
+    bot, cog = await media_cog()
+    cog.client.get_info = AsyncMock(
+        return_value={"webpage_url": "https://a/1", "duration_seconds": 300}
+    )
+    guild = connected_guild()
+    guild.voice_client.channel.id = 70
+    elapsed: list[float] = []
+    player = GuildPlayer(cog, guild)
+
+    async def play(vc: Any, source: Any) -> None:
+        elapsed.append(player.elapsed())
+
+    bot.voice_presence.play = AsyncMock(side_effect=play)  # type: ignore[method-assign]
+
+    player.enqueue([Track("https://a/1", "Ada", panel_channel(), resume_at=120)])
+    await asyncio.wait_for(player._task, timeout=1)  # type: ignore[arg-type]
+
+    assert cog.client.audio_source.call_args.kwargs["start"] == 120
+    assert 119 <= elapsed[0] <= 121
+    # A repeat of the song starts it from its beginning.
+    assert player.history[-1].resume_at is None
+
+
+async def test_a_saved_queue_keeps_where_the_song_was(db: None) -> None:
+    _, cog = await media_cog()
+    guild = connected_guild()
+    guild.voice_client.channel.id = 70
+    player = GuildPlayer(cog, guild)
+    player.current = replace(song("Now", duration=300), channel=panel_channel())
+    player.started_at = time.monotonic() - 95
+
+    await player.save()
+
+    [queue] = await database.take_queues()
+    assert queue.tracks[0]["resume_at"] == 95

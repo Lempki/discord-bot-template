@@ -65,6 +65,11 @@ class CoreStrings:
     stopped: str = ""
     paused: str = ""
     resumed: str = ""
+    # Seek. Placeholders are {at}, the point jumped to, and {length}, the song's length.
+    seek_to: str = ""
+    seek_invalid: str = ""
+    seek_past_end: str = ""
+    seek_live: str = ""
     # /queue. Placeholders are {title}, {position}, {user}, {page}, {pages}, {count}, and {length}.
     queue_empty: str = ""
     queue_title: str = ""
@@ -144,6 +149,7 @@ class CoreStrings:
     action_now: str = ""
     action_paused: str = ""
     action_resumed: str = ""
+    action_seek: str = ""
     action_loop: str = ""
     action_shuffled: str = ""
     action_cleared: str = ""
@@ -348,6 +354,10 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "stopped": "Stopped and cleared the queue.",
         "paused": "Paused.",
         "resumed": "Resumed.",
+        "seek_to": "Jumping to {at}...",
+        "seek_invalid": "Give a point such as 1:30, or 90 for 90 seconds.",
+        "seek_past_end": "The song is only {length} long.",
+        "seek_live": "A live stream has no points to jump to.",
         "queue_empty": "Nothing is playing, and the queue is empty.",
         "queue_title": "Queue",
         "queue_now_playing": "**Now playing:** {title}",
@@ -415,6 +425,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "action_now": "▶️ {user} interrupted **{title}**, which plays next",
         "action_paused": "⏸️ {user} paused",
         "action_resumed": "▶️ {user} resumed",
+        "action_seek": "⏩ {user} jumped to {at}",
         "action_loop": "🔁 {user} set repeat to {loop}",
         "action_shuffled": "🔀 {user} shuffled the queue",
         "action_cleared": "🧹 {user} cleared the queue",
@@ -604,6 +615,10 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "stopped": "Musiikki pysäytetty ja jono tyhjennetty.",
         "paused": "Musiikki tauolla.",
         "resumed": "Soitto jatkuu.",
+        "seek_to": "Siirrytään kohtaan {at}...",
+        "seek_invalid": "Anna kohta muodossa 1:30 tai sekunteina, kuten 90.",
+        "seek_past_end": "Kappale on vain {length} pitkä.",
+        "seek_live": "Suorassa lähetyksessä ei voi siirtyä toiseen kohtaan.",
         "queue_empty": "Nyt ei soi mitään, ja jono on tyhjä.",
         "queue_title": "Jono",
         "queue_now_playing": "**Nyt soi:** {title}",
@@ -671,6 +686,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "action_now": "▶️ {user} keskeytti kappaleen **{title}**, joka soi seuraavaksi",
         "action_paused": "⏸️ {user} tauotti soiton",
         "action_resumed": "▶️ {user} jatkoi soittoa",
+        "action_seek": "⏩ {user} siirtyi kohtaan {at}",
         "action_loop": "🔁 {user} asetti toiston: {loop}",
         "action_shuffled": "🔀 {user} sekoitti jonon",
         "action_cleared": "🧹 {user} tyhjensi jonon",
@@ -911,6 +927,8 @@ CORE_COMMAND_TEXT: dict[str, dict[str, str]] = {
         "A song to look up. Leave it out for the playing song.": "Haettava kappale. Jätä pois, niin haetaan soiva kappale.",
         "Stop playing and clear the queue.": "Pysäytä musiikki ja tyhjennä jono.",
         "Pause or resume the audio that is playing now.": "Tauota tai jatka nyt soivaa ääntä.",
+        "Jump to a point in the song that plays now.": "Siirry kohtaan nyt soivassa kappaleessa.",
+        "Where to jump, such as 1:30, or 90 for 90 seconds.": "Kohta, johon siirrytään, kuten 1:30, tai sekunteina, kuten 90.",
         "Show the playing song and the queue, only to you.": "Näytä soiva kappale ja jono vain sinulle.",
         "Warn a member. At the warning limit they are kicked, banned, or timed out.": "Varoita jäsentä. Varoitusrajalla jäsen potkaistaan, saa porttikiellon tai aikalisän.",
         "The member to warn.": "Varoitettava jäsen.",

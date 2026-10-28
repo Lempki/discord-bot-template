@@ -85,6 +85,7 @@ class MediaAPIClient:
         *,
         skips: tuple[tuple[float, float], ...] = (),
         even_loudness: bool = False,
+        start: float = 0.0,
     ) -> discord.AudioSource:
         """Returns an audio source that plays a track through api-media's /media/stream.
 
@@ -99,11 +100,18 @@ class MediaAPIClient:
             volume: The playback volume, where 1.0 is unchanged.
             skips: The parts to leave out, as start and end in seconds, such as a video's skit.
             even_loudness: Whether to bring the track to the same loudness as other tracks.
+            start: Where to start in the source, in seconds, counting the skipped parts.
 
         Returns:
             A volume-adjusted audio source.
         """
         url = f"{self._base_url}/media/stream?{urlencode({'url': track_url})}"
+        seek = ""
+        if start > 0:
+            # api-media's stream cannot jump ahead, so FFmpeg reads it from the beginning.
+            # It drops the audio before the start, and its clock then starts at zero there.
+            seek = f" -ss {start:.3f}"
+            skips = skips_after(skips, start)
         options = "-vn"
         if filters := audio_filters(skips, even_loudness=even_loudness):
             options += f" -af {shlex.quote(filters)}"
@@ -114,7 +122,7 @@ class MediaAPIClient:
         source = discord.FFmpegPCMAudio(
             url,
             executable=ffmpeg,
-            before_options=f'-headers "{headers}"',
+            before_options=f'-headers "{headers}"{seek}',
             options=options,
         )
         # The volume wraps the buffer, so a volume change is heard at once.
@@ -220,6 +228,19 @@ LYRICS_FIELD_LIMIT = 300
 # EBU R128 loudness normalization to -14 LUFS, the level that streaming services play music at.
 # Each song then sounds about as loud as the one before it.
 LOUDNESS_FILTER = "loudnorm=I=-14:TP=-1.5:LRA=11"
+
+
+def skips_after(
+    skips: tuple[tuple[float, float], ...], start: float
+) -> tuple[tuple[float, float], ...]:
+    """Moves the parts to leave out onto a stream that starts at a later point.
+
+    FFmpeg's clock starts at zero where a seek lands, so each part moves back by the start.
+    A part that ended before the start is gone, and one that the start cuts keeps its rest.
+    """
+    return tuple(
+        (max(0.0, begin - start), end - start) for begin, end in skips if end > start
+    )
 
 
 def audio_filters(

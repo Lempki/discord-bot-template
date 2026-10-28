@@ -48,11 +48,12 @@ The `media` cog plays music in voice channels through api-media, which downloads
 * `/queue show` shows you the whole queue a page at a time, and `/queue remove`, `move`, `shuffle`, `clear`, and `skipto` change it by the numbers it shows.
 * With `/admin fairqueue`, the queue takes turns between the members who add songs, so one member's long album no longer holds everyone else's songs back. `/play`'s `when` option still jumps the line, and repeating the whole queue keeps the order it played in.
 * With `/admin leavecleanup`, a member who leaves voice for two minutes takes their waiting songs out of the queue with them.
-* The queue survives a restart, such as a nightly update. When the bot is back within 30 minutes and someone still waits in the voice channel, it rejoins and plays the song that was playing from its start, then the rest of the queue.
+* The queue survives a restart, such as a nightly update. When the bot is back within 30 minutes and someone still waits in the voice channel, it rejoins and plays the song that was playing from where it was, then the rest of the queue.
 
 ### Controls
 
 * `/music skip` skips the song, or votes to skip it, `/music previous` goes back to the song before, `/music loop` repeats the current song or the whole queue, and `/music pause` and `/music stop` pause and stop.
+* `/music seek` jumps to a point in the playing song, such as `1:30`. A late point in a long mix takes a moment, because the song's audio is read from its start again. Anyone may move around in their own song, while another member's song needs the same control as stopping it.
 * `/music volume` sets the server's music volume, which stays after restarts, and `/music lyrics` shows you a song's lyrics from LRCLIB.
 * An admin can pick a DJ role with `/admin djrole`. While others listen, only members with that role, admins, and a lone listener can then stop, clear, shuffle, repeat, change the volume, skip to a song, play something now, or change other members' songs. Anyone can still add songs, pause, go back, and change their own songs.
 * With a DJ role, a skip of someone else's song needs votes from half of the listeners, unless at most two listen. Without a DJ role, everyone controls the music.
@@ -70,7 +71,7 @@ Commands are grouped by feature, so each name says what it acts on, and Discord'
 | Command | What it does |
 |---|---|
 | `/play` | Plays a link or search result, or adds it to the queue. |
-| `/music pause`, `stop`, `skip`, `previous`, `loop`, `volume`, `lyrics` | Controls the music that plays now. |
+| `/music pause`, `stop`, `skip`, `previous`, `seek`, `loop`, `volume`, `lyrics` | Controls the music that plays now. |
 | `/queue show`, `remove`, `move`, `shuffle`, `clear`, `skipto` | Shows and changes the songs waiting in the queue. |
 | `/voice join`, `leave`, `stop` | Brings the bot into a voice channel, sends it out, or stops what it plays. |
 | `/warn`, `/timeout`, `/untimeout`, `/kick`, `/ban` | Moderates a member. A timeout lasts from 60 seconds to a week, as Discord's own menu offers. |

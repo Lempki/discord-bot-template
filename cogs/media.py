@@ -257,6 +257,38 @@ def played_length(
     return max(1, round(duration - sum(end - start for start, end in skips)))
 
 
+def source_time(played: float, skips: tuple[tuple[float, float], ...]) -> float:
+    """Turns a point in a track's played length into the same point in its source.
+
+    The panel counts the played length, which leaves the skipped parts out.
+    Each skipped part before the point therefore moves it later in the source.
+    """
+    point = played
+    for start, end in sorted(skips):
+        if start > point:
+            break
+        point += end - start
+    return point
+
+
+def parse_position(text: str) -> int | None:
+    """Reads a point in a song, such as 90, 1:30, or 1:02:03, as seconds.
+
+    Returns:
+        The seconds, or None when the text is not such a point.
+    """
+    parts = text.strip().split(":")
+    if not 1 <= len(parts) <= 3 or not all(p.isascii() and p.isdigit() for p in parts):
+        return None
+    # After the first part, each counts the minutes or seconds of the part before it.
+    if any(int(part) >= 60 for part in parts[1:]):
+        return None
+    seconds = 0
+    for part in parts:
+        seconds = seconds * 60 + int(part)
+    return seconds
+
+
 def song_lines(track: Track, s: CoreStrings) -> list[str]:
     """The lines that name a song's artist and album, and where it came from and who added it."""
     lines: list[str] = []
@@ -340,6 +372,8 @@ class Track:
         collection: The playlist or album that the track was queued from, by name.
         collection_url: That playlist's or album's link.
         requested_by_id: The ID of the member who queued it, which may skip it without a vote.
+        resume_at: Where to start playing, in seconds of the played length.
+            Only a song that a restart interrupted has one, so it goes on from there.
     """
 
     query: str
@@ -355,6 +389,7 @@ class Track:
     collection: str | None = None
     collection_url: str | None = None
     requested_by_id: int | None = None
+    resume_at: float | None = None
 
     @property
     def label(self) -> str:
@@ -428,6 +463,15 @@ class SkipOutcome(NamedTuple):
         return template.format(votes=self.votes, needed=self.needed)
 
 
+def stop_audio(source: discord.AudioSource) -> None:
+    """Stops audio that will not play, such as its FFmpeg process and its stream."""
+    try:
+        source.cleanup()
+    except Exception as error:
+        # Nothing plays the audio any more, so a failed cleanup only goes to the log.
+        log.info(f"Could not stop unused audio: {error!r}")
+
+
 @dataclass
 class Prepared:
     """The next song, looked up and maybe already buffering, while the current one plays.
@@ -469,6 +513,8 @@ class GuildPlayer:
         self.now_playing_duration: int | None = None
         # The playing track with its page and title filled in, for the panel and for repeats.
         self.current: Track | None = None
+        # api-media's answer for the playing track, which a seek starts its audio from again.
+        self._current_info: dict[str, Any] | None = None
         # The tracks that played, newest last, for /music previous.
         self.history: deque[Track] = deque(maxlen=HISTORY_SIZE)
         # off, track, or queue, as /music loop sets it.
@@ -782,24 +828,73 @@ class GuildPlayer:
                 except Exception as error:
                     log.info(f"Could not stop unused audio: {error!r}")
 
-    async def _audio(self, info: dict[str, Any]) -> discord.AudioSource:
-        """Starts a track's audio with the server's volume and loudness, minus its skips."""
+    async def _audio(
+        self, info: dict[str, Any], *, at: float = 0.0
+    ) -> discord.AudioSource:
+        """Starts a track's audio with the server's volume and loudness, minus its skips.
+
+        Args:
+            info: The track's api-media fields.
+            at: Where to start, in seconds of the played length.
+        """
         volume = await self._cog.volume(self._guild.id) / 100
         even = await self._cog.evens_loudness(self._guild.id)
+        skips = skips_of(info)
         return self._cog.client.audio_source(
             info["webpage_url"],
             self._cog.bot.config.ffmpeg_path,
             volume=volume,
-            skips=skips_of(info),
+            skips=skips,
             even_loudness=even,
+            start=source_time(at, skips) if at > 0 else 0.0,
         )
+
+    async def seek(self, position: float, voice_client: discord.VoiceClient) -> bool:
+        """Plays the current song from a point, by swapping its audio for audio from there.
+
+        The old audio plays on until the new audio is ready, so the music never stops.
+        A paused song resumes.
+
+        Args:
+            position: Where to jump, in seconds of the played length.
+            voice_client: The guild's voice client, which plays the song.
+
+        Returns:
+            Whether the song now plays from there. It does not when the song ended meanwhile.
+        """
+        played, info = self.current, self._current_info
+        if played is None or info is None:
+            return False
+        source = await self._audio(info, at=position)
+        await prime(source)
+        if self.current is not played or not (
+            voice_client.is_playing() or voice_client.is_paused()
+        ):
+            # The song ended or was skipped while the new audio buffered.
+            stop_audio(source)
+            return False
+        if voice_client.is_paused():
+            # Swapping the audio of a paused player would leave the bot marked as silent.
+            voice_client.resume()
+        old = voice_client.source
+        voice_client.source = source
+        self.started_at = time.monotonic() - position
+        self.paused_at = None
+        if old is not None:
+            stop_audio(old)
+        return True
 
     async def save(self) -> None:
         """Stores the playing track and the queue, so a restart can pick them up again.
 
         A player with nothing to play, or outside voice, forgets what it stored instead.
         """
-        tracks = [*([self.current] if self.current is not None else []), *self.queue]
+        playing: list[Track] = []
+        if self.current is not None:
+            # A song of known length goes on where it was, while a live stream starts anew.
+            at = round(self.elapsed()) if self.current.duration else None
+            playing.append(replace(self.current, resume_at=at or None))
+        tracks = [*playing, *self.queue]
         voice_client = self._guild.voice_client
         try:
             if (
@@ -928,6 +1023,10 @@ class GuildPlayer:
         duration = played_length(
             info.get("duration_seconds") or track.duration, skips_of(info)
         )
+        # A song that a restart interrupted goes on where it was, unless that point is gone.
+        resume_at = track.resume_at or 0.0
+        if duration is None or resume_at >= duration:
+            resume_at = 0.0
         played = replace(
             track,
             query=page_url,
@@ -938,11 +1037,14 @@ class GuildPlayer:
             artist=names.artist if names else info.get("artist"),
             song=names.song if names else info.get("track"),
             album=names.album if names else info.get("album"),
+            # A repeat or a return to this song starts it from its beginning.
+            resume_at=None,
         )
         self.current = played
+        self._current_info = info
         self.now_playing = title
         self.now_playing_duration = duration
-        self.started_at = time.monotonic()
+        self.started_at = time.monotonic() - resume_at
         self.paused_at = None
         self.skip_votes.clear()
         if self.action_carries:
@@ -953,13 +1055,16 @@ class GuildPlayer:
         await self.save()
         await self._cog.show_playing(voice_client.channel, title)
         await self._cog.refresh_panel(self._guild, new_track=True)
-        if prepared is not None and prepared.source is not None:
+        if prepared is not None and prepared.source is not None and not resume_at:
             # The audio has been buffering since shortly before the previous song ended.
             source = prepared.source
             if isinstance(source, discord.PCMVolumeTransformer):
                 source.volume = await self._cog.volume(self._guild.id) / 100
         else:
-            source = await self._audio(info)
+            if prepared is not None:
+                # Audio prepared from the song's start does not fit a resumed song.
+                prepared.close()
+            source = await self._audio(info, at=resume_at)
         # The player's clock starts when audio waits, or the song's start plays too fast.
         await prime(source)
         ticker = asyncio.create_task(self._tick(), name=f"media-panel-{self._guild.id}")
@@ -979,6 +1084,7 @@ class GuildPlayer:
             self.session.append(played)
             self.session_seconds += listened
             self.current = None
+            self._current_info = None
             self.now_playing = None
             self.now_playing_duration = None
             self.started_at = None
@@ -1491,6 +1597,51 @@ class MediaCog(commands.Cog, name="Media"):
         await respond(interaction, s.paused if paused else s.resumed)
         await finish(interaction)
         await self.refresh_panel(guild)
+
+    @music.command(name="seek")
+    @in_bot_channel()
+    @app_commands.checks.cooldown(CONTROL_RATE, CONTROL_PER_SECONDS)
+    @app_commands.describe(
+        position="Where to jump, such as 1:30, or 90 for 90 seconds."
+    )
+    async def seek(self, interaction: discord.Interaction, position: str) -> None:
+        """Jump to a point in the song that plays now."""
+        s = self.bot.strings_for(interaction)
+        guild = guild_of(interaction)
+        voice_client = guild.voice_client
+        player = self.player(guild)
+        current = player.current
+        if (
+            not isinstance(voice_client, discord.VoiceClient)
+            or not (voice_client.is_playing() or voice_client.is_paused())
+            or current is None
+        ):
+            await respond(interaction, s.nothing_playing)
+            await finish(interaction)
+            return
+        # A member may move around in their own song, as in their own queued songs.
+        if current.requested_by_id != interaction.user.id and not (
+            await self.may_control(interaction.user, guild)
+        ):
+            await self._deny(interaction)
+            return
+        seconds = parse_position(position)
+        if current.duration is None:
+            await respond(interaction, s.seek_live)
+        elif seconds is None:
+            await respond(interaction, s.seek_invalid)
+        elif seconds >= current.duration:
+            await respond(interaction, s.seek_past_end, length=clock(current.duration))
+        else:
+            at = clock(seconds)
+            # Reaching a late point takes a moment, so the reply comes first.
+            await respond(interaction, s.seek_to, at=at)
+            await finish(interaction)
+            player.note("seek", interaction.user.display_name, at=at)
+            if await player.seek(seconds, voice_client):
+                await self.refresh_panel(guild)
+            return
+        await finish(interaction)
 
     @queue_group.command(name="show")
     async def show_queue(self, interaction: discord.Interaction) -> None:
@@ -2245,7 +2396,7 @@ class MediaCog(commands.Cog, name="Media"):
                 )
 
     async def restore_queue(self, saved: database.SavedQueue) -> bool:
-        """Plays a queue that the previous run saved, from the start of the song that played.
+        """Plays a queue that the previous run saved, from where its playing song was.
 
         The queue is dropped when it is too old, or when nobody waits in its voice channel.
 
