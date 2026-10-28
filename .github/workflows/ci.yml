@@ -12,7 +12,8 @@ concurrency:
 
 jobs:
   ci:
-    uses: Lempki/dev-standards/.github/workflows/python-ci.yml@v0.6.1
+    uses: Lempki/dev-standards/.github/workflows/python-ci.yml@v0.7.0
     with:
       docker: true
+      smoke-test: .github/smoke-test.sh
       forward-python-version: "3.15"
