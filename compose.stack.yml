@@ -57,9 +57,13 @@ services:
       - ${MEDIA_COOKIES_DIR:-../api-media/cookies}:/app/cookies:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4)"]
-      interval: 10s
+      # Every 5 seconds while the service starts, so the bot waits no longer than it must.
+      # Every 30 seconds after that, which still notices a service that stops answering.
+      interval: 30s
       timeout: 5s
-      retries: 6
+      retries: 3
+      start_period: 60s
+      start_interval: 5s
     restart: unless-stopped
     logging: *logging
     mem_limit: 1g
