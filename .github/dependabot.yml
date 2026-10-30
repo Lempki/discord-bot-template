@@ -1,9 +1,11 @@
 version: 2
+# Monthly, because each update runs CI on its pull request and again on main, which costs minutes.
+# Security updates do not wait for this schedule.
 updates:
   - package-ecosystem: uv
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     groups:
       python:
         patterns: ["*"]
@@ -11,7 +13,7 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     groups:
       actions:
         patterns: ["*"]
@@ -19,7 +21,7 @@ updates:
   - package-ecosystem: docker
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     # A new Python also needs a new .python-version and lint target, so it is moved by hand.
     ignore:
       - dependency-name: python
@@ -31,7 +33,7 @@ updates:
   - package-ecosystem: pre-commit
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     groups:
       hooks:
         patterns: ["*"]
