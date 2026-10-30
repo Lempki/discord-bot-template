@@ -61,6 +61,7 @@ from utils.audio import (
     skips_after,
     source_name,
 )
+from utils.request_ids import current_request_id, start_request
 
 EN = LOCALES["en"]
 
@@ -2852,3 +2853,39 @@ async def test_a_saved_queue_keeps_where_the_song_was(db: None) -> None:
 
     [queue] = await database.take_queues()
     assert queue.tracks[0]["resume_at"] == 95
+
+
+async def test_the_stream_names_the_current_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ffmpeg = MagicMock()
+    monkeypatch.setattr("utils.audio.discord.FFmpegPCMAudio", ffmpeg)
+    monkeypatch.setattr("utils.audio.discord.PCMVolumeTransformer", MagicMock())
+    monkeypatch.setattr("utils.audio.BufferedSource", MagicMock())
+    client = MediaAPIClient("http://media:8000/", "s3cret")
+    start_request("1234567890")
+
+    client.audio_source("https://youtu.be/x", "ffmpeg")
+    await client.aclose()
+
+    assert "X-Request-ID: 1234567890\r\n" in ffmpeg.call_args.kwargs["before_options"]
+
+
+async def test_each_song_plays_under_a_request_id_of_its_own() -> None:
+    bot, cog = await media_cog()
+    cog.client.get_info = AsyncMock(
+        side_effect=lambda **kw: {"webpage_url": kw["url"], "title": kw["url"]}
+    )
+    ids: list[str | None] = []
+
+    async def play(vc: Any, source: Any) -> None:
+        ids.append(current_request_id())
+
+    bot.voice_presence.play = AsyncMock(side_effect=play)  # type: ignore[method-assign]
+    player = GuildPlayer(cog, connected_guild())
+    cog._players[1] = player
+
+    player.enqueue([Track(f"https://a/{n}", "Ada", panel_channel()) for n in range(2)])
+    await asyncio.wait_for(player._task, timeout=1)  # type: ignore[arg-type]
+
+    assert len(set(ids)) == 2 and None not in ids

@@ -395,6 +395,7 @@ discord-bot-template/
 │   ├── i18n.py             # Picks each user's language and translates command descriptions.
 │   ├── moderation.py       # issue_warning(), shared by /warn and AutoMod escalation.
 │   ├── replies.py          # respond() and finish(), which never leave a command "thinking".
+│   ├── request_ids.py      # Request IDs that the log lines and the api-* calls of a command share.
 │   ├── strings.py          # Every core message and command translation, in English and Finnish.
 │   └── voice.py            # Joins, plays in, and leaves voice channels for every cog.
 ├── assets/

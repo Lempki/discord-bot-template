@@ -19,6 +19,7 @@ from utils.checks import NotInBotChannel
 from utils.heartbeat import Heartbeat
 from utils.i18n import SILENT, LocaleTranslator, pick_locale
 from utils.replies import finish, respond
+from utils.request_ids import current_request_id, start_request
 from utils.voice import VoicePresence
 
 log = logging.getLogger("bot")
@@ -31,6 +32,16 @@ class LogFormatter(logging.Formatter):
         super().__init__(
             "[{asctime}] [{levelname}] {name}: {message}", "%Y-%m-%d %H:%M:%S", "{"
         )
+
+    def formatMessage(self, record: logging.LogRecord) -> str:  # noqa: N802
+        """Adds the request ID of a line written during a command or a song.
+
+        The api-* services log the same ID with their lines about the calls that the work made.
+        """
+        line = super().formatMessage(record)
+        if (request_id := current_request_id()) is not None:
+            line += f" [request {request_id}]"
+        return line
 
 
 class ReconnectLogFilter(logging.Filter):
@@ -104,6 +115,7 @@ class BotApp(commands.Bot):
         self.voice_presence = VoicePresence(self)
         self.heartbeat = Heartbeat(self, config.heartbeat_url)
         self.tree.on_error = self._on_command_error
+        self.tree.interaction_check = self._name_request
         self._guild_commands_checked = False
         if config.locale not in LOCALES:
             log.warning(f"Unknown LOCALE '{config.locale}'. Falling back to English.")
@@ -134,6 +146,14 @@ class BotApp(commands.Bot):
         elif isinstance(where, discord.Guild):
             code = where.preferred_locale.value
         return pick_locale(LOCALES, code, self.config.locale)
+
+    async def _name_request(self, interaction: discord.Interaction) -> bool:
+        """Names a command's work after its interaction, for the logs. Every command passes.
+
+        The tree runs this before each command, in the task that then runs the command.
+        """
+        start_request(str(interaction.id))
+        return True
 
     async def _on_command_error(
         self, interaction: discord.Interaction, error: app_commands.AppCommandError

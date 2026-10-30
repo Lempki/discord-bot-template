@@ -1,5 +1,6 @@
 """Tests for bot.py that run without connecting to Discord."""
 
+import contextvars
 import inspect
 import logging
 from unittest.mock import AsyncMock, MagicMock
@@ -13,6 +14,7 @@ from config import Config
 from localization import LOCALES
 from tests.conftest import make_interaction, sent_messages
 from utils.checks import NotInBotChannel
+from utils.request_ids import current_request_id, start_request
 
 
 def test_replies_follow_the_users_language() -> None:
@@ -221,3 +223,26 @@ async def test_a_failed_check_names_its_reason(
     await bot._on_command_error(interaction, error)
 
     assert sent_messages(interaction) == [getattr(LOCALES["en"], text)]
+
+
+def test_a_line_written_during_a_request_names_it() -> None:
+    def format_line() -> str:
+        start_request("1234567890")
+        record = logging.LogRecord(
+            "bot", logging.INFO, __file__, 1, "Hello.", None, None
+        )
+        return LogFormatter().format(record)
+
+    line = contextvars.copy_context().run(format_line)
+
+    assert line.endswith("] [INFO] bot: Hello. [request 1234567890]")
+
+
+async def test_a_command_runs_under_its_interactions_id() -> None:
+    bot = BotApp(Config(discord_token="t", locale="en"))
+    interaction = make_interaction()
+    interaction.id = 1234567890123456789
+
+    assert await bot.tree.interaction_check(interaction) is True
+
+    assert current_request_id() == "1234567890123456789"

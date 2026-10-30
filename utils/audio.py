@@ -14,6 +14,9 @@ from urllib.parse import SplitResult, parse_qs, urlencode, urlsplit
 import discord
 import httpx
 
+from utils.request_ids import HEADER as REQUEST_ID_HEADER
+from utils.request_ids import current_request_id, tag_request
+
 __all__ = [
     "BufferedSource",
     "MediaAPIClient",
@@ -75,6 +78,7 @@ class MediaAPIClient:
             base_url=base_url,
             headers={"Authorization": f"Bearer {secret}"},
             timeout=120.0,
+            event_hooks={"request": [tag_request]},
         )
 
     def audio_source(
@@ -119,6 +123,8 @@ class MediaAPIClient:
         # The secret is then part of FFmpeg's command line, which discord.py logs at DEBUG level.
         # The bot logs at INFO, so keep it there, or the log would hold the secret.
         headers = f"Authorization: Bearer {self._secret}\r\n"
+        if (request_id := current_request_id()) is not None:
+            headers += f"{REQUEST_ID_HEADER}: {request_id}\r\n"
         source = discord.FFmpegPCMAudio(
             url,
             executable=ffmpeg,

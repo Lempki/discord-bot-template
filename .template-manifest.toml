@@ -67,6 +67,9 @@ path = "utils/moderation.py"
 path = "utils/replies.py"
 
 [[file]]
+path = "utils/request_ids.py"
+
+[[file]]
 path = "utils/strings.py"
 
 [[file]]
@@ -116,6 +119,9 @@ path = "tests/test_moderation.py"
 
 [[file]]
 path = "tests/test_replies.py"
+
+[[file]]
+path = "tests/test_request_ids.py"
 
 [[file]]
 path = "tests/test_voice.py"

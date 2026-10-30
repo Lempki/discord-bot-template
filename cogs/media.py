@@ -28,6 +28,7 @@ from utils.audio import (
 )
 from utils.checks import guild_of, in_bot_channel
 from utils.replies import finish, mark_replied, respond
+from utils.request_ids import start_request
 from utils.strings import CoreStrings
 
 if TYPE_CHECKING:
@@ -994,6 +995,8 @@ class GuildPlayer:
                 log.warning(f"Could not move the panel's progress: {error!r}")
 
     async def _play(self, track: Track, voice_client: discord.VoiceClient) -> None:
+        # Each song gets its own request ID, which its lookup, its stream, and its log lines share.
+        start_request()
         bot = self._cog.bot
         # The player's messages belong to the music that a member started, so silence keeps them.
         s = bot.strings_for(self._guild, private=True)
@@ -2564,6 +2567,8 @@ class PanelView(discord.ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Lets a member press within the cooldown, and steer the music only from its channel."""
+        # The button runs in this task next, so its log lines and api-media calls share the ID.
+        start_request(str(interaction.id))
         s = self.cog.bot.strings_for(interaction, private=True)
         retry_after = self.cog.button_retry_after(interaction.user.id)
         if retry_after is not None:
