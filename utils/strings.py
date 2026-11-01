@@ -51,7 +51,7 @@ class CoreStrings:
     queue_full: str = ""
     queue_cut: str = ""
     queue_turns: str = ""
-    # A Spotify playlist whose songs Spotify does not share with the bot.
+    # A Spotify playlist whose songs Spotify shows to nobody, such as a private one.
     playlist_unavailable: str = ""
     # The DJ role and vote skipping. Placeholders are {votes} and {needed}.
     dj_only: str = ""
@@ -344,7 +344,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queue_full": "The queue is full, because it holds at most {limit} songs. /queue clear or /queue remove makes room.",
         "queue_cut": "{left} tracks were left out, because the queue holds at most {limit} songs.",
         "queue_turns": "The queue takes turns between the members who add songs, so it plays songs from each in turn.",
-        "playlist_unavailable": "Spotify does not let the bot read this playlist. Albums, single songs, and YouTube playlists still work.",
+        "playlist_unavailable": "Spotify does not show this playlist's songs, so it may be private. Public playlists, albums, and single songs work.",
         "dj_only": "Only members with the DJ role can do that while others listen.",
         "skip_voted": "Your vote to skip counts: {votes} of {needed} needed.",
         "skip_already_voted": "You already voted to skip this song: {votes} of {needed} needed.",
@@ -449,7 +449,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "help_intro": "Each part below explains one of the bot's features and the commands that belong to it. Discord's / menu shows every command with its options.",
         "help_commands": "Commands: {commands}",
         "help_bot_channel": "In this server, the music and voice commands work only in {channel}.",
-        "guide_media": "Join a voice channel, then use `/play` with a YouTube, SoundCloud, or Spotify link, or with words to search for. Each song shows on a panel whose buttons pause, skip, go back, and repeat, and `/queue show` lists what waits. `/music` and `/queue` hold the other controls. Spotify albums and songs work, but Spotify keeps most playlists from bots. When the server has a DJ role, some controls belong to DJs while others listen, and skips go by vote. When the queue takes turns, each member's songs play in rotation with the others'. The panel's 📩 button sends you the playing song.",
+        "guide_media": "Join a voice channel, then use `/play` with a YouTube, SoundCloud, or Spotify link, or with words to search for. Each song shows on a panel whose buttons pause, skip, go back, and repeat, and `/queue show` lists what waits. `/music` and `/queue` hold the other controls. Spotify songs, albums, and public playlists work, and a playlist plays at most its first 100 songs. When the server has a DJ role, some controls belong to DJs while others listen, and skips go by vote. When the queue takes turns, each member's songs play in rotation with the others'. The panel's 📩 button sends you the playing song.",
         "guide_voice": "The bot joins your voice channel when a feature needs it, and leaves on its own when everyone else has left or nothing has played for a while. `/voice join` brings it to your channel, `/voice leave` sends it out, and `/voice stop` stops the sound that plays now.",
         "guide_moderation": "`/warn` gives a member a warning, and at the server's limit the bot kicks, bans, or times them out. `/warnings` lists and removes warnings, and `/timeout`, `/kick`, and `/ban` act at once. `/purge` deletes recent messages. Right-click a member and choose Apps, then Warn, to warn them quickly. Anyone can right-click a message and choose Report to moderators, which sends it to the AutoMod alert channel.",
         "guide_admin": "`/admin` sets the bot up for this server. `/admin channel` picks the channel for the music and voice commands and for the welcome, `/admin autorole` gives new members a role, `/admin djrole` picks who controls the music, `/admin fairqueue` makes the queue take turns between members, `/admin loudness` evens out how loud songs are, `/admin leavecleanup` drops the waiting songs of members who leave voice, `/admin goodbye` says goodbye to members who leave, and `/admin automod` manages Discord's AutoMod filters. `/admin status` shows every setting.",
@@ -605,7 +605,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queue_full": "Jono on täynnä, koska siihen mahtuu enintään {limit} kappaletta. /queue clear tai /queue remove tekee tilaa.",
         "queue_cut": "{left} kappaletta jäi pois, koska jonoon mahtuu enintään {limit} kappaletta.",
         "queue_turns": "Jono vuorottelee kappaleita lisäävien jäsenten kesken, joten kappaleesi soi omalla vuorollaan.",
-        "playlist_unavailable": "Spotify ei anna botin lukea tätä soittolistaa. Albumit, yksittäiset kappaleet ja YouTube-soittolistat toimivat yhä.",
+        "playlist_unavailable": "Spotify ei näytä tämän soittolistan kappaleita, joten se voi olla yksityinen. Julkiset soittolistat, albumit ja yksittäiset kappaleet toimivat.",
         "dj_only": "Vain DJ:t voivat tehdä tämän, kun muitakin on kuuntelemassa.",
         "skip_voted": "Äänestit ohittamisen puolesta. Ääniä on {votes}/{needed}.",
         "skip_already_voted": "Olet jo äänestänyt tämän kappaleen ohittamista. Ääniä on {votes}/{needed}.",
@@ -710,7 +710,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "help_intro": "Jokainen alla oleva osa kertoo yhdestä botin ominaisuudesta ja sen komennoista. Discordin /-valikko näyttää kaikki komennot vaihtoehtoineen.",
         "help_commands": "Komennot: {commands}",
         "help_bot_channel": "Tällä palvelimella musiikki- ja äänikomennot toimivat vain kanavalla {channel}.",
-        "guide_media": "Liity äänikanavalle ja käytä `/play`-komentoa YouTube-, SoundCloud- tai Spotify-linkin tai hakusanojen kanssa. Jokainen kappale näkyy paneelissa, jonka painikkeilla voi tauottaa, ohittaa, palata ja toistaa, ja `/queue show` näyttää jonon. `/music` ja `/queue` sisältävät muut säätimet. Spotifyn albumit ja kappaleet toimivat, mutta useimpia soittolistoja Spotify ei jaa boteille. Jos palvelimella on DJ-rooli, osa säätimistä kuuluu DJ:lle muiden kuunnellessa, ja ohitukset äänestetään. Kun jono vuorottelee, kunkin jäsenen kappaleet soivat vuorotellen muiden kanssa. Paneelin 📩-painike lähettää sinulle soivan kappaleen.",
+        "guide_media": "Liity äänikanavalle ja käytä `/play`-komentoa YouTube-, SoundCloud- tai Spotify-linkin tai hakusanojen kanssa. Jokainen kappale näkyy paneelissa, jonka painikkeilla voi tauottaa, ohittaa, palata ja toistaa, ja `/queue show` näyttää jonon. `/music` ja `/queue` sisältävät muut säätimet. Spotifyn kappaleet, albumit ja julkiset soittolistat toimivat, mutta soittolistasta soi enintään sen 100 ensimmäistä kappaletta. Jos palvelimella on DJ-rooli, osa säätimistä kuuluu DJ:lle muiden kuunnellessa, ja ohitukset äänestetään. Kun jono vuorottelee, kunkin jäsenen kappaleet soivat vuorotellen muiden kanssa. Paneelin 📩-painike lähettää sinulle soivan kappaleen.",
         "guide_voice": "Botti liittyy äänikanavallesi, kun jokin ominaisuus tarvitsee sitä, ja poistuu itse, kun muut ovat lähteneet tai mitään ei ole soinut hetkeen. `/voice join` tuo sen kanavallesi, `/voice leave` lähettää sen pois, ja `/voice stop` pysäyttää nyt soivan äänen.",
         "guide_moderation": "`/warn` antaa jäsenelle varoituksen, ja kun varoitusraja täyttyy, botti potkaisee jäsenen, antaa porttikiellon tai aikalisän. `/warnings` näyttää ja poistaa varoituksia, ja `/timeout`, `/kick` ja `/ban` toimivat heti. `/purge` poistaa viimeisimmät viestit. Napsauta jäsentä hiiren oikealla ja valitse Sovellukset ja Varoita, niin varoitat nopeasti. Kuka tahansa voi napsauttaa viestiä hiiren oikealla ja valita Ilmoita moderaattoreille, jolloin viesti menee AutoMod-hälytyskanavalle.",
         "guide_admin": "`/admin` määrittää botin tälle palvelimelle. `/admin channel` valitsee kanavan musiikki- ja äänikomennoille sekä tervetulotoivotukselle, `/admin autorole` antaa uusille jäsenille roolin, `/admin djrole` valitsee, kuka ohjaa musiikkia, `/admin fairqueue` saa jonon vuorottelemaan jäsenten kesken, `/admin loudness` tasaa kappaleiden äänenvoimakkuuden, `/admin leavecleanup` poistaa äänikanavalta lähtevien jäsenten odottavat kappaleet, `/admin goodbye` hyvästelee lähtevät jäsenet, ja `/admin automod` hallitsee Discordin AutoMod-suodattimia. `/admin status` näyttää kaikki asetukset.",

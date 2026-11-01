@@ -30,7 +30,7 @@ The `media` cog plays music in voice channels through api-media, which downloads
 * Its reply links the track it found and names its source and its place in the queue, with an estimate of when it plays.
 * Its `when` option plays the song next or now. Now puts the interrupted song right after it, and a playlist sends only its first track ahead, so the waiting songs keep their place.
 * Each track of a playlist or album waits in the queue on its own. A Spotify album starts at once, because each track finds its YouTube match when its turn comes.
-* Since February 2026, Spotify shares the tracks of a playlist only with its owners and collaborators, so `/play` explains that it cannot read most Spotify playlists. Albums and songs still work.
+* Spotify songs, albums, and public playlists work. Since February 2026, Spotify's Web API withholds most playlists from apps, so api-media reads them from Spotify's public embed pages, which list a playlist's first 100 songs. `/play` explains when a playlist is private and shows nowhere.
 
 ### The now-playing panel
 
