@@ -154,6 +154,24 @@ The **Requires OAuth2 Code Grant** toggle in the Bot page is not applicable to s
 None of the core cogs send files. Add **Attach Files** if one of your own cogs does.
 Discord's role settings call Moderate Members **Timeout Members**.
 
+## Installing to user accounts
+
+A bot is installed to servers by default, like the invite URL above.
+Discord also lets a person install a bot to their own account.
+Its commands then work for that person everywhere on Discord: in any server, in the bot's DMs, and in other DMs and group DMs.
+That suits a personal bot, such as one that only its owner and a friend use.
+
+1. In the [Discord Developer Portal](https://discord.com/developers/applications), open the application's **Installation** page.
+2. Under **Installation Contexts**, tick **User Install**. Keep **Guild Install** ticked as well if servers should still be able to add the bot.
+3. Under **Default Install Settings**, give **User Install** the `applications.commands` scope, and save.
+4. Set `INSTALL_TO` in `.env` to `users`, or to `servers,users` for both, and restart the bot.
+5. Copy the **Install Link** from the same page and send it to the person who should use the bot. When they open it, Discord asks whether to add the app to their account or to a server.
+
+Commands that need the bot in the server, such as `/admin`, `/info`, the music commands, and the moderation commands, are offered only in servers that installed the bot.
+A bot whose `INSTALL_TO` lists only `users` therefore cannot load their cogs, and it stops at startup with an error that names the command.
+`DEV_GUILD_ID` needs `servers` in `INSTALL_TO`, because Discord offers the commands of a user install only globally.
+Discord limits a reply to a user-installed command to five follow-up messages, within 15 minutes, in a server that has not installed the bot.
+
 ## Moderation and AutoMod
 
 Discord's own AutoMod does the filtering, so blocked messages never reach the channel.
@@ -353,7 +371,8 @@ All configuration is read from environment variables or from a `.env` file locat
 | `LOCALE` | No | `silent` | The fallback language for users whose Discord language the bot does not speak. Built-in values are `en` and `fi`. `silent` mutes public replies to commands. Private replies, such as `/help`, admin and moderator replies, and error messages, are still sent because only the person who ran the command sees them. The music panel, the welcome, and the goodbye are not replies, so they post as well. |
 | `DATABASE_PATH` | No | `data/bot.db` | The SQLite file for per-guild settings and moderation data. The directory is created if needed. The Docker image uses `/app/data/bot.db`. |
 | `FFMPEG_PATH` | No | `ffmpeg` | The FFmpeg executable. Leave it unset to use FFmpeg from the system PATH. |
-| `DEV_GUILD_ID` | No | None | A server ID for development. Commands sync to that server instantly instead of globally. |
+| `DEV_GUILD_ID` | No | None | A server ID for development. Commands sync to that server instantly instead of globally. It needs `servers` in `INSTALL_TO`. |
+| `INSTALL_TO` | No | `servers` | Where people can install the bot: `servers`, `users`, or `servers,users`. See [Installing to user accounts](#installing-to-user-accounts). |
 | `HEARTBEAT_URL` | No | None | The ping URL of a heartbeat service, such as healthchecks.io, which alerts you when the bot stops reporting that it is online. See [Offline alerts](#offline-alerts). |
 | `MEDIA_COOKIES_DIR` | No | `../api-media/cookies` | The folder that the stack mounts as api-media's `cookies` folder, for a YouTube cookies file. A downloaded release uses `./cookies`. |
 | `MAX_QUEUE_LENGTH` | No | `500` | How many songs may wait in a server's music queue. A playlist that does not fit adds the songs that fit. |

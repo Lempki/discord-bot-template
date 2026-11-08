@@ -1,18 +1,29 @@
 """Tests for bot.py that run without connecting to Discord."""
 
+import asyncio
 import contextvars
+import importlib
 import inspect
 import logging
+from collections import defaultdict
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import discord
 import pytest
 from discord import app_commands
 
-from bot import BotApp, LogFormatter, ReconnectLogFilter
-from config import Config
+from bot import (
+    BotApp,
+    LogFormatter,
+    ReconnectLogFilter,
+    TopLevelCommand,
+    needs_a_server,
+)
+from config import Config, ConfigError, InstallTarget, ServiceConfig
 from localization import LOCALES
 from tests.conftest import make_interaction, sent_messages
+from tests.test_smoke import COG_MODULES
 from utils.checks import NotInBotChannel
 from utils.request_ids import current_request_id, start_request
 
@@ -246,3 +257,138 @@ async def test_a_command_runs_under_its_interactions_id() -> None:
     assert await bot.tree.interaction_check(interaction) is True
 
     assert current_request_id() == "1234567890123456789"
+
+
+def _price_command() -> app_commands.Command[Any, ..., None]:
+    @app_commands.command(name="price", description="Show a price.")
+    async def price(interaction: discord.Interaction) -> None:
+        pass
+
+    return price
+
+
+def _server_group() -> app_commands.Group:
+    return app_commands.Group(
+        name="admin",
+        description="Change this server's settings.",
+        guild_only=True,
+        allowed_contexts=app_commands.AppCommandContext(guild=True),
+    )
+
+
+def _registered(bot: BotApp, command: TopLevelCommand) -> dict[str, Any]:
+    """Returns what the bot registers with Discord for a command it carries."""
+    bot.tree.add_command(command)
+    bot.keep_server_commands_in_servers()
+    return command.to_dict(bot.tree)
+
+
+GUILD_INSTALL, USER_INSTALL = 0, 1
+GUILD, BOT_DM, PRIVATE_CHANNEL = 0, 1, 2
+
+
+def test_a_server_bot_leaves_install_types_to_discord() -> None:
+    bot = BotApp(Config(discord_token="t"))
+
+    payload = _registered(bot, _price_command())
+
+    assert payload["integration_types"] is None
+    assert payload["contexts"] is None
+
+
+@pytest.mark.parametrize(
+    ("install_to", "integration_types"),
+    [
+        ({InstallTarget.USERS}, [USER_INSTALL]),
+        ({InstallTarget.SERVERS, InstallTarget.USERS}, [GUILD_INSTALL, USER_INSTALL]),
+    ],
+    ids=["users", "servers-and-users"],
+)
+def test_a_user_installed_bot_offers_commands_everywhere(
+    install_to: set[InstallTarget], integration_types: list[int]
+) -> None:
+    bot = BotApp(Config(discord_token="t", install_to=frozenset(install_to)))
+
+    payload = _registered(bot, _price_command())
+
+    assert sorted(payload["integration_types"]) == integration_types
+    assert sorted(payload["contexts"]) == [GUILD, BOT_DM, PRIVATE_CHANNEL]
+
+
+def test_a_server_command_stays_in_servers_that_installed_the_bot() -> None:
+    install_to = frozenset({InstallTarget.SERVERS, InstallTarget.USERS})
+    bot = BotApp(Config(discord_token="t", install_to=install_to))
+
+    payload = _registered(bot, _server_group())
+
+    assert payload["integration_types"] == [GUILD_INSTALL]
+    assert payload["contexts"] == [GUILD]
+
+
+def test_a_server_command_cannot_load_without_server_installs() -> None:
+    bot = BotApp(Config(discord_token="t", install_to=frozenset({InstallTarget.USERS})))
+    bot.tree.add_command(_server_group())
+
+    with pytest.raises(ConfigError, match="admin works only in a server"):
+        bot.keep_server_commands_in_servers()
+
+
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        (_price_command(), False),
+        (_server_group(), True),
+        (
+            app_commands.Group(
+                name="dm",
+                description="Works in DMs too.",
+                allowed_contexts=app_commands.AppCommandContext(
+                    guild=True, dm_channel=True
+                ),
+            ),
+            False,
+        ),
+    ],
+    ids=["no-limits", "guild-only", "dm-allowed"],
+)
+def test_needs_a_server(command: TopLevelCommand, *, expected: bool) -> None:
+    assert needs_a_server(command) is expected
+
+
+async def test_no_core_server_command_reaches_user_installs(
+    db: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The music cog resumes playback once the bot is ready, which needs a connection.
+    # Never being ready keeps that task waiting until the cog unloads.
+    monkeypatch.setattr(BotApp, "wait_until_ready", _never_ready)
+    install_to = frozenset({InstallTarget.SERVERS, InstallTarget.USERS})
+    # Every cog finds a service, so a bot's own cogs load here too.
+    services = defaultdict(
+        lambda: ServiceConfig(url="http://localhost:8000", secret="s")
+    )
+    config = Config(discord_token="t", install_to=install_to, services=services)
+    bot = BotApp(config)
+    # Calling setup() adds the cogs without the fresh import that load_extension makes.
+    # A fresh import would replace the modules that other tests patch.
+    for name in COG_MODULES:
+        await importlib.import_module(f"cogs.{name}").setup(bot)
+
+    bot.keep_server_commands_in_servers()
+
+    user_commands = set()
+    for command in bot.tree.get_commands():
+        payload = command.to_dict(bot.tree)
+        if USER_INSTALL in payload["integration_types"]:
+            user_commands.add(command.name)
+            assert PRIVATE_CHANNEL in payload["contexts"], command.name
+        else:
+            assert payload["contexts"] == [GUILD], command.name
+    # The guide works anywhere, while the server settings never leave servers.
+    assert "help" in user_commands
+    assert "admin" not in user_commands
+    for cog in list(bot.cogs):
+        await bot.remove_cog(cog)
+
+
+async def _never_ready(self: BotApp) -> None:
+    await asyncio.Event().wait()

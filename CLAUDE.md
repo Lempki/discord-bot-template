@@ -29,6 +29,8 @@ Read it before changing code. When the repositories are cloned side by side, the
 * `run.bat` and `run.sh` run `scripts/run.py`, which reuses the helpers in `scripts/bootstrap.py`. The same rules apply to it.
 * Change a core file here first. Derived bots then pick it up with `dev-standards template-check --template ../discord-bot-template --apply`.
 * Bot-specific behavior belongs in files outside the manifest, such as `localization.py`, `compose.stack.yml`, and the bot's own cogs.
+* `INSTALL_TO` decides whether servers, users, or both can install the bot.
+  In a user install, `BotApp.keep_server_commands_in_servers()` limits every command that `needs_a_server()` to server installs, so a new server-only command needs `guild_only` or guild-only `allowed_contexts`.
 * `config.py` is generic. A cog reads an api-* service with `bot.config.service("<name>")`, which maps to `API_<NAME>_URL` and `API_<NAME>_SECRET`.
 
 ## Messages and languages

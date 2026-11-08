@@ -4,17 +4,29 @@ import os
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-__all__ = ["Config", "ConfigError", "ServiceConfig"]
+__all__ = ["Config", "ConfigError", "InstallTarget", "ServiceConfig"]
 
 _SERVICE_URL = re.compile(r"^API_([A-Z0-9_]+)_URL$")
 
 
 class ConfigError(Exception):
     """Raised when a required setting is missing or malformed."""
+
+
+class InstallTarget(StrEnum):
+    """Where people can install the bot, which INSTALL_TO lists.
+
+    A server install adds the bot to a server for all its members.
+    A user install adds the bot's commands to one person's account, usable anywhere on Discord.
+    """
+
+    SERVERS = "servers"
+    USERS = "users"
 
 
 @dataclass(frozen=True)
@@ -49,6 +61,7 @@ class Config:
         services: The api-* services found in the environment, keyed by name.
         heartbeat_url: The URL of a heartbeat service that hears from the bot while it is online.
         max_queue_length: How many songs may wait in a server's music queue.
+        install_to: Where people can install the bot, servers by default.
     """
 
     discord_token: str
@@ -60,6 +73,7 @@ class Config:
     services: Mapping[str, ServiceConfig] = field(default_factory=dict)
     heartbeat_url: str | None = None
     max_queue_length: int = DEFAULT_MAX_QUEUE_LENGTH
+    install_to: frozenset[InstallTarget] = frozenset({InstallTarget.SERVERS})
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> Config:
@@ -102,6 +116,13 @@ class Config:
         if queue_limit and (not queue_limit.isdigit() or int(queue_limit) < 1):
             raise ConfigError("MAX_QUEUE_LENGTH must be a whole number of at least 1.")
 
+        install_to = _read_install_targets(environ.get("INSTALL_TO", ""))
+        if dev_guild and InstallTarget.SERVERS not in install_to:
+            raise ConfigError(
+                "DEV_GUILD_ID needs servers in INSTALL_TO, "
+                "because Discord offers commands of a user install only globally."
+            )
+
         return cls(
             discord_token=token,
             cogs_to_load=cogs,
@@ -114,6 +135,7 @@ class Config:
             max_queue_length=int(queue_limit)
             if queue_limit
             else DEFAULT_MAX_QUEUE_LENGTH,
+            install_to=install_to,
         )
 
     def service(self, name: str) -> ServiceConfig:
@@ -135,6 +157,23 @@ class Config:
             raise ConfigError(
                 f"{prefix}_URL and {prefix}_SECRET must both be set."
             ) from None
+
+
+def _read_install_targets(value: str) -> frozenset[InstallTarget]:
+    """Parses INSTALL_TO, a comma-separated list such as "servers,users".
+
+    Raises:
+        ConfigError: If the list names something other than servers and users.
+    """
+    names = {name.strip().lower() for name in value.split(",") if name.strip()}
+    if not names:
+        return frozenset({InstallTarget.SERVERS})
+    known = {target.value for target in InstallTarget}
+    if unknown := names - known:
+        raise ConfigError(
+            f"INSTALL_TO accepts servers and users, not {', '.join(sorted(unknown))}."
+        )
+    return frozenset(InstallTarget(name) for name in names)
 
 
 def _read_services(environ: Mapping[str, str]) -> dict[str, ServiceConfig]:

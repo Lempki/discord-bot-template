@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from config import Config, ConfigError, ServiceConfig
+from config import Config, ConfigError, InstallTarget, ServiceConfig
 
 
 def test_minimal_environment_uses_defaults() -> None:
@@ -80,3 +80,39 @@ def test_the_queue_holds_500_songs_unless_set() -> None:
 def test_a_queue_limit_that_is_not_a_positive_whole_number_raises(value: str) -> None:
     with pytest.raises(ConfigError, match="MAX_QUEUE_LENGTH"):
         Config.from_env({"DISCORD_TOKEN": "t", "MAX_QUEUE_LENGTH": value})
+
+
+def test_the_bot_installs_to_servers_unless_set() -> None:
+    config = Config.from_env({"DISCORD_TOKEN": "t"})
+    assert config.install_to == {InstallTarget.SERVERS}
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("users", {InstallTarget.USERS}),
+        (" Servers , USERS ", {InstallTarget.SERVERS, InstallTarget.USERS}),
+        (",", {InstallTarget.SERVERS}),
+    ],
+)
+def test_install_to_lists_servers_and_users(
+    value: str, expected: set[InstallTarget]
+) -> None:
+    config = Config.from_env({"DISCORD_TOKEN": "t", "INSTALL_TO": value})
+    assert config.install_to == expected
+
+
+def test_install_to_rejects_other_names() -> None:
+    with pytest.raises(ConfigError, match="INSTALL_TO accepts servers and users"):
+        Config.from_env({"DISCORD_TOKEN": "t", "INSTALL_TO": "servers,guilds"})
+
+
+def test_a_dev_guild_needs_server_installs() -> None:
+    with pytest.raises(ConfigError, match="DEV_GUILD_ID"):
+        Config.from_env(
+            {"DISCORD_TOKEN": "t", "INSTALL_TO": "users", "DEV_GUILD_ID": "123"}
+        )
+    config = Config.from_env(
+        {"DISCORD_TOKEN": "t", "INSTALL_TO": "servers,users", "DEV_GUILD_ID": "123"}
+    )
+    assert config.dev_guild_id == 123

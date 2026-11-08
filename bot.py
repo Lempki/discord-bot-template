@@ -6,12 +6,13 @@ import logging
 import math
 import signal
 import sys
+from typing import Any
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
-from config import Config, ConfigError
+from config import Config, ConfigError, InstallTarget
 from localization import COMMAND_TEXT, LOCALES, Strings
 from utils import database
 from utils.about import custom_status, read_project_info
@@ -76,6 +77,49 @@ class ReconnectLogFilter(logging.Filter):
 # The cogs that need the privileged Server Members intent, for member join and leave events.
 MEMBERS_INTENT_COGS = frozenset({"events"})
 
+type TopLevelCommand = (
+    app_commands.Command[Any, ..., Any] | app_commands.Group | app_commands.ContextMenu
+)
+
+
+def needs_a_server(command: TopLevelCommand) -> bool:
+    """Returns whether a command works only in a server, such as one that reads its members."""
+    if command.guild_only:
+        return True
+    contexts = command.allowed_contexts
+    return (
+        contexts is not None
+        and not contexts.dm_channel
+        and not contexts.private_channel
+    )
+
+
+def install_defaults(
+    install_to: frozenset[InstallTarget],
+) -> tuple[app_commands.AppInstallationType, app_commands.AppCommandContext]:
+    """Returns where every command is offered unless it says otherwise.
+
+    A bot that only servers install keeps Discord's own defaults.
+    Those offer commands in servers and in the bot's DMs.
+    A user install offers commands everywhere on Discord.
+    That includes servers, the bot's DMs, and other DMs and group DMs.
+
+    Args:
+        install_to: Where people can install the bot.
+
+    Returns:
+        The install types and contexts, both unset for a bot that only servers install.
+    """
+    if InstallTarget.USERS not in install_to:
+        return app_commands.AppInstallationType(), app_commands.AppCommandContext()
+    installs = app_commands.AppInstallationType(
+        guild=InstallTarget.SERVERS in install_to, user=True
+    )
+    contexts = app_commands.AppCommandContext(
+        guild=True, dm_channel=True, private_channel=True
+    )
+    return installs, contexts
+
 
 class BotApp(commands.Bot):
     """The bot, carrying its configuration, languages, and voice presence for every cog to use.
@@ -97,6 +141,7 @@ class BotApp(commands.Bot):
         # Discord sends a bot the text of every direct message, and no feature reads them.
         # Slash commands and buttons in direct messages still work, because they are interactions.
         intents.dm_messages = False
+        allowed_installs, allowed_contexts = install_defaults(config.install_to)
         super().__init__(
             command_prefix=commands.when_mentioned,
             intents=intents,
@@ -108,6 +153,8 @@ class BotApp(commands.Bot):
             # Messages repeat text from users and from sites, such as song titles.
             # So no message may ping everyone or a role, while member mentions still work.
             allowed_mentions=discord.AllowedMentions(everyone=False, roles=False),
+            allowed_installs=allowed_installs,
+            allowed_contexts=allowed_contexts,
         )
         self.config = config
         self.project = read_project_info()
@@ -197,6 +244,7 @@ class BotApp(commands.Bot):
         await self.tree.set_translator(LocaleTranslator(COMMAND_TEXT))
         for name in self.config.cogs_to_load:
             await self.load_extension(f"cogs.{name}")
+        self.keep_server_commands_in_servers()
 
         if self.config.dev_guild_id is not None:
             # A guild sync is instant, which makes it the right choice while developing.
@@ -207,6 +255,34 @@ class BotApp(commands.Bot):
         else:
             synced = await self.tree.sync()
             log.info(f"Synced {len(synced)} global command(s).")
+
+    def keep_server_commands_in_servers(self) -> None:
+        """Offers a command that works only in a server only where a server installed the bot.
+
+        A user install offers commands everywhere, including servers that do not have the bot.
+        A command that needs the server's settings or members cannot work there.
+        Its install type and contexts are set in full.
+        A partial setting would inherit the user install's defaults.
+
+        Raises:
+            ConfigError: When such a command is loaded while INSTALL_TO has no servers.
+        """
+        if InstallTarget.USERS not in self.config.install_to:
+            return
+        for command in self.tree.get_commands():
+            if not needs_a_server(command):
+                continue
+            if InstallTarget.SERVERS not in self.config.install_to:
+                raise ConfigError(
+                    f"The command {command.name} works only in a server that has the bot. "
+                    "Add servers to INSTALL_TO, or remove its cog from COGS_TO_LOAD."
+                )
+            command.allowed_installs = app_commands.AppInstallationType(
+                guild=True, user=False
+            )
+            command.allowed_contexts = app_commands.AppCommandContext(
+                guild=True, dm_channel=False, private_channel=False
+            )
 
     async def on_ready(self) -> None:
         """Logs the connected identity. This runs after every reconnect as well."""
@@ -274,6 +350,10 @@ async def main() -> None:
                 log.critical(
                     "Discord rejected DISCORD_TOKEN. Copy a fresh token from the portal."
                 )
+                raise SystemExit(1) from error
+            except ConfigError as error:
+                # setup_hook checks the loaded commands against INSTALL_TO.
+                log.critical(str(error))
                 raise SystemExit(1) from error
     finally:
         # Runs after a normal close, Ctrl+C, and SIGTERM alike.
