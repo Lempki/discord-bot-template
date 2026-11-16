@@ -7,6 +7,7 @@ They do not only check the template's.
 import importlib
 import inspect
 import pkgutil
+import string
 from dataclasses import fields
 from types import SimpleNamespace
 
@@ -118,6 +119,26 @@ def test_every_language_defines_every_message(code: str) -> None:
         if not getattr(strings, f.name) and f.name not in optional
     ]
     assert missing == [], f"Language '{code}' has no text for: {', '.join(missing)}"
+
+
+def _placeholders(text: str) -> set[str]:
+    """Returns the names in braces that str.format() fills in a text."""
+    return {name for _, name, _, _ in string.Formatter().parse(text) if name}
+
+
+@pytest.mark.parametrize(
+    "code", [code for code in LOCALES if code not in (SILENT, "en")]
+)
+def test_every_language_keeps_the_english_placeholders(code: str) -> None:
+    # A misspelled placeholder fails the reply, and a missing one drops information.
+    english, strings = LOCALES["en"], LOCALES[code]
+    differing = [
+        f.name
+        for f in fields(strings)
+        if _placeholders(getattr(strings, f.name))
+        != _placeholders(getattr(english, f.name))
+    ]
+    assert differing == [], f"Language '{code}' differs from English in: {differing}"
 
 
 def test_every_command_text_is_described_and_short() -> None:
