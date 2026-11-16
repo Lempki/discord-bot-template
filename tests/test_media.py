@@ -656,6 +656,16 @@ async def test_clear_empties_the_queue_and_says_how_many_went() -> None:
     assert sent_messages(interaction) == [EN.queue_cleared.format(count=4)]
 
 
+async def test_clearing_one_track_answers_in_the_singular() -> None:
+    _, cog = await media_cog()
+    queued_player(cog, 1)
+    interaction = make_interaction()
+
+    await cog.clear.callback(cog, interaction)  # type: ignore[arg-type]
+
+    assert sent_messages(interaction) == [EN.queue_cleared_one.format(count=1)]
+
+
 async def test_shuffle_and_clear_say_when_nothing_waits() -> None:
     _, cog = await media_cog()
     interaction = make_interaction()

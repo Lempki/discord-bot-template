@@ -269,6 +269,33 @@ async def test_clearwarnings_reports_count(
     ]
 
 
+async def test_clearwarnings_reports_a_single_warning_in_the_singular(
+    db: None, bot: BotApp, scene: SimpleNamespace
+) -> None:
+    await database.add_warning(GUILD_ID, USER_ID, MOD_ID, "a")
+    cog = ModerationCog(bot)
+
+    await cog.clearwarnings.callback(cog, scene.interaction, member=scene.target)
+
+    assert sent_messages(scene.interaction) == [
+        EN.warnings_cleared_one.format(user="TestUser", count=1)
+    ]
+
+
+async def test_a_one_minute_warning_timeout_is_announced_in_the_singular(
+    db: None, bot: BotApp, scene: SimpleNamespace
+) -> None:
+    await database.upsert_settings(
+        GUILD_ID, warn_threshold=1, warn_action="timeout", warn_timeout_minutes=1
+    )
+    cog = ModerationCog(bot)
+
+    await cog.warn.callback(cog, scene.interaction, member=scene.target, reason=None)
+
+    expected = EN.warn_threshold_timeout_one.format(user="TestUser", minutes=1)
+    assert expected in sent_messages(scene.interaction)
+
+
 # ---------------------------------------------------------------------------
 # The kick and ban commands.
 # ---------------------------------------------------------------------------

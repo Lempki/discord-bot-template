@@ -1473,7 +1473,9 @@ class MediaCog(commands.Cog, name="Media"):
         }
         playing_now = idle or mode == "now"
         if len(tracks) > 1:
-            if playing_now:
+            if playing_now and values["more"] == 1:
+                template = s.queued_many_now_one
+            elif playing_now:
                 template = s.queued_many_now
             elif mode == "next":
                 template = s.queued_many_next
@@ -1495,8 +1497,9 @@ class MediaCog(commands.Cog, name="Media"):
             values["minutes"] = max(1, round(wait / 60))
         else:
             template = s.queued_one
-        if left_out and template and s.queue_cut:
-            template = f"{template}\n{s.queue_cut}"
+        cut = s.queue_cut_one if left_out == 1 else s.queue_cut
+        if left_out and template and cut:
+            template = f"{template}\n{cut}"
             values.update(left=left_out, limit=limit)
         if turns and placed <= waiting and template and s.queue_turns:
             # The songs went ahead of others' songs, which the member would not expect.
@@ -1706,8 +1709,9 @@ class MediaCog(commands.Cog, name="Media"):
         embed = discord.Embed(title=s.queue_title, description="\n".join(lines))
         if waiting:
             length = sum(track.duration or 0 for track in waiting)
+            footer = s.queue_footer_one if len(waiting) == 1 else s.queue_footer
             embed.set_footer(
-                text=s.queue_footer.format(
+                text=footer.format(
                     page=page + 1,
                     pages=pages,
                     count=len(waiting),
@@ -1787,7 +1791,12 @@ class MediaCog(commands.Cog, name="Media"):
         count = player.shuffle()
         if count:
             player.note("shuffled", interaction.user.display_name)
-        template = s.queue_shuffled if count else s.queue_nothing_waiting
+        if count == 0:
+            template = s.queue_nothing_waiting
+        elif count == 1:
+            template = s.queue_shuffled_one
+        else:
+            template = s.queue_shuffled
         await self._queue_reply(interaction, template, count=count)
 
     @queue_group.command(name="clear")
@@ -1804,7 +1813,12 @@ class MediaCog(commands.Cog, name="Media"):
         count = player.clear()
         if count:
             player.note("cleared", interaction.user.display_name)
-        template = s.queue_cleared if count else s.queue_nothing_waiting
+        if count == 0:
+            template = s.queue_nothing_waiting
+        elif count == 1:
+            template = s.queue_cleared_one
+        else:
+            template = s.queue_cleared
         await self._queue_reply(interaction, template, count=count)
 
     @queue_group.command(name="skipto")
@@ -2111,8 +2125,10 @@ class MediaCog(commands.Cog, name="Media"):
             f"`{position}.` {queued.list_line}"
             for position, queued in enumerate(waiting[:PANEL_NEXT_SHOWN], start=1)
         ]
-        if len(waiting) > PANEL_NEXT_SHOWN:
-            upcoming.append(s.panel_more.format(count=len(waiting) - PANEL_NEXT_SHOWN))
+        hidden = len(waiting) - PANEL_NEXT_SHOWN
+        if hidden > 0:
+            more = s.panel_more_one if hidden == 1 else s.panel_more
+            upcoming.append(more.format(count=hidden))
         embed.add_field(
             name=s.panel_next,
             value="\n".join(upcoming) or s.panel_next_none,
@@ -2270,8 +2286,10 @@ class MediaCog(commands.Cog, name="Media"):
             embed.set_thumbnail(url=last.thumbnail)
         counts = Counter(track.requested_by for track in songs)
         names = [escape(name) for name, _ in counts.most_common(SESSION_NAMES_SHOWN)]
-        if len(counts) > SESSION_NAMES_SHOWN:
-            names.append(s.names_others.format(count=len(counts) - SESSION_NAMES_SHOWN))
+        others = len(counts) - SESSION_NAMES_SHOWN
+        if others > 0:
+            template = s.names_others_one if others == 1 else s.names_others
+            names.append(template.format(count=others))
         lines = [s.session_added_by.format(users=join_names(names, s))]
         origins = Counter(
             (track.collection, track.collection_url, track.source)

@@ -60,11 +60,11 @@ class InfoCog(commands.Cog, name="Info"):
         )
         # Every server has the @everyone role, which is no role that anyone picked.
         embed.add_field(name=s.info_roles, value=str(len(guild.roles) - 1))
+        boosts = guild.premium_subscription_count
+        boost_text = s.info_boost_level_one if boosts == 1 else s.info_boost_level
         embed.add_field(
             name=s.info_boosts,
-            value=s.info_boost_level.format(
-                level=guild.premium_tier, count=guild.premium_subscription_count
-            ),
+            value=boost_text.format(level=guild.premium_tier, count=boosts),
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -94,8 +94,10 @@ class InfoCog(commands.Cog, name="Info"):
             roles = [role for role in reversed(target.roles) if not role.is_default()]
             if roles:
                 shown = " ".join(role.mention for role in roles[:ROLES_SHOWN])
-                if len(roles) > ROLES_SHOWN:
-                    shown += " " + s.info_more.format(count=len(roles) - ROLES_SHOWN)
+                hidden = len(roles) - ROLES_SHOWN
+                if hidden > 0:
+                    more = s.info_more_one if hidden == 1 else s.info_more
+                    shown += " " + more.format(count=hidden)
                 embed.add_field(name=s.info_roles, value=shown, inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 

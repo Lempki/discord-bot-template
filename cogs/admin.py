@@ -222,7 +222,8 @@ class AdminCog(commands.Cog, name="Admin"):
         await database.upsert_settings(
             guild_of(interaction).id, warn_timeout_minutes=minutes
         )
-        await respond(interaction, s.admin_timeout_set, ephemeral=True, minutes=minutes)
+        template = s.admin_timeout_set_one if minutes == 1 else s.admin_timeout_set
+        await respond(interaction, template, ephemeral=True, minutes=minutes)
 
     @admin.command(name="status")
     async def status(self, interaction: discord.Interaction) -> None:
@@ -347,7 +348,7 @@ class AdminCog(commands.Cog, name="Admin"):
             if total is not None:
                 await respond(
                     interaction,
-                    s.automod_keywords_saved,
+                    _keywords_saved(s, len(total)),
                     ephemeral=True,
                     count=len(total),
                 )
@@ -373,7 +374,7 @@ class AdminCog(commands.Cog, name="Admin"):
             if remaining is not None:
                 await respond(
                     interaction,
-                    s.automod_keywords_saved,
+                    _keywords_saved(s, len(remaining)),
                     ephemeral=True,
                     count=len(remaining),
                 )
@@ -519,6 +520,11 @@ def _preset_name(s: Strings, preset: str) -> str:
         "sexual_content": s.preset_sexual_content,
         "slurs": s.preset_slurs,
     }.get(preset, preset)
+
+
+def _keywords_saved(s: Strings, count: int) -> str:
+    """Returns the reply that says how many keywords the filter now has."""
+    return s.automod_keywords_saved_one if count == 1 else s.automod_keywords_saved
 
 
 async def setup(bot: BotApp) -> None:

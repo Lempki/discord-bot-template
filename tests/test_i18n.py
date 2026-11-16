@@ -126,6 +126,10 @@ def _placeholders(text: str) -> set[str]:
     return {name for _, name, _, _ in string.Formatter().parse(text) if name}
 
 
+# Placeholders that hold a number, whose noun usually changes when the number is 1.
+_NUMBER_PLACEHOLDERS = {"count", "more", "left", "minutes", "seconds", "hours"}
+
+
 @pytest.mark.parametrize(
     "code", [code for code in LOCALES if code not in (SILENT, "en")]
 )
@@ -139,6 +143,41 @@ def test_every_language_keeps_the_english_placeholders(code: str) -> None:
         != _placeholders(getattr(english, f.name))
     ]
     assert differing == [], f"Language '{code}' differs from English in: {differing}"
+
+
+def test_every_text_with_a_number_has_a_singular() -> None:
+    english = LOCALES["en"]
+    names = {f.name for f in fields(english)}
+    missing = [
+        name
+        for name in sorted(names)
+        if _placeholders(getattr(english, name)) & _NUMBER_PLACEHOLDERS
+        and not name.endswith("_one")
+        and f"{name}_one" not in names
+        and name not in english.NO_SINGULAR
+    ]
+    assert missing == [], (
+        f"Add a _one text, or list the text in NO_SINGULAR, for: {missing}"
+    )
+
+
+def test_no_singular_names_existing_texts() -> None:
+    names = {f.name for f in fields(LOCALES["en"])}
+    assert sorted(LOCALES["en"].NO_SINGULAR - names) == []
+
+
+def test_a_singular_uses_only_the_placeholders_of_its_plural() -> None:
+    english = LOCALES["en"]
+    names = {f.name for f in fields(english)}
+    extra = [
+        name
+        for name in sorted(names)
+        if name.endswith("_one")
+        and name.removesuffix("_one") in names
+        and not _placeholders(getattr(english, name))
+        <= _placeholders(getattr(english, name.removesuffix("_one")))
+    ]
+    assert extra == []
 
 
 def test_every_command_text_is_described_and_short() -> None:

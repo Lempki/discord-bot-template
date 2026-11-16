@@ -71,9 +71,14 @@ def outcome_messages(s: Strings, outcome: WarningOutcome, user: str) -> list[str
     """
     if outcome.action is None:
         return []
+    timeout = (
+        s.warn_threshold_timeout_one
+        if outcome.timeout_minutes == 1
+        else s.warn_threshold_timeout
+    )
     announce, failed = {
         "ban": (s.warn_threshold_ban, s.ban_failed),
-        "timeout": (s.warn_threshold_timeout, s.timeout_failed),
+        "timeout": (timeout, s.timeout_failed),
     }.get(outcome.action, (s.warn_threshold_kick, s.kick_failed))
     values = {"user": user, "minutes": outcome.timeout_minutes, "error": outcome.error}
     messages = [announce.format(**values)]
@@ -257,7 +262,7 @@ class ModerationCog(commands.Cog, name="Moderation"):
         count = await database.delete_all_warnings(guild_of(interaction).id, member.id)
         await respond(
             interaction,
-            s.warnings_cleared,
+            s.warnings_cleared_one if count == 1 else s.warnings_cleared,
             ephemeral=True,
             user=member.display_name,
             count=count,
@@ -532,7 +537,8 @@ class ModerationCog(commands.Cog, name="Moderation"):
         if not deleted:
             await respond(interaction, s.purge_none, ephemeral=True)
             return
-        await respond(interaction, s.purge_done, ephemeral=True, count=len(deleted))
+        template = s.purge_done_one if len(deleted) == 1 else s.purge_done
+        await respond(interaction, template, ephemeral=True, count=len(deleted))
         log.info(f"{interaction.user} purged {len(deleted)} message(s) in {channel}.")
 
     async def warn_from_menu(

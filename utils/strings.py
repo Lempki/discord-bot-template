@@ -3,9 +3,11 @@
 Each bot's localization.py extends CoreStrings with its own messages and can override any core text.
 Placeholders in braces are filled with str.format().
 An empty string means the bot sends nothing for that event.
+A field named like another one plus _one, such as purge_done_one, is that text's singular form, which a cog picks when the number is 1.
 """
 
 from dataclasses import dataclass
+from typing import ClassVar
 
 __all__ = ["CORE_COMMAND_TEXT", "CORE_TEXT", "CoreStrings"]
 
@@ -13,6 +15,29 @@ __all__ = ["CORE_COMMAND_TEXT", "CORE_TEXT", "CoreStrings"]
 @dataclass(frozen=True)
 class CoreStrings:
     """Every user-facing message the core cogs send. All fields default to silence."""
+
+    # Texts with a number that never need a singular form, because the number is never 1 or reads the same at 1.
+    # Every other text with {count}, {more}, {left}, {minutes}, {seconds}, or {hours} has a _one field, which a test checks.
+    # A bot's Strings adds its own with NO_SINGULAR = CoreStrings.NO_SINGULAR | {...}.
+    NO_SINGULAR: ClassVar[frozenset[str]] = frozenset(
+        {
+            # Short units, as in "1 min".
+            "cooldown",
+            "queued_one_wait",
+            "session_hours",
+            "session_minutes",
+            # Playlist texts, which only run for two tracks or more.
+            "queued_many",
+            "queued_many_next",
+            "session_title",
+            # Totals and ratios, as in "(1 in total)" and "1/3".
+            "automod_keywords_header",
+            "warnings_list_header",
+            "automod_warned",
+            "warn_issued",
+            "admin_threshold_set",
+        }
+    )
 
     # General.
     bot_channel_only: str = ""
@@ -45,11 +70,13 @@ class CoreStrings:
     queued_many: str = ""
     # queued_many_now also uses {more}, the tracks added after the one that starts.
     queued_many_now: str = ""
+    queued_many_now_one: str = ""
     # A playlist with when=Next. {position} is where the rest of its tracks start.
     queued_many_next: str = ""
     # The queue's limit. Placeholders are {limit} and {left}, the tracks that did not fit.
     queue_full: str = ""
     queue_cut: str = ""
+    queue_cut_one: str = ""
     queue_turns: str = ""
     # A Spotify playlist whose songs Spotify shows to nobody, such as a private one.
     playlist_unavailable: str = ""
@@ -77,11 +104,14 @@ class CoreStrings:
     queue_next: str = ""
     queue_line: str = ""
     queue_footer: str = ""
+    queue_footer_one: str = ""
     # Queue control. Placeholders are {title}, {position}, and {count}.
     queue_removed: str = ""
     queue_moved: str = ""
     queue_shuffled: str = ""
+    queue_shuffled_one: str = ""
     queue_cleared: str = ""
+    queue_cleared_one: str = ""
     queue_skipping_to: str = ""
     queue_no_position: str = ""
     queue_nothing_waiting: str = ""
@@ -110,6 +140,7 @@ class CoreStrings:
     panel_next: str = ""
     panel_next_none: str = ""
     panel_more: str = ""
+    panel_more_one: str = ""
     panel_footer: str = ""
     panel_loop_off: str = ""
     panel_loop_track: str = ""
@@ -131,6 +162,7 @@ class CoreStrings:
     names_two: str = ""
     names_last: str = ""
     names_others: str = ""
+    names_others_one: str = ""
     panel_played: str = ""
     played_title: str = ""
     played_gone: str = ""
@@ -194,10 +226,12 @@ class CoreStrings:
     info_roles: str = ""
     info_boosts: str = ""
     info_boost_level: str = ""
+    info_boost_level_one: str = ""
     info_account_created: str = ""
     info_joined: str = ""
     info_boosting: str = ""
     info_more: str = ""
+    info_more_one: str = ""
     info_avatar_title: str = ""
     # The placeholders of about_text are {name}, {version}, {since}, {latency}, and {servers}.
     # {since} is a Discord timestamp, which each reader's app shows in their own language.
@@ -239,6 +273,7 @@ class CoreStrings:
     admin_threshold_set: str = ""
     admin_action_set: str = ""
     admin_timeout_set: str = ""
+    admin_timeout_set_one: str = ""
     admin_status: str = ""
     status_any_channel: str = ""
     status_none: str = ""
@@ -254,6 +289,7 @@ class CoreStrings:
     automod_keywords_invalid: str = ""
     automod_keywords_limit: str = ""
     automod_keywords_saved: str = ""
+    automod_keywords_saved_one: str = ""
     automod_keywords_none: str = ""
     automod_keywords_header: str = ""
     automod_preset_on: str = ""
@@ -277,11 +313,13 @@ class CoreStrings:
     warn_threshold_kick: str = ""
     warn_threshold_ban: str = ""
     warn_threshold_timeout: str = ""
+    warn_threshold_timeout_one: str = ""
     warnings_list_header: str = ""
     warnings_list_entry: str = ""
     warnings_no_reason: str = ""
     warnings_none: str = ""
     warnings_cleared: str = ""
+    warnings_cleared_one: str = ""
     warning_removed: str = ""
     warning_not_found: str = ""
     kick_success: str = ""
@@ -295,6 +333,7 @@ class CoreStrings:
     untimeout_none: str = ""
     untimeout_failed: str = ""
     purge_done: str = ""
+    purge_done_one: str = ""
     purge_none: str = ""
     purge_failed: str = ""
     # The right-click Warn and Report. warn_modal_title uses {user}.
@@ -340,9 +379,11 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queued_one_wait": "Added **{title}** from {source} to the queue at #{position}. It plays in about {minutes} min.",
         "queued_many": "Added {count} tracks from {source} to the queue, starting at #{position}.",
         "queued_many_now": "Playing **{title}** from {source}, and added {more} more tracks to the queue.",
+        "queued_many_now_one": "Playing **{title}** from {source}, and added 1 more track to the queue.",
         "queued_many_next": "Added {count} tracks from {source}. **{title}** plays next, and the rest start at #{position}.",
         "queue_full": "The queue is full, because it holds at most {limit} songs. /queue clear or /queue remove makes room.",
         "queue_cut": "{left} tracks were left out, because the queue holds at most {limit} songs.",
+        "queue_cut_one": "One track was left out, because the queue holds at most {limit} songs.",
         "queue_turns": "The queue takes turns between the members who add songs, so it plays songs from each in turn.",
         "playlist_unavailable": "Spotify does not show this playlist's songs, so it may be private. Public playlists, albums, and single songs work.",
         "dj_only": "Only members with the DJ role can do that while others listen.",
@@ -364,10 +405,13 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queue_next": "**Up next:**",
         "queue_line": "`{position}.` {title} · {user}",
         "queue_footer": "Page {page} of {pages} · {count} tracks · {length}",
+        "queue_footer_one": "Page {page} of {pages} · 1 track · {length}",
         "queue_removed": "Removed **{title}** from the queue.",
         "queue_moved": "Moved **{title}** to #{position}.",
         "queue_shuffled": "Shuffled {count} tracks.",
+        "queue_shuffled_one": "Shuffled 1 track.",
         "queue_cleared": "Removed {count} tracks from the queue. The current track keeps playing.",
+        "queue_cleared_one": "Removed 1 track from the queue. The current track keeps playing.",
         "queue_skipping_to": "Skipping to **{title}**...",
         "queue_no_position": "There is no track at #{position}. /queue show shows the numbers.",
         "queue_nothing_waiting": "No tracks are waiting in the queue.",
@@ -393,6 +437,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "panel_next": "Up next",
         "panel_next_none": "Nothing yet. /play adds more.",
         "panel_more": "…and {count} more",
+        "panel_more_one": "…and 1 more",
         "panel_footer": "Repeat: {loop} · Volume: {volume}%",
         "panel_loop_off": "off",
         "panel_loop_track": "this song",
@@ -411,6 +456,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "names_two": "{first} and {second}",
         "names_last": ", and {last}",
         "names_others": "{count} others",
+        "names_others_one": "1 other",
         "panel_played": "Played songs",
         "played_title": "Played songs",
         "played_gone": "This list is no longer kept. The bot keeps the songs of the last 20 sessions.",
@@ -464,10 +510,12 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "info_roles": "Roles",
         "info_boosts": "Boosts",
         "info_boost_level": "Level {level}, {count} boosts",
+        "info_boost_level_one": "Level {level}, 1 boost",
         "info_account_created": "Account created",
         "info_joined": "Joined the server",
         "info_boosting": "Boosting since",
         "info_more": "and {count} more",
+        "info_more_one": "and 1 more",
         "info_avatar_title": "Avatar of {user}",
         "about_text": "**{name}** {version}\nOnline since {since}\nResponse time: {latency} ms\nServers: {servers}",
         "about_link": "Source code: <{url}>",
@@ -495,12 +543,13 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "admin_threshold_set": "Warning threshold set to {count}.",
         "admin_action_set": "Warning action set to **{action}**.",
         "admin_timeout_set": "Timeout length set to {minutes} minutes.",
+        "admin_timeout_set_one": "Timeout length set to 1 minute.",
         "admin_status": (
             "**Bot settings**\nChannel: {channel}\nAuto-role: {autorole}\nDJ role: {dj}\n"
             "Fair queue: {fair}\nEven loudness: {loudness}\nLeaver cleanup: {leavers}\n"
             "Goodbye message: {goodbye}\n"
             "Warning threshold: {threshold}\nWarning action: {action}\n"
-            "Timeout length: {timeout} minutes\nAutoMod escalation: {escalation}\n"
+            "Timeout length: {timeout} min\nAutoMod escalation: {escalation}\n"
             "AutoMod alerts: {alert}\nAutoMod keywords: {keywords}\n"
             "AutoMod presets: {presets}"
         ),
@@ -517,7 +566,8 @@ CORE_TEXT: dict[str, dict[str, str]] = {
             "Too long: {keywords}"
         ),
         "automod_keywords_limit": "The keyword filter can hold at most {limit} keywords.",
-        "automod_keywords_saved": "The keyword filter now has {count} keyword(s).",
+        "automod_keywords_saved": "The keyword filter now has {count} keywords.",
+        "automod_keywords_saved_one": "The keyword filter now has 1 keyword.",
         "automod_keywords_none": "The keyword filter is empty.",
         "automod_keywords_header": "**Keyword filter** ({count} in total)",
         "automod_preset_on": "The {preset} filter is now on.",
@@ -544,11 +594,13 @@ CORE_TEXT: dict[str, dict[str, str]] = {
             "🚨 The warning limit was reached, so **{user}** will be timed out "
             "for {minutes} minutes."
         ),
+        "warn_threshold_timeout_one": "🚨 The warning limit was reached, so **{user}** will be timed out for 1 minute.",
         "warnings_list_header": "**Warnings for {user}** ({count} in total)",
         "warnings_list_entry": "`#{id}` {reason} _({date})_",
         "warnings_no_reason": "No reason given.",
         "warnings_none": "**{user}** has no warnings.",
-        "warnings_cleared": "Cleared {count} warning(s) from **{user}**.",
+        "warnings_cleared": "Cleared {count} warnings from **{user}**.",
+        "warnings_cleared_one": "Cleared 1 warning from **{user}**.",
         "warning_removed": "Warning `#{id}` was removed.",
         "warning_not_found": "Warning `#{id}` was not found in this server.",
         "kick_success": "**{user}** was kicked.",
@@ -561,6 +613,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "untimeout_none": "**{user}** has no timeout.",
         "untimeout_failed": "Could not lift the timeout of **{user}**. Reason: {error}",
         "purge_done": "Deleted {count} messages.",
+        "purge_done_one": "Deleted 1 message.",
         "purge_none": "No messages to delete were found among the messages of the last 14 days.",
         "purge_failed": "Could not delete the messages. Reason: {error}",
         "warn_modal_title": "Warn {user}",
@@ -601,9 +654,11 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queued_one_wait": "**{title}** ({source}) lisättiin jonoon sijalle {position}. Se soi noin {minutes} min päästä.",
         "queued_many": "Jonoon lisättiin {count} kappaletta ({source}) sijalta {position} alkaen.",
         "queued_many_now": "Soitetaan **{title}** ({source}), ja jonoon lisättiin {more} muuta kappaletta.",
+        "queued_many_now_one": "Soitetaan **{title}** ({source}), ja jonoon lisättiin yksi muu kappale.",
         "queued_many_next": "Jonoon lisättiin {count} kappaletta ({source}). **{title}** soi seuraavaksi, ja loput alkavat sijalta {position}.",
         "queue_full": "Jono on täynnä, koska siihen mahtuu enintään {limit} kappaletta. /queue clear tai /queue remove tekee tilaa.",
         "queue_cut": "{left} kappaletta jäi pois, koska jonoon mahtuu enintään {limit} kappaletta.",
+        "queue_cut_one": "Yksi kappale jäi pois, koska jonoon mahtuu enintään {limit} kappaletta.",
         "queue_turns": "Jono vuorottelee kappaleita lisäävien jäsenten kesken, joten kappaleesi soi omalla vuorollaan.",
         "playlist_unavailable": "Spotify ei näytä tämän soittolistan kappaleita, joten se voi olla yksityinen. Julkiset soittolistat, albumit ja yksittäiset kappaleet toimivat.",
         "dj_only": "Vain DJ:t voivat tehdä tämän, kun muitakin on kuuntelemassa.",
@@ -625,10 +680,13 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "queue_next": "**Seuraavaksi:**",
         "queue_line": "`{position}.` {title} · {user}",
         "queue_footer": "Sivu {page}/{pages} · {count} kappaletta · {length}",
+        "queue_footer_one": "Sivu {page}/{pages} · 1 kappale · {length}",
         "queue_removed": "**{title}** poistettiin jonosta.",
         "queue_moved": "**{title}** siirrettiin sijalle {position}.",
         "queue_shuffled": "Jonon {count} kappaletta sekoitettiin.",
-        "queue_cleared": "Jonosta poistettu {count} kappaletta. Nykyinen kappale soi loppuun.",
+        "queue_shuffled_one": "Jonon ainoa kappale sekoitettiin.",
+        "queue_cleared": "Jonosta poistettiin {count} kappaletta. Nykyinen kappale soi loppuun.",
+        "queue_cleared_one": "Jonosta poistettiin yksi kappale. Nykyinen kappale soi loppuun.",
         "queue_skipping_to": "Hypätään kappaleeseen **{title}**...",
         "queue_no_position": "Sijalla {position} ei ole kappaletta. /queue show näyttää numerot.",
         "queue_nothing_waiting": "Jonossa ei odota kappaleita.",
@@ -654,6 +712,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "panel_next": "Seuraavaksi",
         "panel_next_none": "Ei vielä mitään. /play lisää kappaleita.",
         "panel_more": "…ja {count} muuta",
+        "panel_more_one": "…ja 1 muu",
         "panel_footer": "Toisto: {loop} · Äänenvoimakkuus: {volume} %",
         "panel_loop_off": "pois",
         "panel_loop_track": "tämä kappale",
@@ -672,6 +731,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "names_two": "{first} ja {second}",
         "names_last": " ja {last}",
         "names_others": "{count} muuta",
+        "names_others_one": "1 muu",
         "panel_played": "Soitetut kappaleet",
         "played_title": "Soitetut kappaleet",
         "played_gone": "Tätä listaa ei enää säilytetä. Botti muistaa 20 viimeisimmän soittokerran kappaleet.",
@@ -725,10 +785,12 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "info_roles": "Roolit",
         "info_boosts": "Tehostukset",
         "info_boost_level": "Taso {level}, {count} tehostusta",
+        "info_boost_level_one": "Taso {level}, 1 tehostus",
         "info_account_created": "Tili luotu",
         "info_joined": "Liittyi palvelimelle",
         "info_boosting": "Tehostanut alkaen",
         "info_more": "ja {count} muuta",
+        "info_more_one": "ja 1 muu",
         "info_avatar_title": "Käyttäjän {user} profiilikuva",
         "about_text": "**{name}** {version}\nPäällä {since} alkaen\nVasteaika: {latency} ms\nPalvelimia: {servers}",
         "about_link": "Lähdekoodi: <{url}>",
@@ -756,12 +818,13 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "admin_threshold_set": "Varoitusrajaksi asetettiin {count}.",
         "admin_action_set": "Varoitusrajan seuraukseksi asetettiin **{action}**.",
         "admin_timeout_set": "Aikalisän pituudeksi asetettiin {minutes} minuuttia.",
+        "admin_timeout_set_one": "Aikalisän pituudeksi asetettiin 1 minuutti.",
         "admin_status": (
             "**Botin asetukset**\nKanava: {channel}\nAutomaattinen rooli: {autorole}\nDJ-rooli: {dj}\n"
             "Vuorotteleva jono: {fair}\nTasainen äänenvoimakkuus: {loudness}\n"
             "Lähtijän kappaleiden poisto: {leavers}\nHyvästit: {goodbye}\n"
             "Varoitusraja: {threshold}\nVaroitusrajan seuraus: {action}\n"
-            "Aikalisän pituus: {timeout} minuuttia\nAutoMod-seuraus: {escalation}\n"
+            "Aikalisän pituus: {timeout} min\nAutoMod-seuraus: {escalation}\n"
             "AutoMod-hälytykset: {alert}\nAutoMod-avainsanat: {keywords}\n"
             "AutoMod-esiasetukset: {presets}"
         ),
@@ -779,6 +842,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         ),
         "automod_keywords_limit": "Avainsanasuodattimessa voi olla enintään {limit} avainsanaa.",
         "automod_keywords_saved": "Avainsanoja on nyt {count}.",
+        "automod_keywords_saved_one": "Suodattimessa on nyt yksi avainsana.",
         "automod_keywords_none": "Avainsanasuodatin on tyhjä.",
         "automod_keywords_header": "**Avainsanasuodatin** ({count} yhteensä)",
         "automod_preset_on": "Suodatus luokalle {preset} on nyt käytössä.",
@@ -806,11 +870,13 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "warn_threshold_timeout": (
             "🚨 Varoitusraja täyttyi, joten **{user}** saa {minutes} minuutin aikalisän."
         ),
+        "warn_threshold_timeout_one": "🚨 Varoitusraja täyttyi, joten **{user}** saa minuutin aikalisän.",
         "warnings_list_header": "**Käyttäjän {user} varoitukset** ({count} yhteensä)",
         "warnings_list_entry": "`#{id}` {reason} _({date})_",
         "warnings_no_reason": "Syytä ei annettu.",
         "warnings_none": "Käyttäjällä **{user}** ei ole varoituksia.",
-        "warnings_cleared": "Käyttäjältä **{user}** poistettiin varoituksia: {count}.",
+        "warnings_cleared": "Käyttäjältä **{user}** poistettiin {count} varoitusta.",
+        "warnings_cleared_one": "Käyttäjältä **{user}** poistettiin yksi varoitus.",
         "warning_removed": "Varoitus `#{id}` poistettiin.",
         "warning_not_found": "Varoitusta `#{id}` ei löytynyt tältä palvelimelta.",
         "kick_success": "**{user}** potkaistiin palvelimelta.",
@@ -823,6 +889,7 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "untimeout_none": "Käyttäjällä **{user}** ei ole aikalisää.",
         "untimeout_failed": "Käyttäjän **{user}** aikalisän poistaminen epäonnistui. Syy: {error}",
         "purge_done": "Poistettiin {count} viestiä.",
+        "purge_done_one": "Poistettiin yksi viesti.",
         "purge_none": "Poistettavia viestejä ei löytynyt viimeisen 14 päivän viesteistä.",
         "purge_failed": "Viestien poistaminen epäonnistui. Syy: {error}",
         "warn_modal_title": "Varoita: {user}",
