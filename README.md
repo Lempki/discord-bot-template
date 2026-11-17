@@ -162,8 +162,8 @@ Its commands then work for that person everywhere on Discord: in any server, in 
 That suits a personal bot, such as one that only its owner and a friend use.
 
 1. In the [Discord Developer Portal](https://discord.com/developers/applications), open the application's **Installation** page.
-2. Under **Installation Contexts**, tick **User Install**. Keep **Guild Install** ticked as well if servers should still be able to add the bot.
-3. Under **Default Install Settings**, give **User Install** the `applications.commands` scope, and save.
+2. Under **Installation Contexts**, make sure **User Install** is ticked. Keep **Guild Install** ticked as well if servers should still be able to add the bot.
+3. Under **Default Install Settings**, make sure **User Install** has the `applications.commands` scope, and save.
 4. Set `INSTALL_TO` in `.env` to `users`, or to `servers,users` for both, and restart the bot.
 5. Copy the **Install Link** from the same page and send it to the person who should use the bot. When they open it, Discord asks whether to add the app to their account or to a server.
 
