@@ -99,8 +99,10 @@ def install_defaults(
 ) -> tuple[app_commands.AppInstallationType, app_commands.AppCommandContext]:
     """Returns where every command is offered unless it says otherwise.
 
-    A bot that only servers install keeps Discord's own defaults.
-    Those offer commands in servers and in the bot's DMs.
+    A bot that only servers install offers its commands to server installs only.
+    Discord would otherwise offer them wherever the Developer Portal allows installs.
+    A ticked User Install box would then open every command to user installs, even server-only ones.
+    Its contexts keep Discord's defaults, which are servers and the bot's DMs.
     A user install offers commands everywhere on Discord.
     That includes servers, the bot's DMs, and other DMs and group DMs.
 
@@ -108,10 +110,13 @@ def install_defaults(
         install_to: Where people can install the bot.
 
     Returns:
-        The install types and contexts, both unset for a bot that only servers install.
+        The install types and contexts, with the contexts unset for a bot that only servers install.
     """
     if InstallTarget.USERS not in install_to:
-        return app_commands.AppInstallationType(), app_commands.AppCommandContext()
+        return (
+            app_commands.AppInstallationType(guild=True),
+            app_commands.AppCommandContext(),
+        )
     installs = app_commands.AppInstallationType(
         guild=InstallTarget.SERVERS in install_to, user=True
     )

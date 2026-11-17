@@ -287,12 +287,13 @@ GUILD_INSTALL, USER_INSTALL = 0, 1
 GUILD, BOT_DM, PRIVATE_CHANNEL = 0, 1, 2
 
 
-def test_a_server_bot_leaves_install_types_to_discord() -> None:
+def test_a_server_bot_offers_its_commands_to_server_installs_only() -> None:
+    # Unset install types follow the Developer Portal, where User Install may be ticked.
     bot = BotApp(Config(discord_token="t"))
 
     payload = _registered(bot, _price_command())
 
-    assert payload["integration_types"] is None
+    assert payload["integration_types"] == [GUILD_INSTALL]
     assert payload["contexts"] is None
 
 
