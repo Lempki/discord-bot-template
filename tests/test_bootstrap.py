@@ -695,3 +695,10 @@ def test_language_stays_unset_without_an_answer(
 
     assert bootstrap.fill_locale("# LOCALE=silent\n", report) == "# LOCALE=silent\n"
     assert "LOCALE was not set" in report.skipped[0]
+
+
+def test_the_nightly_task_keeps_local_time_all_year() -> None:
+    # A trigger with a UTC offset moves an hour when daylight saving starts or ends.
+    assert "$trigger.StartBoundary = (Get-Date $env:UPDATE_TIME).ToString('s')" in (
+        bootstrap._REGISTER_TASK
+    )
