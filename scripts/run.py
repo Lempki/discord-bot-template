@@ -15,6 +15,7 @@ It is identical in every bot and api-* repository.
 """
 
 import argparse
+import contextlib
 import io
 import json
 import re
@@ -22,8 +23,10 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 import time
 import urllib.request
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -67,6 +70,14 @@ NOTICE_AGENT = "DiscordBot (https://github.com/Lempki, 1.0)"
 NOTICE_TIMEOUT_SECONDS = 10
 # Discord rejects messages longer than 2000 characters.
 NOTICE_LIMIT = 2000
+
+# Only one project on a computer updates at a time.
+# Two projects that download the same image layers at once can break both downloads.
+# Every nightly update starts at the same hour, and after sleep they all start at once.
+UPDATE_LOCK = Path(tempfile.gettempdir()) / "release-update.lock"
+UPDATE_LOCK_POLL_SECONDS = 5
+# The scheduled task stops an update after an hour, so an older turn was never given back.
+UPDATE_LOCK_STALE_SECONDS = 60 * 60
 
 ACTIONS = {
     "start": "Start everything in Docker, then wait until it is ready.",
@@ -1340,11 +1351,46 @@ def update_notice(
     return "\n".join(lines)
 
 
+@contextlib.contextmanager
+def one_update_at_a_time() -> Iterator[None]:
+    """Waits until no other project on this computer is updating, then holds the turn.
+
+    Creating a folder either works or fails at once, so two projects never both get the turn.
+    A turn older than the scheduled task's time limit was never given back, so it is taken over.
+    """
+    waiting = False
+    while True:
+        try:
+            UPDATE_LOCK.mkdir()
+            break
+        except FileExistsError:
+            try:
+                age = time.time() - UPDATE_LOCK.stat().st_mtime
+            except FileNotFoundError:
+                # The other update finished between the two calls.
+                continue
+            if age > UPDATE_LOCK_STALE_SECONDS:
+                print("  Taking over from an update that stopped without finishing.")
+                with contextlib.suppress(OSError):
+                    UPDATE_LOCK.rmdir()
+                continue
+            if not waiting:
+                print("  Another project is updating. Waiting until it finishes...")
+                waiting = True
+            time.sleep(UPDATE_LOCK_POLL_SECONDS)
+    try:
+        yield
+    finally:
+        with contextlib.suppress(OSError):
+            UPDATE_LOCK.rmdir()
+
+
 def update(project: Project, report: Report) -> bool:
     """Installs the newest release, or pulls the latest code and rebuilds in a Git clone."""
     if project.published:
         installed: list[str] = []
-        ok = update_release(project, report, installed)
+        with one_update_at_a_time():
+            ok = update_release(project, report, installed)
         if notice := update_notice(project, report, ok, installed):
             post_notice(project.root, notice)
         return ok

@@ -783,6 +783,59 @@ def test_restore_refuses_a_file_that_is_not_a_database(
 WEBHOOK = "https://discord.com/api/webhooks/1/secret-token"
 
 
+@pytest.fixture(autouse=True)
+def own_update_lock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Keeps each test's update turn apart from other tests and from real updates."""
+    lock = tmp_path / "release-update.lock"
+    monkeypatch.setattr(run_script, "UPDATE_LOCK", lock)
+    return lock
+
+
+def test_an_update_waits_while_another_project_updates(
+    own_update_lock: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    own_update_lock.mkdir()
+    waits: list[float] = []
+
+    def other_update_finishes(seconds: float) -> None:
+        waits.append(seconds)
+        own_update_lock.rmdir()
+
+    monkeypatch.setattr(run_script.time, "sleep", other_update_finishes)
+
+    with run_script.one_update_at_a_time():
+        assert own_update_lock.exists()
+
+    assert waits == [run_script.UPDATE_LOCK_POLL_SECONDS]
+    assert not own_update_lock.exists()
+
+
+def test_an_update_takes_over_a_turn_that_was_never_given_back(
+    own_update_lock: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    own_update_lock.mkdir()
+    monkeypatch.setattr(
+        run_script.time,
+        "time",
+        lambda: (
+            own_update_lock.stat().st_mtime + run_script.UPDATE_LOCK_STALE_SECONDS + 1
+        ),
+    )
+    monkeypatch.setattr(
+        run_script.time, "sleep", lambda seconds: pytest.fail("It waited.")
+    )
+
+    with run_script.one_update_at_a_time():
+        assert own_update_lock.exists()
+
+
+def test_a_failed_update_gives_back_its_turn(own_update_lock: Path) -> None:
+    with pytest.raises(RuntimeError), run_script.one_update_at_a_time():
+        raise RuntimeError
+
+    assert not own_update_lock.exists()
+
+
 def test_update_notice_lists_what_was_installed(released_bot: Path) -> None:
     project = run_script.detect_project(released_bot)
 

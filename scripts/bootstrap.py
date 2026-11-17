@@ -1627,6 +1627,9 @@ _REGISTER_TASK = (
     # New-ScheduledTaskTrigger stores the time with today's UTC offset, so daylight saving moves it.
     # A time without an offset is local time, which stays at the same hour all year.
     "$trigger.StartBoundary = (Get-Date $env:UPDATE_TIME).ToString('s'); "
+    # New-ScheduledTaskTrigger stores the time with today's UTC offset, so daylight saving moves it.
+    # A time without an offset is local time, which stays at the same hour all year.
+    "$trigger.StartBoundary = (Get-Date $env:UPDATE_TIME).ToString('s'); "
     # A laptop that was asleep or on battery at that time still updates when it can.
     "$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries "
     "-DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 1); "

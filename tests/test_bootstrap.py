@@ -702,3 +702,10 @@ def test_the_nightly_task_keeps_local_time_all_year() -> None:
     assert "$trigger.StartBoundary = (Get-Date $env:UPDATE_TIME).ToString('s')" in (
         bootstrap._REGISTER_TASK
     )
+
+
+def test_the_nightly_task_keeps_local_time_all_year() -> None:
+    # A trigger with a UTC offset moves an hour when daylight saving starts or ends.
+    assert "$trigger.StartBoundary = (Get-Date $env:UPDATE_TIME).ToString('s')" in (
+        bootstrap._REGISTER_TASK
+    )
