@@ -65,6 +65,9 @@ _PROJECT_NAME = re.compile(r"^name:\s*([\w.-]+)\s*$", re.MULTILINE)
 # What the registry answers for an image that is private or not published yet.
 _PULL_DENIED = re.compile(r"denied|unauthorized|authentication required", re.IGNORECASE)
 
+# How many lines of a tool's error output a problem keeps for the update notice.
+ERROR_TAIL_LINES = 3
+
 DOCKER_WAIT_SECONDS = 180
 
 # The registry that holds the image of every release.
@@ -189,11 +192,13 @@ class Problem:
         what: What went wrong.
         why: What does not work because of it.
         fix: What to do next.
+        detail: The end of the error that a tool printed, or an empty string without one.
     """
 
     what: str
     why: str
     fix: str
+    detail: str = ""
 
 
 @dataclass
@@ -219,12 +224,17 @@ class Report:
         print(f"  [--] {message}")
         self.skipped.append(message)
 
-    def problem(self, what: str, why: str, fix: str, *, required: bool = False) -> None:
-        """Reports a failed step together with its consequence and its fix."""
+    def problem(
+        self, what: str, why: str, fix: str, *, required: bool = False, detail: str = ""
+    ) -> None:
+        """Reports a failed step together with its consequence and its fix.
+
+        The detail is printed already by the tool that failed, so only the notice repeats it.
+        """
         print(f"  [!!] {what}")
         print(f"       Why it matters: {why}")
         print(f"       What to do: {fix}")
-        self.problems.append(Problem(what, why, fix))
+        self.problems.append(Problem(what, why, fix, detail))
         if required:
             self.required_failed = True
 
@@ -1541,6 +1551,20 @@ def sign_in_to_registry(report: Report) -> bool:
     return False
 
 
+def error_tail(output: str, lines: int = ERROR_TAIL_LINES) -> str:
+    """Returns the last lines of a tool's error output, which usually hold the cause.
+
+    Docker Compose mixes warnings into the same output, such as one about images to build.
+    They come before the error and never explain it, so they are left out.
+    """
+    kept = [
+        line.strip()
+        for line in output.splitlines()
+        if line.strip() and "level=warning" not in line
+    ]
+    return "\n".join(kept[-lines:])
+
+
 def pull_images(
     compose: list[str], report: Report, services: list[str] | None = None
 ) -> bool:
@@ -1583,13 +1607,15 @@ def pull_images(
             "Either the image is private or GitHub has not published it yet. "
             "A new release takes GitHub up to half an hour to publish, so try again later. "
             "For a private image, run this script in a window, which asks for a GitHub token.",
+            detail=error_tail(result.stderr),
         )
     else:
         report.problem(
             "Downloading the images failed.",
             "Nothing new can start without them.",
-            "Read the error above. A lost internet connection is the most common cause. "
+            "Read Docker's error. A lost internet connection is the most common cause. "
             "Then run this script again.",
+            detail=error_tail(result.stderr),
         )
     return False
 
@@ -1624,9 +1650,6 @@ _REGISTER_TASK = (
     "$action = New-ScheduledTaskAction -Execute 'powershell.exe' "
     "-Argument $env:UPDATE_ARGUMENT -WorkingDirectory $env:UPDATE_FOLDER; "
     "$trigger = New-ScheduledTaskTrigger -Daily -At $env:UPDATE_TIME; "
-    # New-ScheduledTaskTrigger stores the time with today's UTC offset, so daylight saving moves it.
-    # A time without an offset is local time, which stays at the same hour all year.
-    "$trigger.StartBoundary = (Get-Date $env:UPDATE_TIME).ToString('s'); "
     # New-ScheduledTaskTrigger stores the time with today's UTC offset, so daylight saving moves it.
     # A time without an offset is local time, which stays at the same hour all year.
     "$trigger.StartBoundary = (Get-Date $env:UPDATE_TIME).ToString('s'); "

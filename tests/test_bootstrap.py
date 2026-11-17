@@ -408,6 +408,29 @@ def test_pull_failure_without_a_refusal_asks_for_no_sign_in(
 
     assert not bootstrap.pull_images(["docker", "compose"], report)
     assert report.problems[0].what == "Downloading the images failed."
+    assert report.problems[0].detail == "dial tcp: lookup ghcr.io: no such host"
+
+
+def test_the_error_tail_keeps_the_last_lines_without_warnings() -> None:
+    output = (
+        " Image ghcr.io/lempki/api-morshu:latest Pulling\n"
+        " Image ghcr.io/lempki/api-morshu:latest Pulled\n"
+        'time="2026-11-17T15:55:20+02:00" level=warning msg="WARNING: build bot"\n'
+        "\n"
+        'failed commit on ref "layer-sha256:8bb2": commit failed: no such file\n'
+    )
+
+    assert bootstrap.error_tail(output, lines=2) == (
+        "Image ghcr.io/lempki/api-morshu:latest Pulled\n"
+        'failed commit on ref "layer-sha256:8bb2": commit failed: no such file'
+    )
+
+
+def test_the_nightly_task_keeps_local_time_all_year() -> None:
+    # A trigger with a UTC offset moves an hour when daylight saving starts or ends.
+    assert "$trigger.StartBoundary = (Get-Date $env:UPDATE_TIME).ToString('s')" in (
+        bootstrap._REGISTER_TASK
+    )
 
 
 def test_sign_in_needs_someone_at_the_keyboard(
@@ -695,17 +718,3 @@ def test_language_stays_unset_without_an_answer(
 
     assert bootstrap.fill_locale("# LOCALE=silent\n", report) == "# LOCALE=silent\n"
     assert "LOCALE was not set" in report.skipped[0]
-
-
-def test_the_nightly_task_keeps_local_time_all_year() -> None:
-    # A trigger with a UTC offset moves an hour when daylight saving starts or ends.
-    assert "$trigger.StartBoundary = (Get-Date $env:UPDATE_TIME).ToString('s')" in (
-        bootstrap._REGISTER_TASK
-    )
-
-
-def test_the_nightly_task_keeps_local_time_all_year() -> None:
-    # A trigger with a UTC offset moves an hour when daylight saving starts or ends.
-    assert "$trigger.StartBoundary = (Get-Date $env:UPDATE_TIME).ToString('s')" in (
-        bootstrap._REGISTER_TASK
-    )

@@ -28,12 +28,14 @@ import time
 import urllib.request
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 
 from bootstrap import (
     DOCKER,
     REPO,
     UPDATE_HOUR,
+    Problem,
     Report,
     ask,
     docker_info,
@@ -68,8 +70,15 @@ NOTICE_PREFIXES = (
 # Discord asks for a User-Agent of the form "DiscordBot (URL, version)".
 NOTICE_AGENT = "DiscordBot (https://github.com/Lempki, 1.0)"
 NOTICE_TIMEOUT_SECONDS = 10
-# Discord rejects messages longer than 2000 characters.
-NOTICE_LIMIT = 2000
+# Discord's limits on the parts of an embed, which it rejects whole when one is too long.
+NOTICE_TITLE_LIMIT = 256
+NOTICE_FIELD_NAME_LIMIT = 256
+NOTICE_FIELD_VALUE_LIMIT = 1024
+NOTICE_FIELDS_LIMIT = 25
+# The bar beside a notice: green when it worked, yellow beside a problem, red on failure.
+NOTICE_GREEN = 0x57F287
+NOTICE_YELLOW = 0xFEE75C
+NOTICE_RED = 0xED4245
 
 # Only one project on a computer updates at a time.
 # Two projects that download the same image layers at once can break both downloads.
@@ -920,8 +929,23 @@ def roll_back(
     show_status(project)
 
 
+@dataclass(frozen=True)
+class InstalledImage:
+    """An image that an update installed, for the notice.
+
+    Attributes:
+        name: The image's short name, such as api-media.
+        version: The release version it brought, or an empty string when the image has none.
+        previous: The version it replaced, or an empty string when none was known.
+    """
+
+    name: str
+    version: str
+    previous: str
+
+
 def update_release(
-    project: Project, report: Report, installed: list[str] | None = None
+    project: Project, report: Report, installed: list[InstalledImage] | None = None
 ) -> bool:
     """Installs the newest published release, and puts the previous one back if it fails to start.
 
@@ -932,8 +956,7 @@ def update_release(
     Args:
         project: The project to update.
         report: The report that records the outcome.
-        installed: Receives each image that changed, such as "api-media `2.6.0` (was `2.5.0`)".
-            The project's own image is named by the notice already, so its entry has only versions.
+        installed: Receives each image that changed, with its new and previous version.
 
     Returns:
         Whether the newest release runs.
@@ -1028,14 +1051,12 @@ def update_release(
     state.save(project.root)
     report.ok("Updated to the newest release.")
     if installed is not None:
-        own = {image.ref for image in images if image.own}
         for ref, new in changed.items():
-            entry = f"`{version_of(new) or '?'}`"
-            if ref not in own:
-                entry = f"{image_name(ref)} {entry}"
-            if old := old_versions.get(ref):
-                entry = f"{entry} (was `{old}`)"
-            installed.append(entry)
+            installed.append(
+                InstalledImage(
+                    image_name(ref), version_of(new), old_versions.get(ref, "")
+                )
+            )
     show_result(project, True)
     return True
 
@@ -1297,8 +1318,8 @@ def notice_url(root: Path) -> str | None:
     return url if url and url.startswith(NOTICE_PREFIXES) else None
 
 
-def post_notice(root: Path, text: str) -> None:
-    """Posts a message to the Discord webhook in UPDATE_WEBHOOK_URL, when one is set.
+def post_notice(root: Path, embed: dict[str, object]) -> None:
+    """Posts an embed to the Discord webhook in UPDATE_WEBHOOK_URL, when one is set.
 
     The URL works like a password, so neither it nor an error that could hold it is printed.
     A failed post never fails the update.
@@ -1308,7 +1329,7 @@ def post_notice(root: Path, text: str) -> None:
         return
     body = json.dumps(
         # A notice never pings anyone.
-        {"content": text[:NOTICE_LIMIT], "allowed_mentions": {"parse": []}}
+        {"embeds": [embed], "allowed_mentions": {"parse": []}}
     ).encode()
     request = urllib.request.Request(
         url,
@@ -1331,24 +1352,65 @@ def image_name(ref: str) -> str:
     return ref.rsplit("/", 1)[-1].split(":", 1)[0]
 
 
+def _shorten(text: str, limit: int) -> str:
+    """Cuts a text to a length that Discord accepts, marking the cut with an ellipsis."""
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def version_change(image: InstalledImage) -> str:
+    """Words an image's version change, such as `3.4.1` → `3.6.1`."""
+    version = f"`{image.version or '?'}`"
+    return f"`{image.previous}` → {version}" if image.previous else f"{version} (new)"
+
+
+def problem_field(problem: Problem) -> dict[str, object]:
+    """Turns a problem into an embed field with its consequence, its fix, and the error."""
+    value = f"{problem.why}\n**What to do:** {problem.fix}"
+    if problem.detail:
+        # The error goes last, so a cut to Discord's limit shortens it and keeps the advice.
+        room = NOTICE_FIELD_VALUE_LIMIT - len(value) - len("\n```\n\n```")
+        if room > 0:
+            value += f"\n```\n{_shorten(problem.detail, room)}\n```"
+    return {
+        "name": _shorten(f"⚠️ {problem.what}", NOTICE_FIELD_NAME_LIMIT),
+        "value": _shorten(value, NOTICE_FIELD_VALUE_LIMIT),
+    }
+
+
 def update_notice(
-    project: Project, report: Report, ok: bool, installed: list[str]
-) -> str | None:
-    """Words the Discord notice of an update, or returns None when there is nothing to tell.
+    project: Project, report: Report, ok: bool, installed: list[InstalledImage]
+) -> dict[str, object] | None:
+    """Builds the Discord embed of an update, or returns None when there is nothing to tell.
 
     A quiet night, when nothing new was released and nothing failed, needs no notice.
     A problem that did not stop the update, such as a backup that failed, is named too.
+    Its bar is green when everything worked, yellow beside a problem, and red on failure.
     """
-    if ok and installed:
-        lines = [f"✅ **{project.name}** installed {', '.join(installed)}."]
-        if report.problems:
-            lines.append("⚠️ Something else needs attention.")
+    if ok and installed and not report.problems:
+        title, color = f"✅ {project.name} updated", NOTICE_GREEN
+    elif ok and installed:
+        title, color = (
+            f"✅ {project.name} updated, but something needs attention",
+            NOTICE_YELLOW,
+        )
+    elif ok and report.problems:
+        title, color = f"⚠️ {project.name} needs attention", NOTICE_YELLOW
     elif report.problems:
-        lines = [f"⚠️ **{project.name}**: the update needs attention."]
+        title, color = f"❌ {project.name} was not updated", NOTICE_RED
     else:
         return None
-    lines += [f"• {problem.what} {problem.why}" for problem in report.problems]
-    return "\n".join(lines)
+    fields: list[dict[str, object]] = [
+        {"name": image.name, "value": version_change(image), "inline": True}
+        for image in installed
+    ]
+    fields += [problem_field(problem) for problem in report.problems]
+    return {
+        "title": _shorten(title, NOTICE_TITLE_LIMIT),
+        "color": color,
+        "fields": fields[:NOTICE_FIELDS_LIMIT],
+        # Discord shows the time in each reader's own time zone.
+        "timestamp": datetime.now(UTC).isoformat(timespec="seconds"),
+    }
 
 
 @contextlib.contextmanager
@@ -1388,7 +1450,7 @@ def one_update_at_a_time() -> Iterator[None]:
 def update(project: Project, report: Report) -> bool:
     """Installs the newest release, or pulls the latest code and rebuilds in a Git clone."""
     if project.published:
-        installed: list[str] = []
+        installed: list[InstalledImage] = []
         with one_update_at_a_time():
             ok = update_release(project, report, installed)
         if notice := update_notice(project, report, ok, installed):

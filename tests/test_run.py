@@ -783,12 +783,93 @@ def test_restore_refuses_a_file_that_is_not_a_database(
 WEBHOOK = "https://discord.com/api/webhooks/1/secret-token"
 
 
+BOT_2_0_0 = run_script.InstalledImage("discord-bot-example", "2.0.0", "1.7.0")
+MEDIA_2_6_0 = run_script.InstalledImage("api-media", "2.6.0", "")
+
+
 @pytest.fixture(autouse=True)
 def own_update_lock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Keeps each test's update turn apart from other tests and from real updates."""
     lock = tmp_path / "release-update.lock"
     monkeypatch.setattr(run_script, "UPDATE_LOCK", lock)
     return lock
+
+
+def test_a_working_update_is_green_and_lists_each_version(released_bot: Path) -> None:
+    project = run_script.detect_project(released_bot)
+
+    notice = run_script.update_notice(
+        project, run_script.Report(), True, [BOT_2_0_0, MEDIA_2_6_0]
+    )
+
+    assert notice is not None
+    assert notice["title"] == f"✅ {project.name} updated"
+    assert notice["color"] == run_script.NOTICE_GREEN
+    assert notice["fields"] == [
+        {"name": "discord-bot-example", "value": "`1.7.0` → `2.0.0`", "inline": True},
+        {"name": "api-media", "value": "`2.6.0` (new)", "inline": True},
+    ]
+
+
+def test_problems_beside_a_working_update_are_yellow(released_bot: Path) -> None:
+    project = run_script.detect_project(released_bot)
+    report = run_script.Report()
+    report.problem("The backup could not be copied.", "It stays here.", "Fix it.")
+
+    quiet = run_script.update_notice(project, report, True, [])
+    installed = run_script.update_notice(project, report, True, [BOT_2_0_0])
+
+    assert quiet is not None and "needs attention" in str(quiet["title"])
+    assert installed is not None
+    assert installed["color"] == run_script.NOTICE_YELLOW
+    assert installed["fields"][-1] == {  # type: ignore[index]
+        "name": "⚠️ The backup could not be copied.",
+        "value": "It stays here.\n**What to do:** Fix it.",
+    }
+
+
+def test_a_quiet_night_sends_no_notice(released_bot: Path) -> None:
+    project = run_script.detect_project(released_bot)
+
+    assert run_script.update_notice(project, run_script.Report(), True, []) is None
+
+
+def test_a_failed_update_is_red_and_shows_the_error(released_bot: Path) -> None:
+    project = run_script.detect_project(released_bot)
+    report = run_script.Report()
+    report.problem(
+        "Downloading the images failed.",
+        "Nothing new can start.",
+        "Run it again.",
+        detail="commit failed: no such file or directory",
+    )
+
+    notice = run_script.update_notice(project, report, False, [])
+
+    assert notice is not None
+    assert notice["title"] == f"❌ {project.name} was not updated"
+    assert notice["color"] == run_script.NOTICE_RED
+    assert notice["fields"] == [
+        {
+            "name": "⚠️ Downloading the images failed.",
+            "value": "Nothing new can start.\n**What to do:** Run it again.\n"
+            "```\ncommit failed: no such file or directory\n```",
+        }
+    ]
+
+
+def test_a_long_error_is_cut_and_keeps_the_advice(released_bot: Path) -> None:
+    project = run_script.detect_project(released_bot)
+    report = run_script.Report()
+    report.problem("Failed.", "It matters.", "Do this.", detail="x" * 5000)
+
+    notice = run_script.update_notice(project, report, False, [])
+
+    assert notice is not None
+    value = notice["fields"][0]["value"]  # type: ignore[index]
+    assert len(value) <= run_script.NOTICE_FIELD_VALUE_LIMIT
+    assert value.startswith("It matters.\n**What to do:** Do this.\n```")
+    assert value.endswith("…\n```")
 
 
 def test_an_update_waits_while_another_project_updates(
@@ -836,52 +917,6 @@ def test_a_failed_update_gives_back_its_turn(own_update_lock: Path) -> None:
     assert not own_update_lock.exists()
 
 
-def test_update_notice_lists_what_was_installed(released_bot: Path) -> None:
-    project = run_script.detect_project(released_bot)
-
-    text = run_script.update_notice(
-        project, run_script.Report(), True, ["2.0.0 (was 1.7.0)", "api-media 2.6.0"]
-    )
-
-    assert (
-        text == f"✅ **{project.name}** installed 2.0.0 (was 1.7.0), api-media 2.6.0."
-    )
-
-
-def test_problems_beside_a_working_update_are_named(released_bot: Path) -> None:
-    project = run_script.detect_project(released_bot)
-    report = run_script.Report()
-    report.problem("The backup could not be copied.", "It stays here.", "Fix it.")
-
-    quiet = run_script.update_notice(project, report, True, [])
-    installed = run_script.update_notice(project, report, True, ["2.0.0"])
-
-    assert quiet is not None and "needs attention" in quiet
-    assert installed is not None
-    assert installed.startswith(f"✅ **{project.name}** installed 2.0.0.")
-    assert installed.endswith("• The backup could not be copied. It stays here.")
-
-
-def test_a_quiet_night_sends_no_notice(released_bot: Path) -> None:
-    project = run_script.detect_project(released_bot)
-
-    assert run_script.update_notice(project, run_script.Report(), True, []) is None
-
-
-def test_a_failed_update_names_every_problem(released_bot: Path) -> None:
-    project = run_script.detect_project(released_bot)
-    report = run_script.Report()
-    report.problem(
-        "The new release failed to start.", "The old one runs.", "Read the log."
-    )
-
-    text = run_script.update_notice(project, report, False, [])
-
-    assert text is not None
-    assert "needs attention" in text
-    assert "• The new release failed to start. The old one runs." in text
-
-
 def test_the_notice_goes_to_the_webhook_in_env(
     released_bot: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -905,11 +940,14 @@ def test_the_notice_goes_to_the_webhook_in_env(
 
     monkeypatch.setattr(run_script.urllib.request, "urlopen", fake_urlopen)
 
-    run_script.post_notice(released_bot, "Hello <@123>")
+    run_script.post_notice(released_bot, {"title": "Hello <@123>"})
 
     assert sent[0].full_url == WEBHOOK
     body = json.loads(sent[0].data)  # type: ignore[arg-type]
-    assert body == {"content": "Hello <@123>", "allowed_mentions": {"parse": []}}
+    assert body == {
+        "embeds": [{"title": "Hello <@123>"}],
+        "allowed_mentions": {"parse": []},
+    }
     # The URL works like a password, so it never reaches the log.
     assert "secret-token" not in capsys.readouterr().out
 
@@ -932,7 +970,7 @@ def test_no_notice_without_a_discord_webhook(
         lambda *args, **kwargs: pytest.fail("A notice was sent."),
     )
 
-    run_script.post_notice(released_bot, "Hello")
+    run_script.post_notice(released_bot, {"title": "Hello"})
 
 
 def test_a_failed_post_never_fails_the_update(
@@ -949,7 +987,7 @@ def test_a_failed_post_never_fails_the_update(
 
     monkeypatch.setattr(run_script.urllib.request, "urlopen", refuse)
 
-    run_script.post_notice(released_bot, "Hello")
+    run_script.post_notice(released_bot, {"title": "Hello"})
 
     output = capsys.readouterr().out
     assert "Could not post" in output
@@ -975,14 +1013,17 @@ def test_an_installed_update_reports_its_versions(
         "version_of",
         lambda target: versions.get(docker.ids.get(target, target), ""),
     )
-    installed: list[str] = []
+    installed: list[run_script.InstalledImage] = []
 
     assert run_script.update_release(
         run_script.detect_project(released_bot), run_script.Report(), installed
     )
 
-    # The project's own image needs no name, and an image without a version shows none.
-    assert installed == ["`1.7.0` (was `1.6.0`)", "api-media `2.6.0`"]
+    # An image that was not on the computer before has no previous version.
+    assert installed == [
+        run_script.InstalledImage("discord-bot-x", "1.7.0", "1.6.0"),
+        run_script.InstalledImage("api-media", "2.6.0", ""),
+    ]
 
 
 def test_check_setup_refuses_a_secret_that_the_service_would_refuse(
