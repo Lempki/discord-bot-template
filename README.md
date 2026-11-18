@@ -378,6 +378,7 @@ All configuration is read from environment variables or from a `.env` file locat
 | `MAX_QUEUE_LENGTH` | No | `500` | How many songs may wait in a server's music queue. A playlist that does not fit adds the songs that fit. |
 | `BACKUP_COPY_FOLDER` | No | None | A folder that receives a copy of each backup, such as one that syncs to the cloud. See [Backups](#backups). |
 | `UPDATE_WEBHOOK_URL` | No | None | A Discord webhook that hears when a nightly update installs a new release or fails. See [Updates](#updates). It works like a password. |
+| `DISPLAY_NAME` | No | The bot's name after `discord-bot-` | The name that update notices in Discord call the project by, such as `OSRS Market Bot`. |
 | `API_<NAME>_URL` | No | None | The base URL of an api-* service, for example `API_MEDIA_URL`. |
 | `API_<NAME>_SECRET` | No | None | The bearer token of that service. It must match `API_SECRET` in the service's own configuration. |
 

@@ -72,12 +72,16 @@ NOTICE_PREFIXES = (
 # Discord asks for a User-Agent of the form "DiscordBot (URL, version)".
 NOTICE_AGENT = "DiscordBot (https://github.com/Lempki, 1.0)"
 NOTICE_TIMEOUT_SECONDS = 10
+# A name in .env that the notice uses instead of the project's own, such as OSRS Market Bot.
+DISPLAY_NAME_KEY = "DISPLAY_NAME"
+BOT_PREFIX = "discord-bot-"
 NOTICE_RETRY = (
     "To try again, run run.bat update, or ./run.sh update outside Windows, "
     "in the project's folder."
 )
 # Discord's limits on the parts of an embed, which it rejects whole when one is too long.
 NOTICE_TITLE_LIMIT = 256
+NOTICE_DESCRIPTION_LIMIT = 4096
 NOTICE_FIELD_NAME_LIMIT = 256
 NOTICE_FIELD_VALUE_LIMIT = 1024
 NOTICE_FIELDS_LIMIT = 25
@@ -1386,6 +1390,23 @@ def problem_field(problem: Problem) -> dict[str, object]:
     }
 
 
+def display_name(project: Project) -> str:
+    """Returns the name that the notice calls the project by.
+
+    DISPLAY_NAME in .env wins.
+    Without it, a bot is called by the part of its name after discord-bot-, such as Morshu.
+    A service keeps its full name, because api-media reads better than Media.
+    """
+    env = project.root / ".env"
+    text = env.read_text(encoding="utf-8") if env.exists() else ""
+    if name := (env_value(text, DISPLAY_NAME_KEY) or "").strip():
+        return name
+    short = project.name.removeprefix(BOT_PREFIX)
+    if project.is_bot and short and short != project.name:
+        return short[0].upper() + short[1:]
+    return project.name
+
+
 def update_notice(
     project: Project, report: Report, ok: bool, installed: list[InstalledImage]
 ) -> dict[str, object] | None:
@@ -1394,32 +1415,34 @@ def update_notice(
     A quiet night, when nothing new was released and nothing failed, needs no notice.
     A problem that did not stop the update, such as a backup that failed, is named too.
     Its bar is green when everything worked, yellow beside a problem, and red on failure.
+    Each installed image gets a line of its own, so a stack of several services still fits.
     """
+    name = display_name(project)
     if ok and installed and not report.problems:
-        title, color = f"✅ {project.name} updated", NOTICE_GREEN
+        title, color = f"✅ {name} updated", NOTICE_GREEN
     elif ok and installed:
         title, color = (
-            f"✅ {project.name} updated, but something needs attention",
+            f"✅ {name} updated, but something needs attention",
             NOTICE_YELLOW,
         )
     elif ok and report.problems:
-        title, color = f"⚠️ {project.name} needs attention", NOTICE_YELLOW
+        title, color = f"⚠️ {name} needs attention", NOTICE_YELLOW
     elif report.problems:
-        title, color = f"❌ {project.name} was not updated", NOTICE_RED
+        title, color = f"❌ {name} was not updated", NOTICE_RED
     else:
         return None
-    fields: list[dict[str, object]] = [
-        {"name": image.name, "value": version_change(image), "inline": True}
-        for image in installed
-    ]
-    fields += [problem_field(problem) for problem in report.problems]
     notice: dict[str, object] = {
         "title": _shorten(title, NOTICE_TITLE_LIMIT),
         "color": color,
-        "fields": fields[:NOTICE_FIELDS_LIMIT],
         # Discord shows the time in each reader's own time zone.
         "timestamp": datetime.now(UTC).isoformat(timespec="seconds"),
     }
+    if installed:
+        lines = [f"**{image.name}** {version_change(image)}" for image in installed]
+        notice["description"] = _shorten("\n".join(lines), NOTICE_DESCRIPTION_LIMIT)
+    if report.problems:
+        fields = [problem_field(problem) for problem in report.problems]
+        notice["fields"] = fields[:NOTICE_FIELDS_LIMIT]
     if not ok:
         # The problems say to try again, and a reader in Discord needs to know how.
         notice["footer"] = {"text": NOTICE_RETRY}

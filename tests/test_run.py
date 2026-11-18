@@ -805,12 +805,38 @@ def test_a_working_update_is_green_and_lists_each_version(released_bot: Path) ->
     )
 
     assert notice is not None
-    assert notice["title"] == f"✅ {project.name} updated"
+    assert notice["title"] == "✅ X updated"
     assert notice["color"] == run_script.NOTICE_GREEN
-    assert notice["fields"] == [
-        {"name": "discord-bot-example", "value": "`1.7.0` → `2.0.0`", "inline": True},
-        {"name": "api-media", "value": "`2.6.0` (new)", "inline": True},
-    ]
+    # One line per image keeps a stack of several services readable on any screen.
+    assert notice["description"] == (
+        "**discord-bot-example** `1.7.0` → `2.0.0`\n**api-media** `2.6.0` (new)"
+    )
+    assert "fields" not in notice
+    assert "footer" not in notice
+
+
+def test_a_bot_is_called_by_its_short_name(released_bot: Path) -> None:
+    project = run_script.detect_project(released_bot)
+
+    assert project.name == "discord-bot-x"
+    assert run_script.display_name(project) == "X"
+
+
+def test_display_name_in_env_names_the_project(released_bot: Path) -> None:
+    with (released_bot / ".env").open("a", encoding="utf-8") as env:
+        env.write("DISPLAY_NAME=OSRS Market Bot\n")
+
+    project = run_script.detect_project(released_bot)
+
+    assert run_script.display_name(project) == "OSRS Market Bot"
+
+
+def test_a_service_keeps_its_full_name(tmp_path: Path) -> None:
+    service = tmp_path / "api-media"
+    service.mkdir()
+    project = run_script.Project(service, False, "docker-compose.yml", "", True)
+
+    assert run_script.display_name(project) == "api-media"
 
 
 def test_problems_beside_a_working_update_are_yellow(released_bot: Path) -> None:
@@ -824,10 +850,14 @@ def test_problems_beside_a_working_update_are_yellow(released_bot: Path) -> None
     assert quiet is not None and "needs attention" in str(quiet["title"])
     assert installed is not None
     assert installed["color"] == run_script.NOTICE_YELLOW
-    assert installed["fields"][-1] == {  # type: ignore[index]
-        "name": "⚠️ The backup could not be copied.",
-        "value": "It stays here.\n**What to do:** Fix it.",
-    }
+    assert installed["fields"] == [
+        {
+            "name": "⚠️ The backup could not be copied.",
+            "value": "It stays here.\n**What to do:** Fix it.",
+        }
+    ]
+    # The update worked, so there is nothing to try again.
+    assert "footer" not in installed
 
 
 def test_a_quiet_night_sends_no_notice(released_bot: Path) -> None:
@@ -849,7 +879,7 @@ def test_a_failed_update_is_red_and_shows_the_error(released_bot: Path) -> None:
     notice = run_script.update_notice(project, report, False, [])
 
     assert notice is not None
-    assert notice["title"] == f"❌ {project.name} was not updated"
+    assert notice["title"] == "❌ X was not updated"
     assert notice["color"] == run_script.NOTICE_RED
     assert notice["fields"] == [
         {
