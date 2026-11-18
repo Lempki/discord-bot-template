@@ -682,6 +682,8 @@ def test_failed_backup_is_reported(
 
     assert run_script.backup_database(run_script.detect_project(bot), report) is None
     assert "could not be backed up" in report.problems[0].what
+    # The notice shows Docker's error, because a reader in Discord cannot scroll up to it.
+    assert report.problems[0].detail == "boom"
 
 
 @pytest.mark.parametrize(
@@ -856,6 +858,7 @@ def test_a_failed_update_is_red_and_shows_the_error(released_bot: Path) -> None:
             "```\ncommit failed: no such file or directory\n```",
         }
     ]
+    assert notice["footer"] == {"text": run_script.NOTICE_RETRY}
 
 
 def test_a_long_error_is_cut_and_keeps_the_advice(released_bot: Path) -> None:

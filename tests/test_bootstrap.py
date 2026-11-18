@@ -426,6 +426,21 @@ def test_the_error_tail_keeps_the_last_lines_without_warnings() -> None:
     )
 
 
+def test_the_error_tail_hides_the_home_folder(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A path in the home folder holds the user's name, which must not reach Discord.
+    monkeypatch.setattr(bootstrap.Path, "home", lambda: Path("C:\\Users\\someone"))
+
+    tail = bootstrap.error_tail(
+        "open C:\\Users\\someone\\Hosting\\compose.stack.yml: denied\n"
+        "open C:/Users/someone/Hosting/.env: denied"
+    )
+
+    assert (
+        tail
+        == "open ~\\Hosting\\compose.stack.yml: denied\nopen ~/Hosting/.env: denied"
+    )
+
+
 def test_the_nightly_task_keeps_local_time_all_year() -> None:
     # A trigger with a UTC offset moves an hour when daylight saving starts or ends.
     assert "$trigger.StartBoundary = (Get-Date $env:UPDATE_TIME).ToString('s')" in (

@@ -34,6 +34,7 @@ from pathlib import Path
 from bootstrap import (
     DOCKER,
     REPO,
+    RUN_OUTPUT,
     UPDATE_HOUR,
     Problem,
     Report,
@@ -41,6 +42,7 @@ from bootstrap import (
     docker_info,
     ensure_docker_running,
     env_value,
+    error_tail,
     fill_stack_secrets,
     image_id,
     is_installed,
@@ -70,6 +72,10 @@ NOTICE_PREFIXES = (
 # Discord asks for a User-Agent of the form "DiscordBot (URL, version)".
 NOTICE_AGENT = "DiscordBot (https://github.com/Lempki, 1.0)"
 NOTICE_TIMEOUT_SECONDS = 10
+NOTICE_RETRY = (
+    "To try again, run run.bat update, or ./run.sh update outside Windows, "
+    "in the project's folder."
+)
 # Discord's limits on the parts of an embed, which it rejects whole when one is too long.
 NOTICE_TITLE_LIMIT = 256
 NOTICE_FIELD_NAME_LIMIT = 256
@@ -111,7 +117,8 @@ SETTLE_SECONDS = 15
 _HOST_PORT = re.compile(r"""["']?(\d+):8000["']?""")
 
 SETUP_FIX = (
-    "Run setup.bat on Windows or ./setup.sh elsewhere, then run this script again."
+    "Run setup.bat on Windows or ./setup.sh elsewhere in the project's folder, "
+    "then try again."
 )
 
 # The files of a downloaded release that an update replaces with the copies in the new image.
@@ -318,7 +325,7 @@ def check_setup(project: Project, report: Report) -> bool:
     env_file = project.root / ".env"
     if not env_file.exists():
         report.problem(
-            "This project has not been set up on this machine yet, because .env is missing.",
+            "This project has not been set up on the computer yet, because its .env is missing.",
             "The project reads its settings from .env.",
             SETUP_FIX,
         )
@@ -459,8 +466,8 @@ def report_crash(project: Project, service: str, report: Report) -> None:
     report.problem(
         f"{service} stopped or became unhealthy right after it started.",
         f"{service} is not running. It was stopped so that it does not restart over and over.",
-        "Read its log above. A wrong value in .env is the most common cause. "
-        "Fix it and run this script again.",
+        "Read its log with the logs action. A wrong value in .env is the most common cause. "
+        "Fix it and try again.",
     )
 
 
@@ -488,7 +495,7 @@ def wait_until_ready(project: Project, report: Report) -> bool:
             report.problem(
                 f"{waiting} did not become ready within {READY_TIMEOUT_SECONDS // 60} minutes.",
                 "The project may not work yet.",
-                "Check the logs with the logs action. Then run this script again.",
+                "Check the logs with the logs action. Then try again.",
             )
             return False
         time.sleep(POLL_SECONDS)
@@ -567,7 +574,7 @@ def launch(project: Project, report: Report, command: list[str]) -> bool:
         report.problem(
             "Docker could not start the containers.",
             "The project is not running.",
-            "Read the error above, fix it, and run this script again.",
+            f"Read Docker's error in {RUN_OUTPUT}, fix it, and try again.",
         )
         return False
     return wait_until_ready(project, report)
@@ -916,14 +923,14 @@ def roll_back(
         report.problem(
             "The new release failed to start, so the update was undone.",
             "The previous version runs again, so nothing changed for the people who use it.",
-            "Read the log above for the cause. "
+            f"Read {RUN_OUTPUT} for the cause. "
             "Later updates skip this release and try the next one that appears.",
         )
     else:
         report.problem(
             "The previous version did not start again either.",
             "The project is not running.",
-            "Read the log above. Then run the start action, or the setup script.",
+            f"Read {RUN_OUTPUT}. Then run the start action, or the setup script.",
         )
     section("Status")
     show_status(project)
@@ -974,7 +981,7 @@ def update_release(
         report.problem(
             f"Docker Compose could not read {project.compose_file}.",
             "The update cannot tell which images to download.",
-            f"Read the error above. {SETUP_FIX}",
+            f"Read Docker Compose's error in {RUN_OUTPUT}. {SETUP_FIX}",
         )
         return False
     # Another project may have pulled the same image already, which moved its tag.
@@ -1140,9 +1147,10 @@ def copy_backup(project: Project, backup: Path, report: Report) -> None:
         print(f"  {error}")
         report.problem(
             f"The backup could not be copied to the {BACKUP_COPY_KEY} folder.",
-            "The backup stays only on this computer, which a broken disk would lose with the bot.",
-            f"Read the error above, and make sure that {BACKUP_COPY_KEY} in .env names a folder "
-            "that exists and can be written to.",
+            "The backup stays only on the computer that runs the bot, "
+            "so a broken disk would lose it together with the bot.",
+            f"Make sure that {BACKUP_COPY_KEY} in .env names a folder that exists "
+            f"and can be written to. {RUN_OUTPUT.capitalize()} shows the error.",
         )
         return
     report.ok(f"Copied the backup to {folder}.")
@@ -1181,7 +1189,8 @@ def backup_database(project: Project, report: Report) -> Path | None:
         report.problem(
             "The bot's database could not be backed up.",
             "The previous backups stay, but this run made no new one.",
-            "Read the error above. Make sure Docker runs, then run the backup action again.",
+            "Read the error. Make sure Docker runs, then run the backup action again.",
+            detail=error_tail(result.stderr.decode(errors="replace")),
         )
         return None
     if not result.stdout:
@@ -1404,13 +1413,17 @@ def update_notice(
         for image in installed
     ]
     fields += [problem_field(problem) for problem in report.problems]
-    return {
+    notice: dict[str, object] = {
         "title": _shorten(title, NOTICE_TITLE_LIMIT),
         "color": color,
         "fields": fields[:NOTICE_FIELDS_LIMIT],
         # Discord shows the time in each reader's own time zone.
         "timestamp": datetime.now(UTC).isoformat(timespec="seconds"),
     }
+    if not ok:
+        # The problems say to try again, and a reader in Discord needs to know how.
+        notice["footer"] = {"text": NOTICE_RETRY}
+    return notice
 
 
 @contextlib.contextmanager

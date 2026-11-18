@@ -68,6 +68,10 @@ _PULL_DENIED = re.compile(r"denied|unauthorized|authentication required", re.IGN
 # How many lines of a tool's error output a problem keeps for the update notice.
 ERROR_TAIL_LINES = 3
 
+# Where to read an error that a problem does not carry itself.
+# The words must work in the console and in the Discord notice of a nightly update alike.
+RUN_OUTPUT = "the run script's output, which update.log keeps for nightly updates"
+
 DOCKER_WAIT_SECONDS = 180
 
 # The registry that holds the image of every release.
@@ -1057,9 +1061,7 @@ def read_virtualization() -> Virtualization:
     )
 
 
-RESTART_FIX = (
-    "Restart Windows, then run this script again. It continues where it stopped."
-)
+RESTART_FIX = "Restart Windows, then try again."
 
 
 def prepare_windows_virtualization(report: Report) -> bool:
@@ -1090,7 +1092,7 @@ def prepare_windows_virtualization(report: Report) -> bool:
             "under Advanced startup. Then choose Troubleshoot > Advanced options > "
             "UEFI Firmware Settings > Restart. In the firmware, turn on the setting called "
             "Intel Virtualization Technology, VT-x, AMD-V, or SVM Mode. "
-            "Save, let Windows start, and run this script again.",
+            "Save, let Windows start, and try again.",
         )
         return False
     print(
@@ -1107,7 +1109,7 @@ def prepare_windows_virtualization(report: Report) -> bool:
             "Turning on WSL failed.",
             without_it,
             "Read the error above. In PowerShell, run wsl --install --no-distribution, "
-            "then restart Windows and run this script again.",
+            "then restart Windows and try again.",
         )
         return False
     report.problem(
@@ -1364,21 +1366,20 @@ def ensure_docker_running(report: Report, *, ask_first: bool = True) -> bool:
         report.problem(
             "Docker is installed, but this user may not use it.",
             "Nothing can run in Docker from this account.",
-            "Run sudo usermod -aG docker $USER, log out and back in, "
-            "and run this script again.",
+            "Run sudo usermod -aG docker $USER, log out and back in, and try again.",
         )
         return False
     if sys.platform not in ("win32", "darwin"):
         report.problem(
             "Docker is installed but not running.",
             "Nothing can run in Docker until it starts.",
-            "Start it with sudo systemctl enable --now docker and run this script again.",
+            "Start it with sudo systemctl enable --now docker and try again.",
         )
         return False
     not_running = "Docker Desktop is not running."
     fix = (
         "Start Docker Desktop from the Start menu or Applications, "
-        "wait until it is ready, and run this script again."
+        "wait until it is ready, and try again."
     )
     if ask_first and not ask(f"{not_running} Start it now?"):
         report.skip(f"{not_running} Start it before using Docker.")
@@ -1556,13 +1557,16 @@ def error_tail(output: str, lines: int = ERROR_TAIL_LINES) -> str:
 
     Docker Compose mixes warnings into the same output, such as one about images to build.
     They come before the error and never explain it, so they are left out.
+    The home folder becomes ~, because its path holds the user's name.
     """
     kept = [
         line.strip()
         for line in output.splitlines()
         if line.strip() and "level=warning" not in line
     ]
-    return "\n".join(kept[-lines:])
+    tail = "\n".join(kept[-lines:])
+    home = str(Path.home())
+    return tail.replace(home, "~").replace(home.replace("\\", "/"), "~")
 
 
 def pull_images(
@@ -1614,7 +1618,7 @@ def pull_images(
             "Downloading the images failed.",
             "Nothing new can start without them.",
             "Read Docker's error. A lost internet connection is the most common cause. "
-            "Then run this script again.",
+            "Then try again.",
             detail=error_tail(result.stderr),
         )
     return False
