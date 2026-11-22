@@ -14,6 +14,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from config import InstallTarget
 from utils import database
 from utils.replies import respond
 
@@ -63,6 +64,11 @@ def _required_permissions(command: AnyCommand) -> discord.Permissions | None:
 def _milliseconds(seconds: float) -> str:
     """Shows a latency in milliseconds, or a question mark before the first heartbeat answers."""
     return str(round(seconds * 1000)) if math.isfinite(seconds) else "?"
+
+
+def _count(count: int | None) -> str:
+    """Shows a count, or a question mark when it is unknown."""
+    return "?" if count is None else str(count)
 
 
 def _is_guild_only(command: AnyCommand) -> bool:
@@ -232,9 +238,16 @@ class HelpCog(commands.Cog, name="Help"):
                 version=project.version,
                 since=discord.utils.format_dt(self.bot.started_at, "R"),
                 latency=_milliseconds(self.bot.latency),
-                servers=len(self.bot.guilds),
             )
         ]
+        # Each count shows only where people can install the bot.
+        # A bot installed only to accounts therefore shows no servers.
+        install_to = self.bot.config.install_to
+        if InstallTarget.SERVERS in install_to:
+            lines.append(s.about_servers.format(count=len(self.bot.guilds)))
+        if InstallTarget.USERS in install_to:
+            count = await self._user_install_count()
+            lines.append(s.about_user_installs.format(count=_count(count)))
         if project.repository:
             lines.append(s.about_link.format(url=project.repository))
         # Placeholders are filled already, so braces in the values must stay as they are.
@@ -244,6 +257,19 @@ class HelpCog(commands.Cog, name="Help"):
             message.replace("{", "{{").replace("}", "}}"),
             ephemeral=True,
         )
+
+    async def _user_install_count(self) -> int | None:
+        """Asks Discord how many accounts installed the bot, or returns None when it cannot tell.
+
+        Discord counts user installs only in the application's info, which it updates now and then.
+        The info is fetched for each /about, because the copy from startup grows stale.
+        """
+        try:
+            info = await self.bot.application_info()
+        except discord.HTTPException as error:
+            log.warning(f"Could not read the application info for /about: {error}")
+            return None
+        return info.approximate_user_install_count
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:

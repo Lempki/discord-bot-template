@@ -30,6 +30,9 @@ class CoreStrings:
             "queued_many",
             "queued_many_next",
             "session_title",
+            # Labels with a count after them, as in "Servers: 1".
+            "about_servers",
+            "about_user_installs",
             # Totals and ratios, as in "(1 in total)" and "1/3".
             "automod_keywords_header",
             "warnings_list_header",
@@ -233,9 +236,12 @@ class CoreStrings:
     info_more: str = ""
     info_more_one: str = ""
     info_avatar_title: str = ""
-    # The placeholders of about_text are {name}, {version}, {since}, {latency}, and {servers}.
+    # The placeholders of about_text are {name}, {version}, {since}, and {latency}.
     # {since} is a Discord timestamp, which each reader's app shows in their own language.
     about_text: str = ""
+    # The placeholder of the counts is {count}. Each shows only where INSTALL_TO lets people install the bot.
+    about_servers: str = ""
+    about_user_installs: str = ""
     about_link: str = ""
     help_footer: str = ""
     # The reply to a message that only mentions the bot, and its button that opens the guide.
@@ -517,7 +523,9 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "info_more": "and {count} more",
         "info_more_one": "and 1 more",
         "info_avatar_title": "Avatar of {user}",
-        "about_text": "**{name}** {version}\nOnline since {since}\nResponse time: {latency} ms\nServers: {servers}",
+        "about_text": "**{name}** {version}\nOnline since {since}\nResponse time: {latency} ms",
+        "about_servers": "Servers: {count}",
+        "about_user_installs": "Users: {count}",
         "about_link": "Source code: <{url}>",
         "help_empty": "No commands are available to you here.",
         "section_admin": "Admin",
@@ -792,7 +800,9 @@ CORE_TEXT: dict[str, dict[str, str]] = {
         "info_more": "ja {count} muuta",
         "info_more_one": "ja 1 muu",
         "info_avatar_title": "Käyttäjän {user} profiilikuva",
-        "about_text": "**{name}** {version}\nPäällä {since} alkaen\nVasteaika: {latency} ms\nPalvelimia: {servers}",
+        "about_text": "**{name}** {version}\nPäällä {since} alkaen\nVasteaika: {latency} ms",
+        "about_servers": "Palvelimia: {count}",
+        "about_user_installs": "Käyttäjiä: {count}",
         "about_link": "Lähdekoodi: <{url}>",
         "help_empty": "Sinulla ei ole täällä käytettävissä komentoja.",
         "section_admin": "Ylläpito",

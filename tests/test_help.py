@@ -260,3 +260,58 @@ async def test_the_guide_button_shows_the_guide_privately(bot: BotApp) -> None:
     assert kwargs["ephemeral"] is True
     assert kwargs["embeds"][0].title == EN.help_title
     assert kwargs["embeds"][-1].footer.text == EN.help_footer
+
+
+async def test_about_counts_only_where_the_bot_installs(bot: BotApp) -> None:
+    from config import Config, InstallTarget
+
+    both = BotApp(
+        Config(
+            discord_token="t",
+            locale="en",
+            install_to=frozenset({InstallTarget.SERVERS, InstallTarget.USERS}),
+        )
+    )
+    users = BotApp(
+        Config(
+            discord_token="t",
+            locale="en",
+            install_to=frozenset({InstallTarget.USERS}),
+        )
+    )
+    info = MagicMock(approximate_user_install_count=3)
+    replies = []
+    for app in (bot, both, users):
+        app.application_info = AsyncMock(return_value=info)  # type: ignore[method-assign]
+        await app.add_cog(HelpCog(app))
+        interaction = make_interaction()
+        await app.cogs["Help"].about.callback(app.cogs["Help"], interaction)  # type: ignore[attr-defined]
+        (message,) = sent_messages(interaction)
+        replies.append(message)
+
+    servers_only, servers_and_users, users_only = replies
+    assert "Servers: 0" in servers_only
+    assert "Users" not in servers_only
+    assert "Servers: 0\nUsers: 3" in servers_and_users
+    assert "Servers" not in users_only
+    assert "Users: 3" in users_only
+
+
+async def test_about_shows_an_unknown_install_count_when_discord_fails() -> None:
+    from config import Config, InstallTarget
+
+    app = BotApp(
+        Config(
+            discord_token="t", locale="en", install_to=frozenset({InstallTarget.USERS})
+        )
+    )
+    app.application_info = AsyncMock(  # type: ignore[method-assign]
+        side_effect=discord.HTTPException(MagicMock(status=503), "unavailable")
+    )
+    await app.add_cog(HelpCog(app))
+    interaction = make_interaction()
+
+    await app.cogs["Help"].about.callback(app.cogs["Help"], interaction)  # type: ignore[attr-defined]
+
+    (message,) = sent_messages(interaction)
+    assert "Users: ?" in message
